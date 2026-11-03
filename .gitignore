@@ -27,7 +27,8 @@ migrate_working_dir/
 .env
 .env.*
 !.env.example
-.neon
+# Keep Neon credentials local. Share a blank template instead.
+.env.local
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
