@@ -2,13 +2,13 @@
 
 CarShare est une application Flutter Android pour la gestion des comptes de covoiturage. Le client mobile communique avec une API **Spring Boot** ; les comptes et sessions sont stockés dans **PostgreSQL sur Neon**.
 
-> Le module actuellement pris en charge est la gestion des utilisateurs : inscription, connexion, déconnexion, profil et demande de réinitialisation du mot de passe. Les trajets, réservations, paiements, messages et la géolocalisation ne sont pas encore implémentés.
+> Le module pris en charge est la gestion des utilisateurs : authentification, profil, photo, préférences, contacts d’urgence, statut du compte et consultation de l’historique des sanctions. Les trajets, réservations, paiements, messages, géolocalisation et statistiques de profil ne sont pas inclus.
 
 ## Architecture
 
 ```text
 Application Flutter  →  API REST Spring Boot  →  PostgreSQL (Neon)
-      Android                  port 8080                 données
+      Android                  port 8081                 données
 ```
 
 - `lib/` : pages Flutter, validation des formulaires, client HTTP et stockage sécurisé du jeton de session.
@@ -108,12 +108,13 @@ Ne mettez pas une URL locale `localhost` dans l’application pour un téléphon
 
 ## Parcours utilisateur disponible
 
-1. **Welcome** : accéder à l’inscription ou à la connexion.
-2. **Sign Up** : créer un compte avec nom complet, téléphone, adresse e-mail, mot de passe et rôle (`passenger` ou `driver`).
-3. **Sign In** : se connecter à un compte enregistré dans Neon.
-4. **Home** : afficher le nom et le rôle de l’utilisateur connecté.
-5. **Sign Out** : révoquer la session côté API et revenir à la connexion.
-6. **Forgot password?** : demander un lien de réinitialisation ; nécessite la configuration d’un serveur SMTP dans le backend.
+1. **Sign Up / Sign In / Sign Out** : gérer le compte Neon ; cinq mots de passe incorrects verrouillent la connexion pendant 15 minutes.
+2. **Profil** : consulter et modifier nom, téléphone, e-mail et rôle, ajouter ou retirer une photo, ou supprimer le compte après confirmation du mot de passe.
+3. **Préférences** : enregistrer langue, domicile, travail, campus, musique, tabac, animaux et bagages.
+4. **Contacts d’urgence** : ajouter, modifier et supprimer des contacts.
+5. **Statut et sanctions** : consulter son statut calculé et l’historique des sanctions. Les sanctions sont créées par le module Support.
+6. **Administration** : un compte promu `ADMIN` peut consulter la liste des comptes. Le statut reste calculé à partir des points de sanction.
+7. **Forgot password?** : demander un code à six chiffres par e-mail, puis le saisir dans l’application. SMTP doit être configuré.
 
 Le backend chiffre les mots de passe avec BCrypt et ne stocke que les empreintes des jetons de session. L’application conserve le jeton dans le stockage sécurisé Android et l’envoie comme jeton Bearer aux routes protégées.
 
@@ -130,7 +131,9 @@ MAIL_FROM
 PUBLIC_API_URL
 ```
 
-`PUBLIC_API_URL` doit être joignable par la personne qui reçoit le lien. Sans SMTP configuré, inscription, connexion, profil et déconnexion restent disponibles ; la récupération du mot de passe ne peut pas envoyer de message.
+Le courriel contient un code à six chiffres valable 30 minutes. Après cinq codes incorrects, il faut demander un nouveau code. Aucun lien public ni tunnel n’est nécessaire. Sans SMTP configuré, les autres fonctions de compte restent disponibles.
+
+Les migrations Flyway ajoutent les tables et champs nécessaires lors du prochain démarrage du backend. Exécuter ces changements d’abord sur une branche Neon de développement. Pour activer l’écran administrateur, un administrateur de la base doit promouvoir explicitement un compte existant (`role = 'ADMIN'`) après application des migrations ; l’inscription mobile ne permet jamais de choisir ce rôle.
 
 ## Vérifications de développement
 

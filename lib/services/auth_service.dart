@@ -42,7 +42,7 @@ class AuthService {
       await _cacheProfile(profile);
     } on ApiException catch (error) {
       if (revision != _sessionRevision) return;
-      if (error.statusCode == 401) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
         await _api.clearToken();
         await _clearCachedProfile();
         currentUser.value = null;
@@ -100,6 +100,18 @@ class AuthService {
     await _api.post('/auth/forgot-password', {'email': email.trim()});
   }
 
+  Future<void> resetPassword({
+    String email = '',
+    required String token,
+    required String newPassword,
+  }) async {
+    await _api.post('/auth/reset-password', {
+      if (email.isNotEmpty) 'email': email.trim(),
+      'token': token,
+      'newPassword': newPassword,
+    });
+  }
+
   Future<UserProfile> updateProfile({
     required String fullName,
     required String phone,
@@ -117,6 +129,21 @@ class AuthService {
     currentUser.value = profile;
     await _cacheProfile(profile);
     return profile;
+  }
+
+  Future<UserProfile> refreshProfile() async {
+    final profile = UserProfile.fromJson(await _api.get('/users/me'));
+    currentUser.value = profile;
+    await _cacheProfile(profile);
+    return profile;
+  }
+
+  Future<void> deleteAccount(String password) async {
+    await _api.delete('/users/me', {'password': password});
+    _sessionRevision++;
+    await _api.clearToken();
+    await _clearCachedProfile();
+    currentUser.value = null;
   }
 
   Future<void> signOut() async {

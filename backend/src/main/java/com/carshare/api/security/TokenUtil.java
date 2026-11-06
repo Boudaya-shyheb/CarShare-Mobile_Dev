@@ -15,6 +15,10 @@ public final class TokenUtil {
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
+    public static String newPasswordResetCode() {
+        int code = RANDOM.nextInt(1_000_000);
+        return String.format(java.util.Locale.ROOT, "%06d", code);
+    }
     public static String sha256(String value) {
         try {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));

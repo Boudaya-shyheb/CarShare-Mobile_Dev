@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import 'profile_page.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 
@@ -31,6 +32,13 @@ class HomePage extends StatelessWidget {
         style: TextStyle(fontWeight: FontWeight.w800),
       ),
       actions: [
+        IconButton(
+          tooltip: 'Profile',
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage())),
+          icon: const Icon(Icons.account_circle_outlined),
+        ),
         IconButton(
           tooltip: 'Sign Out',
           onPressed: () => _signOut(context),

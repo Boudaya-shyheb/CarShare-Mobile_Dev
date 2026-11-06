@@ -2,7 +2,8 @@ package com.carshare.api.users;
 
 public enum UserRole {
     PASSENGER("passenger"),
-    DRIVER("driver");
+    DRIVER("driver"),
+    ADMIN("admin");
 
     private final String value;
 
@@ -14,6 +15,7 @@ public enum UserRole {
         return switch (value == null ? "" : value.trim().toLowerCase()) {
             case "passenger" -> PASSENGER;
             case "driver" -> DRIVER;
+            case "admin" -> ADMIN;
             default -> throw new IllegalArgumentException("Role must be passenger or driver.");
         };
     }

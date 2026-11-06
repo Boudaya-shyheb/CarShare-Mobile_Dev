@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'models/user_profile.dart';
+import 'navigation.dart';
 import 'pages/home_page.dart';
+import 'pages/admin_users_page.dart';
 import 'pages/sign_in_page.dart';
 import 'pages/sign_up_page.dart';
 import 'pages/welcome_page.dart';
@@ -13,6 +15,7 @@ class CarShareApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    navigatorKey: carShareNavigatorKey,
     title: 'CarShare',
     debugShowCheckedModeBanner: false,
     theme: carShareTheme,
@@ -28,10 +31,17 @@ class _AuthenticationGate extends StatelessWidget {
   const _AuthenticationGate();
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<UserProfile?>(
-    valueListenable: AuthService.instance.currentUser,
-    builder: (context, user, _) => user == null
-        ? const WelcomePage()
-        : HomePage(user: user),
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: AuthService.instance.isRestoringSession,
+    builder: (context, isRestoring, _) => isRestoring
+        ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+        : ValueListenableBuilder<UserProfile?>(
+            valueListenable: AuthService.instance.currentUser,
+            builder: (context, user, _) => user == null
+                ? const WelcomePage()
+                : user.role == 'admin'
+                ? const AdminUsersPage()
+                : HomePage(user: user),
+          ),
   );
 }

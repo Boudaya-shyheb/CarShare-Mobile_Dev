@@ -12,6 +12,7 @@ public class PasswordResetToken {
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "user_id", nullable = false) private AppUser user;
     @Column(name = "token_hash", nullable = false, unique = true, length = 64) private String tokenHash;
     @Column(name = "expires_at", nullable = false) private Instant expiresAt;
+    @Column(name = "failed_attempts", nullable = false) private int failedAttempts;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
 
     protected PasswordResetToken() { }
@@ -23,4 +24,6 @@ public class PasswordResetToken {
     public AppUser getUser() { return user; }
     public String getTokenHash() { return tokenHash; }
     public Instant getExpiresAt() { return expiresAt; }
+    public int getFailedAttempts() { return failedAttempts; }
+    public void recordFailedAttempt() { failedAttempts++; }
 }

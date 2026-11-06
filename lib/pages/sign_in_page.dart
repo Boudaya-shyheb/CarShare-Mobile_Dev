@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
 import 'home_page.dart';
+import 'reset_password_page.dart';
 import 'sign_up_page.dart';
 import 'welcome_page.dart';
 
@@ -21,6 +22,7 @@ class _SignInPageState extends State<SignInPage> {
   final _password = TextEditingController();
   final _service = AuthService.instance;
   bool _loading = false;
+  bool _sendingReset = false;
 
   @override
   void dispose() {
@@ -64,15 +66,20 @@ class _SignInPageState extends State<SignInPage> {
       _formKey.currentState!.validate();
       return;
     }
+    setState(() => _sendingReset = true);
     try {
       await _service.sendPasswordReset(_email.text);
-      if (mounted) {
-        _showMessage(
-          'Password reset instructions have been sent to your email.',
-        );
-      }
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              ResetPasswordPage(token: '', email: _email.text.trim()),
+        ),
+      );
     } catch (error) {
       if (mounted) _showMessage(authErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _sendingReset = false);
     }
   }
 
@@ -148,8 +155,13 @@ class _SignInPageState extends State<SignInPage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: _resetPassword,
-                      child: const Text('Forgot password?'),
+                      onPressed: _sendingReset ? null : _resetPassword,
+                      child: _sendingReset
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Forgot password?'),
                     ),
                   ),
                   const SizedBox(height: 8),

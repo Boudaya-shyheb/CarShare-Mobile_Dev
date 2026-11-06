@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -54,5 +55,12 @@ public class AuthController {
     public AuthDtos.UserProfile updateCurrentUser(@AuthenticationPrincipal SessionPrincipal principal,
             @Valid @RequestBody AuthDtos.UpdateProfileRequest request) {
         return authService.updateProfile(principal.userId(), request);
+    }
+
+    @DeleteMapping("/users/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCurrentUser(@AuthenticationPrincipal SessionPrincipal principal,
+            @Valid @RequestBody AuthDtos.DeleteAccountRequest request) {
+        authService.deleteAccount(principal.userId(), request.password());
     }
 }

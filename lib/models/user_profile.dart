@@ -6,6 +6,9 @@ class UserProfile {
     required this.email,
     required this.role,
     required this.createdAt,
+    this.status = 'ACTIVE',
+    this.statusUntil,
+    this.hasProfilePhoto = false,
   });
 
   final String id;
@@ -14,6 +17,9 @@ class UserProfile {
   final String email;
   final String role;
   final DateTime createdAt;
+  final String status;
+  final DateTime? statusUntil;
+  final bool hasProfilePhoto;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
     id: json['id'] as String,
@@ -22,6 +28,11 @@ class UserProfile {
     email: json['email'] as String,
     role: json['role'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    status: json['status'] as String? ?? 'ACTIVE',
+    statusUntil: json['statusUntil'] == null
+        ? null
+        : DateTime.parse(json['statusUntil'] as String),
+    hasProfilePhoto: json['hasProfilePhoto'] as bool? ?? false,
   );
 
   factory UserProfile.fromMap(Map<String, Object?> map) => UserProfile(
@@ -31,6 +42,11 @@ class UserProfile {
     email: map['email']! as String,
     role: map['role']! as String,
     createdAt: DateTime.parse(map['created_at']! as String),
+    status: map['status'] as String? ?? 'ACTIVE',
+    statusUntil: map['status_until'] == null
+        ? null
+        : DateTime.parse(map['status_until']! as String),
+    hasProfilePhoto: (map['has_profile_photo'] as int? ?? 0) == 1,
   );
 
   Map<String, Object?> toMap() => {
@@ -40,5 +56,8 @@ class UserProfile {
     'email': email,
     'role': role,
     'created_at': createdAt.toIso8601String(),
+    'status': status,
+    'status_until': statusUntil?.toIso8601String(),
+    'has_profile_photo': hasProfilePhoto ? 1 : 0,
   };
 }
