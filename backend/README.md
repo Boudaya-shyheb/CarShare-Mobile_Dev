@@ -66,8 +66,11 @@ For a deployed API, use its HTTPS URL. The debug Android manifest allows clearte
 - `POST /api/vehicles/{vehicleId}/default` selects the default vehicle
 - `POST /api/vehicles/{vehicleId}/photos` uploads one vehicle photo
 - `GET/DELETE /api/vehicles/{vehicleId}/photos/{photoId}` reads or removes an owned vehicle photo
+- `POST /api/vehicles/{vehicleId}/photos/{photoId}/primary` selects the primary vehicle photo
 
 Vehicle photos are stored as UUID-named files in `public/uploads/vehicles` by default; the database stores only filenames and MIME types. Set `VEHICLE_UPLOAD_DIRECTORY` to change the storage directory. Vehicle images must be valid JPEG, PNG, or WebP files no larger than 5 MB each, and a vehicle can have at most four photos.
+
+Vehicles may include insurance and technical-inspection expiration dates. The mobile app shows an in-app warning within 30 days of expiration and an overdue state; no push notifications or document verification are performed. The first uploaded photo becomes primary by default, and deleting the primary photo promotes the oldest remaining photo.
 
 Vehicle registration numbers support `123TU4567` and `RS123456`; spaces are accepted on input and removed for storage. The mobile make/model fields provide searchable suggestions for common vehicles, while still allowing drivers to enter a brand or model that is not suggested.
 

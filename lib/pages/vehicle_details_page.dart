@@ -21,6 +21,28 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
   late Vehicle _vehicle = widget.vehicle;
   bool _loading = false;
   int _currentPhoto = 0;
+  late final PageController _photoController;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPhoto = _primaryPhotoIndex(_vehicle);
+    _photoController = PageController(initialPage: _currentPhoto);
+  }
+
+  @override
+  void dispose() {
+    _photoController.dispose();
+    super.dispose();
+  }
+
+  int _primaryPhotoIndex(Vehicle vehicle) {
+    if (vehicle.photos.isEmpty) return 0;
+    final index = vehicle.photos.indexWhere(
+      (photo) => photo.id == vehicle.primaryPhoto?.id,
+    );
+    return index < 0 ? 0 : index;
+  }
 
   Future<void> _refreshVehicle() async {
     setState(() => _loading = true);
@@ -29,8 +51,11 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
       if (mounted) {
         setState(() {
           _vehicle = updated;
-          _currentPhoto = 0;
+          _currentPhoto = _primaryPhotoIndex(updated);
         });
+        if (_photoController.hasClients) {
+          _photoController.jumpToPage(_currentPhoto);
+        }
       }
     } catch (error) {
       if (mounted) _showMessage(vehicleErrorMessage(error));
@@ -114,8 +139,11 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                   children: [
                     SizedBox(
                       height: 260,
-                      child: _vehicle.photos.isEmpty
-                          ? const ColoredBox(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (_vehicle.photos.isEmpty)
+                            const ColoredBox(
                               color: Color(0xFFF1F5F4),
                               child: Icon(
                                 Icons.directions_car_outlined,
@@ -123,7 +151,9 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                                 color: Color(0xFF718096),
                               ),
                             )
-                          : PageView.builder(
+                          else
+                            PageView.builder(
+                              controller: _photoController,
                               itemCount: _vehicle.photos.length,
                               onPageChanged: (index) =>
                                   setState(() => _currentPhoto = index),
@@ -134,6 +164,23 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                                     height: 260,
                                   ),
                             ),
+                          if (_vehicle.photos.isNotEmpty &&
+                              _vehicle.photos[_currentPhoto].id ==
+                                  _vehicle.primaryPhoto?.id)
+                            const Positioned(
+                              top: 8,
+                              left: 12,
+                              child: Chip(
+                                avatar: Icon(
+                                  Icons.star,
+                                  color: carShareGreen,
+                                  size: 18,
+                                ),
+                                label: Text('Primary photo'),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     if (_vehicle.photos.length > 1)
                       Padding(
@@ -214,6 +261,7 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                       _titleCase(_vehicle.status),
                       Icons.info_outline,
                     ),
+                    _documentSection(),
                   ],
                 ),
               ),
@@ -224,8 +272,78 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
   Widget _detail(String label, String value, IconData icon) => ListTile(
     leading: Icon(icon, color: carShareGreen),
     title: Text(label),
-    trailing: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+    trailing: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 180),
+      child: Text(
+        value,
+        textAlign: TextAlign.end,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+    ),
   );
+
+  Widget _documentSection() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Vehicle documents',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            _documentRow('Insurance', _vehicle.insuranceExpiryDate),
+            const Divider(height: 18),
+            _documentRow('Technical inspection', _vehicle.inspectionExpiryDate),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _documentRow(String label, DateTime? expiry) {
+    if (expiry == null) {
+      return Row(
+        children: [
+          Expanded(child: Text(label)),
+          const Text('Not set', style: TextStyle(color: Color(0xFF718096))),
+        ],
+      );
+    }
+
+    final reminder = vehicleDocumentReminder(expiry);
+    final reminderColor = reminder == 'Expired'
+        ? Theme.of(context).colorScheme.error
+        : const Color(0xFFB45309);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label)),
+            Text(
+              MaterialLocalizations.of(context).formatMediumDate(expiry),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        if (reminder != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            reminder,
+            style: TextStyle(
+              color: reminderColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   String _titleCase(String value) =>
       value[0] + value.substring(1).toLowerCase();

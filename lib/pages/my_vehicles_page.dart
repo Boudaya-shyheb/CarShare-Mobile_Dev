@@ -240,7 +240,7 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                         ),
                       )
                     : VehiclePhotoImage(
-                        url: vehicle.photos.first.url,
+                        url: vehicle.primaryPhoto!.url,
                         width: double.infinity,
                         height: 112,
                       ),
@@ -330,6 +330,12 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                   ),
                 ],
               ),
+              if (_documentWarnings(vehicle) case final warnings
+                  when warnings.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(spacing: 6, runSpacing: 4, children: warnings),
+                ),
               if (!vehicle.isDefault)
                 Align(
                   alignment: Alignment.centerRight,
@@ -367,6 +373,45 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
         fontWeight: FontWeight.w600,
         fontSize: 11,
       ),
+    ),
+  );
+
+  List<Widget> _documentWarnings(Vehicle vehicle) {
+    final documents = [
+      ('Insurance', vehicle.insuranceExpiryDate),
+      ('Inspection', vehicle.inspectionExpiryDate),
+    ];
+    return [
+      for (final (label, expiry) in documents)
+        if (vehicleDocumentReminder(expiry) case final reminder?)
+          _documentReminderChip('$label: $reminder'),
+    ];
+  }
+
+  Widget _documentReminderChip(String reminder) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFEE2E2),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.event_busy_outlined,
+          size: 13,
+          color: Color(0xFFB91C1C),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          reminder,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFFB91C1C),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     ),
   );
 

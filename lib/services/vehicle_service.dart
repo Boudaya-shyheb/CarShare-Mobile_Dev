@@ -46,6 +46,13 @@ class VehicleService {
     ),
   );
 
+  Future<Vehicle> setPrimaryPhoto({
+    required String vehicleId,
+    required String photoId,
+  }) async => Vehicle.fromJson(
+    await _api.post('/vehicles/$vehicleId/photos/$photoId/primary'),
+  );
+
   Future<Uint8List> getPhotoBytes(String path) => _api.getBytes(path);
 
   Future<void> deletePhoto({

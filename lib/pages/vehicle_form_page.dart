@@ -35,6 +35,10 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   final List<VehiclePhoto> _existingPhotos = [];
   final Set<String> _removedPhotoIds = {};
   Vehicle? _savedVehicle;
+  DateTime? _insuranceExpiryDate;
+  DateTime? _inspectionExpiryDate;
+  String? _selectedPrimaryPhotoId;
+  XFile? _selectedNewPrimaryPhoto;
   VehiclePlateType _plateType = VehiclePlateType.tunisian;
   String _selectedColor = 'Grey';
   String _trunkSize = 'MEDIUM';
@@ -69,6 +73,9 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       _trunkSize = vehicle.trunkSize;
       _airConditioning = vehicle.airConditioning;
       _existingPhotos.addAll(vehicle.photos);
+      _selectedPrimaryPhotoId = vehicle.primaryPhoto?.id;
+      _insuranceExpiryDate = vehicle.insuranceExpiryDate;
+      _inspectionExpiryDate = vehicle.inspectionExpiryDate;
       _savedVehicle = vehicle;
     }
     _plateDigits.addListener(_onPlateDigitsChanged);
@@ -126,7 +133,20 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       if (accepted.length > available) {
         _showMessage('A vehicle can have up to four photos.');
       }
-      if (mounted) setState(() => _newPhotos.addAll(limited));
+      if (mounted) {
+        setState(() {
+          _newPhotos.addAll(limited);
+          final hasRemainingPhoto = _existingPhotos.any(
+            (photo) => !_removedPhotoIds.contains(photo.id),
+          );
+          if (!hasRemainingPhoto &&
+              _selectedPrimaryPhotoId == null &&
+              _selectedNewPrimaryPhoto == null &&
+              _newPhotos.isNotEmpty) {
+            _selectedNewPrimaryPhoto = _newPhotos.first;
+          }
+        });
+      }
     } catch (_) {
       if (mounted) {
         _showMessage('Photos could not be selected. Please try again.');
@@ -202,7 +222,71 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     status: _savedVehicle?.status ?? 'ACTIVE',
     isDefault: _savedVehicle?.isDefault ?? false,
     photos: _existingPhotos,
+    insuranceExpiryDate: _insuranceExpiryDate,
+    inspectionExpiryDate: _inspectionExpiryDate,
   );
+
+  Future<void> _pickDocumentDate({required bool insurance}) async {
+    final currentDate = insurance
+        ? _insuranceExpiryDate
+        : _inspectionExpiryDate;
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: currentDate ?? DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2200),
+    );
+    if (selectedDate == null || !mounted) return;
+    setState(() {
+      if (insurance) {
+        _insuranceExpiryDate = selectedDate;
+      } else {
+        _inspectionExpiryDate = selectedDate;
+      }
+    });
+  }
+
+  String _formatDate(DateTime date) =>
+      MaterialLocalizations.of(context).formatMediumDate(date);
+
+  void _removeExistingPhoto(VehiclePhoto photo) {
+    setState(() {
+      _removedPhotoIds.add(photo.id);
+      if (_selectedPrimaryPhotoId == photo.id) {
+        final remainingPhotos = _existingPhotos.where(
+          (item) => item.id != photo.id && !_removedPhotoIds.contains(item.id),
+        );
+        if (remainingPhotos.isNotEmpty) {
+          _selectedPrimaryPhotoId = remainingPhotos
+              .firstWhere(
+                (item) => item.isPrimary,
+                orElse: () => remainingPhotos.first,
+              )
+              .id;
+          _selectedNewPrimaryPhoto = null;
+        } else {
+          _selectedPrimaryPhotoId = null;
+          _selectedNewPrimaryPhoto = _newPhotos.isEmpty
+              ? null
+              : _newPhotos.first;
+        }
+      }
+    });
+  }
+
+  void _selectExistingPrimary(VehiclePhoto photo) {
+    setState(() {
+      _selectedPrimaryPhotoId = photo.id;
+      _selectedNewPrimaryPhoto = null;
+    });
+  }
+
+  void _selectNewPrimary(XFile image) {
+    setState(() {
+      _selectedPrimaryPhotoId = null;
+      _selectedNewPrimaryPhoto = image;
+    });
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -233,6 +317,8 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                 status: _savedVehicle!.status,
                 isDefault: _savedVehicle!.isDefault,
                 photos: _existingPhotos,
+                insuranceExpiryDate: draft.insuranceExpiryDate,
+                inspectionExpiryDate: draft.inspectionExpiryDate,
               ),
             );
       if (!mounted) return;
@@ -249,6 +335,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         if (mounted) setState(() {});
       }
 
+      String? selectedNewPhotoId;
       for (final image in _newPhotos.toList()) {
         final bytes = await image.readAsBytes();
         if (bytes.length > _maxPhotoSize) {
@@ -260,18 +347,40 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         if (mimeType == null) {
           throw const ApiException('Choose a JPG, PNG, or WebP image.');
         }
+        final previousPhotoIds = _existingPhotos
+            .map((photo) => photo.id)
+            .toSet();
         final updated = await _vehicleService.uploadPhoto(
           vehicleId: vehicle.id,
           bytes: bytes,
           fileName: image.name,
           mimeType: mimeType,
         );
+        if (identical(_selectedNewPrimaryPhoto, image)) {
+          selectedNewPhotoId = updated.photos
+              .firstWhere((photo) => !previousPhotoIds.contains(photo.id))
+              .id;
+        }
         _newPhotos.remove(image);
         _existingPhotos
           ..clear()
           ..addAll(updated.photos);
         _savedVehicle = updated;
         if (mounted) setState(() {});
+      }
+
+      final desiredPrimaryPhotoId =
+          _selectedPrimaryPhotoId ?? selectedNewPhotoId;
+      if (desiredPrimaryPhotoId != null &&
+          _savedVehicle?.primaryPhoto?.id != desiredPrimaryPhotoId) {
+        final updated = await _vehicleService.setPrimaryPhoto(
+          vehicleId: vehicle.id,
+          photoId: desiredPrimaryPhotoId,
+        );
+        _savedVehicle = updated;
+        _existingPhotos
+          ..clear()
+          ..addAll(updated.photos);
       }
 
       if (mounted) Navigator.of(context).pop(true);
@@ -307,6 +416,8 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               children: [
                 _photoSection(),
+                const SizedBox(height: 20),
+                _documentsSection(),
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -465,6 +576,61 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   Widget _sectionTitle(String title) => Text(
     title,
     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+  );
+
+  Widget _documentsSection() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _sectionTitle('Vehicle documents'),
+      const SizedBox(height: 4),
+      const Text(
+        'Dates only. Add reminders for upcoming expirations.',
+        style: TextStyle(fontSize: 12, color: Color(0xFF718096)),
+      ),
+      const SizedBox(height: 8),
+      _documentDateTile(
+        label: 'Insurance expires',
+        date: _insuranceExpiryDate,
+        onChoose: () => _pickDocumentDate(insurance: true),
+        onClear: () => setState(() => _insuranceExpiryDate = null),
+      ),
+      _documentDateTile(
+        label: 'Technical inspection expires',
+        date: _inspectionExpiryDate,
+        onChoose: () => _pickDocumentDate(insurance: false),
+        onClear: () => setState(() => _inspectionExpiryDate = null),
+      ),
+    ],
+  );
+
+  Widget _documentDateTile({
+    required String label,
+    required DateTime? date,
+    required VoidCallback onChoose,
+    required VoidCallback onClear,
+  }) => Card(
+    margin: const EdgeInsets.only(bottom: 6),
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: Text(label, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(date == null ? 'Not set' : _formatDate(date)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Choose date',
+            onPressed: _saving ? null : onChoose,
+            icon: const Icon(Icons.calendar_month_outlined),
+          ),
+          if (date != null)
+            IconButton(
+              tooltip: 'Clear date',
+              onPressed: _saving ? null : onClear,
+              icon: const Icon(Icons.close),
+            ),
+        ],
+      ),
+    ),
   );
 
   Widget _catalogField({required bool brand}) {
@@ -704,14 +870,34 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         ),
       ),
       Positioned(
+        left: 2,
+        bottom: 2,
+        child: IconButton.filledTonal(
+          visualDensity: VisualDensity.compact,
+          tooltip: _selectedPrimaryPhotoId == photo.id
+              ? 'Primary photo'
+              : 'Set as primary photo',
+          onPressed: _saving || _removedPhotoIds.contains(photo.id)
+              ? null
+              : () => _selectExistingPrimary(photo),
+          icon: Icon(
+            _selectedPrimaryPhotoId == photo.id
+                ? Icons.star
+                : Icons.star_outline,
+            size: 18,
+            color: _selectedPrimaryPhotoId == photo.id
+                ? const Color(0xFF00A884)
+                : null,
+          ),
+        ),
+      ),
+      Positioned(
         top: 2,
         right: 2,
         child: IconButton.filledTonal(
           visualDensity: VisualDensity.compact,
           tooltip: 'Remove photo',
-          onPressed: _saving
-              ? null
-              : () => setState(() => _removedPhotoIds.add(photo.id)),
+          onPressed: _saving ? null : () => _removeExistingPhoto(photo),
           icon: const Icon(Icons.close, size: 18),
         ),
       ),
@@ -734,6 +920,26 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         ),
       ),
       Positioned(
+        left: 2,
+        bottom: 2,
+        child: IconButton.filledTonal(
+          visualDensity: VisualDensity.compact,
+          tooltip: identical(_selectedNewPrimaryPhoto, image)
+              ? 'Primary photo'
+              : 'Set as primary photo',
+          onPressed: _saving ? null : () => _selectNewPrimary(image),
+          icon: Icon(
+            identical(_selectedNewPrimaryPhoto, image)
+                ? Icons.star
+                : Icons.star_outline,
+            size: 18,
+            color: identical(_selectedNewPrimaryPhoto, image)
+                ? const Color(0xFF00A884)
+                : null,
+          ),
+        ),
+      ),
+      Positioned(
         top: 2,
         right: 2,
         child: IconButton.filledTonal(
@@ -741,7 +947,14 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
           tooltip: 'Remove photo',
           onPressed: _saving
               ? null
-              : () => setState(() => _newPhotos.remove(image)),
+              : () => setState(() {
+                  _newPhotos.remove(image);
+                  if (identical(_selectedNewPrimaryPhoto, image)) {
+                    _selectedNewPrimaryPhoto = _newPhotos.isEmpty
+                        ? null
+                        : _newPhotos.first;
+                  }
+                }),
           icon: const Icon(Icons.close, size: 18),
         ),
       ),

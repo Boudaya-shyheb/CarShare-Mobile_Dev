@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,7 +22,9 @@ public final class VehicleDtos {
             @NotBlank @Pattern(regexp = "(?i)^(?:\\d{3}\\s*TU\\s*\\d{4}|RS\\s*\\d{6})$") String registrationNumber,
             @Min(1) @Max(9) int seatsNumber,
             @NotNull Vehicle.TrunkSize trunkSize,
-            boolean airConditioning) { }
+            boolean airConditioning,
+            LocalDate insuranceExpiryDate,
+            LocalDate inspectionExpiryDate) { }
 
     public record VehicleResponse(
             UUID id,
@@ -36,6 +39,8 @@ public final class VehicleDtos {
             Vehicle.Status status,
             boolean defaultVehicle,
             Instant createdAt,
+            LocalDate insuranceExpiryDate,
+            LocalDate inspectionExpiryDate,
             List<PhotoReference> photos) {
         public static VehicleResponse from(Vehicle vehicle) {
             return new VehicleResponse(
@@ -51,16 +56,19 @@ public final class VehicleDtos {
                     vehicle.getStatus(),
                     vehicle.isDefaultVehicle(),
                     vehicle.getCreatedAt(),
+                    vehicle.getInsuranceExpiryDate(),
+                    vehicle.getInspectionExpiryDate(),
                     vehicle.getPhotos().stream().map(PhotoReference::from).toList());
         }
     }
 
-    public record PhotoReference(UUID id, String url, String mimeType) {
+    public record PhotoReference(UUID id, String url, String mimeType, boolean primary) {
         public static PhotoReference from(VehiclePhoto photo) {
             return new PhotoReference(
                     photo.getId(),
                     "/vehicles/" + photo.getVehicle().getId() + "/photos/" + photo.getId(),
-                    photo.getMimeType());
+                    photo.getMimeType(),
+                    photo.isPrimaryPhoto());
         }
     }
 }

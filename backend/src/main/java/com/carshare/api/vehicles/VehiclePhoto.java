@@ -27,6 +27,9 @@ public class VehiclePhoto {
     @Column(name = "mime_type", nullable = false, length = 30)
     private String mimeType;
 
+    @Column(name = "is_primary", nullable = false)
+    private boolean primaryPhoto;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -44,9 +47,11 @@ public class VehiclePhoto {
     }
 
     void setVehicle(Vehicle vehicle) { this.vehicle = vehicle; }
+    void setPrimaryPhoto(boolean primaryPhoto) { this.primaryPhoto = primaryPhoto; }
     public UUID getId() { return id; }
     public Vehicle getVehicle() { return vehicle; }
     public String getFileName() { return fileName; }
     public String getMimeType() { return mimeType; }
+    public boolean isPrimaryPhoto() { return primaryPhoto; }
     public Instant getCreatedAt() { return createdAt; }
 }

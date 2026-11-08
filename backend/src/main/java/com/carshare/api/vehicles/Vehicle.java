@@ -15,6 +15,7 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -70,6 +71,12 @@ public class Vehicle {
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
 
+    @Column(name = "insurance_expiry_date")
+    private LocalDate insuranceExpiryDate;
+
+    @Column(name = "inspection_expiry_date")
+    private LocalDate inspectionExpiryDate;
+
     @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt ASC")
     private List<VehiclePhoto> photos = new ArrayList<>();
@@ -96,6 +103,8 @@ public class Vehicle {
         seatsNumber = request.seatsNumber();
         trunkSize = request.trunkSize();
         airConditioning = request.airConditioning();
+        insuranceExpiryDate = request.insuranceExpiryDate();
+        inspectionExpiryDate = request.inspectionExpiryDate();
     }
 
     public void setDefault(Instant usedAt) {
@@ -142,5 +151,7 @@ public class Vehicle {
     public boolean isDefaultVehicle() { return defaultVehicle; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getLastUsedAt() { return lastUsedAt; }
+    public LocalDate getInsuranceExpiryDate() { return insuranceExpiryDate; }
+    public LocalDate getInspectionExpiryDate() { return inspectionExpiryDate; }
     public List<VehiclePhoto> getPhotos() { return photos; }
 }

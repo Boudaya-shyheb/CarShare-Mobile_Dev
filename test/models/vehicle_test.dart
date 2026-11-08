@@ -16,22 +16,28 @@ void main() {
       'airConditioning': true,
       'status': 'ACTIVE',
       'defaultVehicle': true,
+      'insuranceExpiryDate': '2027-04-15',
+      'inspectionExpiryDate': '2026-12-01',
       'photos': [
         {
           'id': 'photo-1',
           'url': '/vehicles/vehicle-1/photos/photo-1',
           'mimeType': 'image/jpeg',
+          'primary': true,
         },
       ],
     });
 
     expect(vehicle.id, 'vehicle-1');
     expect(vehicle.isDefault, isTrue);
+    expect(vehicle.primaryPhoto?.id, 'photo-1');
+    expect(vehicle.insuranceExpiryDate, DateTime(2027, 4, 15));
+    expect(vehicle.inspectionExpiryDate, DateTime(2026, 12, 1));
     expect(vehicle.photos.single.url, '/vehicles/vehicle-1/photos/photo-1');
   });
 
   test('serializes only fields accepted by vehicle create and update', () {
-    const vehicle = Vehicle(
+    final vehicle = Vehicle(
       id: '',
       brand: 'Toyota',
       model: 'Yaris',
@@ -44,6 +50,8 @@ void main() {
       status: 'ACTIVE',
       isDefault: false,
       photos: [],
+      insuranceExpiryDate: DateTime(2027, 4, 15),
+      inspectionExpiryDate: DateTime(2026, 12, 1),
     );
 
     expect(vehicle.toJson(), {
@@ -55,6 +63,8 @@ void main() {
       'seatsNumber': 5,
       'trunkSize': 'MEDIUM',
       'airConditioning': true,
+      'insuranceExpiryDate': '2027-04-15',
+      'inspectionExpiryDate': '2026-12-01',
     });
   });
 
@@ -77,5 +87,22 @@ void main() {
     );
     expect(displayVehicleRegistration('123TU4567'), '123 TU 4567');
     expect(displayVehicleRegistration('RS123456'), 'RS 123456');
+  });
+
+  test('reminds about upcoming and expired vehicle documents', () {
+    final today = DateTime(2026, 11, 8);
+    expect(
+      vehicleDocumentReminder(DateTime(2026, 11, 8), today: today),
+      'Expires today',
+    );
+    expect(
+      vehicleDocumentReminder(DateTime(2026, 12, 8), today: today),
+      'Expires in 30 days',
+    );
+    expect(
+      vehicleDocumentReminder(DateTime(2026, 11, 7), today: today),
+      'Expired',
+    );
+    expect(vehicleDocumentReminder(DateTime(2027, 1, 1), today: today), isNull);
   });
 }

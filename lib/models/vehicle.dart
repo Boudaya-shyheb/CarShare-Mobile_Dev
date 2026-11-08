@@ -3,16 +3,19 @@ class VehiclePhoto {
     required this.id,
     required this.url,
     required this.mimeType,
+    this.isPrimary = false,
   });
 
   final String id;
   final String url;
   final String mimeType;
+  final bool isPrimary;
 
   factory VehiclePhoto.fromJson(Map<String, dynamic> json) => VehiclePhoto(
     id: json['id'] as String,
     url: json['url'] as String,
     mimeType: json['mimeType'] as String,
+    isPrimary: json['primary'] as bool? ?? false,
   );
 }
 
@@ -30,6 +33,8 @@ class Vehicle {
     required this.status,
     required this.isDefault,
     required this.photos,
+    this.insuranceExpiryDate,
+    this.inspectionExpiryDate,
   });
 
   final String id;
@@ -44,6 +49,15 @@ class Vehicle {
   final String status;
   final bool isDefault;
   final List<VehiclePhoto> photos;
+  final DateTime? insuranceExpiryDate;
+  final DateTime? inspectionExpiryDate;
+
+  VehiclePhoto? get primaryPhoto {
+    for (final photo in photos) {
+      if (photo.isPrimary) return photo;
+    }
+    return photos.isEmpty ? null : photos.first;
+  }
 
   factory Vehicle.fromJson(Map<String, dynamic> json) => Vehicle(
     id: json['id'] as String,
@@ -60,6 +74,8 @@ class Vehicle {
     photos: (json['photos'] as List<dynamic>? ?? const [])
         .map((photo) => VehiclePhoto.fromJson(photo as Map<String, dynamic>))
         .toList(growable: false),
+    insuranceExpiryDate: _dateFromJson(json['insuranceExpiryDate']),
+    inspectionExpiryDate: _dateFromJson(json['inspectionExpiryDate']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -71,5 +87,28 @@ class Vehicle {
     'seatsNumber': seatsNumber,
     'trunkSize': trunkSize,
     'airConditioning': airConditioning,
+    'insuranceExpiryDate': _dateToJson(insuranceExpiryDate),
+    'inspectionExpiryDate': _dateToJson(inspectionExpiryDate),
   };
+
+  static DateTime? _dateFromJson(Object? value) =>
+      value == null ? null : DateTime.parse(value as String);
+
+  static String? _dateToJson(DateTime? value) => value == null
+      ? null
+      : '${value.year.toString().padLeft(4, '0')}-'
+            '${value.month.toString().padLeft(2, '0')}-'
+            '${value.day.toString().padLeft(2, '0')}';
+}
+
+String? vehicleDocumentReminder(DateTime? expiry, {DateTime? today}) {
+  if (expiry == null) return null;
+  final current = today ?? DateTime.now();
+  final currentDate = DateTime(current.year, current.month, current.day);
+  final expiryDate = DateTime(expiry.year, expiry.month, expiry.day);
+  final daysRemaining = expiryDate.difference(currentDate).inDays;
+  if (daysRemaining < 0) return 'Expired';
+  if (daysRemaining == 0) return 'Expires today';
+  if (daysRemaining <= 30) return 'Expires in $daysRemaining days';
+  return null;
 }

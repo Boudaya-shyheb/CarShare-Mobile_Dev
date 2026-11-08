@@ -157,8 +157,11 @@ public class VehicleService {
                     "A vehicle can have up to four photos.");
         }
 
+        boolean firstPhoto = photos.countByVehicle_Id(vehicleId) == 0;
         VehiclePhotoStorage.StoredPhoto stored = photoStorage.save(bytes);
-        vehicle.addPhoto(new VehiclePhoto(stored.fileName(), stored.mimeType()));
+        VehiclePhoto photo = new VehiclePhoto(stored.fileName(), stored.mimeType());
+        photo.setPrimaryPhoto(firstPhoto);
+        vehicle.addPhoto(photo);
         vehicle.clearReport();
         try {
             vehicles.flush();
@@ -181,6 +184,26 @@ public class VehicleService {
     }
 
     @Transactional
+    public VehicleDtos.VehicleResponse setPrimaryPhoto(UUID ownerId, UUID vehicleId, UUID photoId) {
+        requireDriver(ownerId);
+        Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
+        VehiclePhoto selected = photos.findByIdAndVehicle_Id(photoId, vehicleId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
+                        "Vehicle photo not found."));
+        if (selected.isPrimaryPhoto()) {
+            return VehicleDtos.VehicleResponse.from(vehicle);
+        }
+
+        vehicle.getPhotos().stream()
+                .filter(VehiclePhoto::isPrimaryPhoto)
+                .forEach(photo -> photo.setPrimaryPhoto(false));
+        vehicles.flush();
+        selected.setPrimaryPhoto(true);
+        vehicles.flush();
+        return VehicleDtos.VehicleResponse.from(vehicle);
+    }
+
+    @Transactional
     public void deletePhoto(UUID ownerId, UUID vehicleId, UUID photoId) {
         requireDriver(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
@@ -188,9 +211,18 @@ public class VehicleService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
                         "Vehicle photo not found."));
         String fileName = photo.getFileName();
+        boolean wasPrimary = photo.isPrimaryPhoto();
         vehicle.removePhoto(photo);
         photos.delete(photo);
         photos.flush();
+        if (wasPrimary) {
+            photos.findByVehicle_IdOrderByCreatedAtAsc(vehicleId).stream()
+                    .findFirst()
+                    .ifPresent(replacement -> {
+                        replacement.setPrimaryPhoto(true);
+                        photos.flush();
+                    });
+        }
         deleteFilesAfterCommit(List.of(fileName));
     }
 

@@ -101,6 +101,14 @@ public class VehicleController {
                 .body(photo.bytes());
     }
 
+    @PostMapping("/{vehicleId}/photos/{photoId}/primary")
+    public VehicleDtos.VehicleResponse setPrimaryPhoto(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable UUID vehicleId,
+            @PathVariable UUID photoId) {
+        return vehicleService.setPrimaryPhoto(principal.userId(), vehicleId, photoId);
+    }
+
     @DeleteMapping("/{vehicleId}/photos/{photoId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePhoto(
