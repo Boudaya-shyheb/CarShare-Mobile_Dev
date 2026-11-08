@@ -39,6 +39,12 @@ dependencies:
   image_picker: ^1.2.4
   http_parser: ^4.1.2
 
+  # Reservation module: maps, location and date formatting.
+  flutter_map: ^8.1.1          # OpenStreetMap tiles, no API key
+  latlong2: ^0.9.1             # LatLng, used by flutter_map
+  geolocator: ^14.0.1          # permissions + the device position
+  intl: ^0.20.2                # DateFormat for the trip date and time
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

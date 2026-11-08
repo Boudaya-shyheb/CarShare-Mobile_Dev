@@ -18,9 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/reservations")
 public class ReservationController {
     private final ReservationService reservationService;
+    private final TrackingService trackingService;
 
-    public ReservationController(ReservationService reservationService) {
+    public ReservationController(ReservationService reservationService,
+            TrackingService trackingService) {
         this.reservationService = reservationService;
+        this.trackingService = trackingService;
     }
 
     @GetMapping("/mine")
@@ -47,5 +50,21 @@ public class ReservationController {
             @AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID reservationId,
             @Valid @RequestBody ReservationDtos.CancelReservationRequest request) {
         return reservationService.cancel(principal.userId(), reservationId, request.reason());
+    }
+
+    /** Trip owner only: the driver types in the code the passenger shows them at pickup. */
+    @PostMapping("/{reservationId}/check-in")
+    public ReservationDtos.PassengerView checkIn(
+            @AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID reservationId,
+            @Valid @RequestBody TrackingDtos.CheckInRequest request) {
+        return trackingService.checkIn(principal.userId(), reservationId, request.code());
+    }
+
+    /** Trip owner only, once the driver has waited five minutes at the pickup point. */
+    @PostMapping("/{reservationId}/no-show")
+    public ReservationDtos.PassengerView noShow(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable UUID reservationId) {
+        return trackingService.markNoShow(principal.userId(), reservationId);
     }
 }

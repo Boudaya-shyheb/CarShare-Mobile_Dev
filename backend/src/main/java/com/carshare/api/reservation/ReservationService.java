@@ -214,6 +214,17 @@ public class ReservationService {
         return stale.size();
     }
 
+    /**
+     * True while some passenger holding a confirmed seat has neither checked in nor been marked a
+     * no-show. TripService uses it to refuse a manual PICKED_UP that would drive off and leave
+     * their reservation confirmed for ever.
+     */
+    @Transactional(readOnly = true)
+    boolean hasPassengersStillToBoard(UUID tripId) {
+        return reservations.findByTrip_IdAndStatusIn(tripId, Set.of(ReservationStatus.CONFIRMED))
+                .stream().anyMatch(reservation -> !reservation.isCheckedIn());
+    }
+
     // --- helpers ----------------------------------------------------------------------------
 
     private void releaseSeats(Trip trip, int seats, boolean wasConfirmed) {
@@ -251,12 +262,13 @@ public class ReservationService {
         return reservation;
     }
 
+    // 404 rather than 403, matching the trip endpoints, so one driver cannot use these routes to
+    // find out which trips belong to another driver.
     private Reservation requireReservationOnOwnTrip(UUID driverId, UUID reservationId) {
         Reservation reservation = reservations.findById(reservationId)
                 .orElseThrow(ReservationService::reservationNotFound);
         if (!reservation.getTrip().isDrivenBy(driverId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "not_trip_owner",
-                    "Only the driver of this trip can answer its seat requests.");
+            throw tripNotFound();
         }
         return reservation;
     }
@@ -264,8 +276,7 @@ public class ReservationService {
     private void requireOwnTrip(UUID driverId, UUID tripId) {
         Trip trip = trips.findById(tripId).orElseThrow(ReservationService::tripNotFound);
         if (!trip.isDrivenBy(driverId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "not_trip_owner",
-                    "Only the driver of this trip can see who booked it.");
+            throw tripNotFound();
         }
     }
 

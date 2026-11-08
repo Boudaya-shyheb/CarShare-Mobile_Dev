@@ -48,4 +48,16 @@ public enum TripStatus {
         return this == DRIVER_EN_ROUTE || this == DRIVER_ARRIVED || this == PICKED_UP
                 || this == IN_PROGRESS;
     }
+
+    /**
+     * Which end of the route the driver is heading for. The live view reports the distance and
+     * ETA to this point.
+     */
+    public TrackingTarget trackingTarget() {
+        return switch (this) {
+            // Still on the way to the passenger. A cancelled trip never got anyone aboard.
+            case SCHEDULED, DRIVER_EN_ROUTE, DRIVER_ARRIVED, CANCELLED -> TrackingTarget.PICKUP;
+            case PICKED_UP, IN_PROGRESS, COMPLETED -> TrackingTarget.DROPOFF;
+        };
+    }
 }

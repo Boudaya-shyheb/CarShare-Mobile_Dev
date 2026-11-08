@@ -103,6 +103,6 @@ class TripWindowTest {
 
     private Trip tripAt(Instant departure, Integer durationS) {
         return new Trip(driver, null, "Origin", 36.8, 10.18, "Destination", 35.82, 10.63,
-                departure, 4, new BigDecimal("12.00"), false, null, null, durationS);
+                departure, 4, new BigDecimal("12.00"), false, null, null, durationS, null);
     }
 }

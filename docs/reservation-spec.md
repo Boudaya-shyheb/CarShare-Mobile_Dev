@@ -119,15 +119,82 @@ service at check-in time (step 6), not by a database constraint.
 
 - The driver sends positions from `DRIVER_EN_ROUTE` until `COMPLETED` — not only during
   `IN_PROGRESS`. Confirmed passengers poll the latest position every **5 s**.
-- Geofence **100 m** around the pickup point → `DRIVER_ARRIVED` automatically; around the
-  drop-off point → `COMPLETED`.
-- Pickup check-in: the driver submits the passenger's 4-digit code, allowed only while
-  `DRIVER_ARRIVED` → `PICKED_UP`.
-- No-show: after **5 min** in `DRIVER_ARRIVED` with no code, the driver can mark the reservation
-  `NO_SHOW` and the seat is released.
-- Deviation alert: more than **300 m** off the straight/planned route stores a `DEVIATION` event.
-- Every position is stored in `gps_points` (`trip_id`, `lat`, `lng`, `speed`, `recorded_at`) so
-  the trip can be replayed.
+- Every position is stored in `gps_points` (`trip_id`, `lat`, `lng`, `speed_mps`, `recorded_at`)
+  so the trip can be replayed. `recorded_at` is the phone's own clock, which is what keeps an
+  offline buffer in order; `created_at` is when the server received it.
+- `trips` also carries `last_lat`, `last_lng`, `last_position_at` — a copy of the newest kept
+  position, so the live view is one row read rather than a sort over every point.
+
+### Sending positions
+
+One request carries **1–50** points, so the app can flush a buffer after a dead spot. The batch
+is sorted by `recorded_at` server-side rather than trusted.
+
+A point is kept only when it is at least **2 s** newer than the last point kept. That single rule
+covers both filters: anything at or before the trip's `last_position_at` is already too old, and
+anything bunched up behind a kept point is dropped. A point outside 1–50, or with a missing or
+impossible coordinate, is `400` `invalid_positions` — the whole batch is refused, not trimmed.
+
+The geofences and the deviation check run **per kept point, in time order**, not only on the last
+one. A buffer flushed after a dead spot can cross a geofence part-way through, and checking only
+its newest point would leave the trip stuck one status behind.
+
+### Automatic transitions
+
+All of them go through the one `changeStatus` method, with the triggering position on the event.
+
+| Trigger | From | To |
+| --- | --- | --- |
+| Within **100 m** of the pickup point | `DRIVER_EN_ROUTE` | `DRIVER_ARRIVED` |
+| Every confirmed passenger aboard or `NO_SHOW`, at least one aboard | `DRIVER_ARRIVED` | `PICKED_UP` |
+| Within **100 m** of the drop-off point | `IN_PROGRESS` | `COMPLETED` |
+
+The driver starts the ride themselves (`PICKED_UP` → `IN_PROGRESS`) through the status endpoint.
+On completion every checked-in reservation becomes `COMPLETED`.
+
+`DRIVER_ARRIVED` → `PICKED_UP` is also a legal manual transition, but the status endpoint refuses
+it with `409` `passengers_not_boarded` while any `CONFIRMED` reservation is neither checked in nor
+`NO_SHOW`. Otherwise a driver could set off by hand and leave those reservations `CONFIRMED` for
+ever, since completion only closes checked-in ones. The automatic transition above is unaffected:
+it has already proved everybody is settled, and it does not go through that endpoint.
+
+### Check-in
+
+The driver submits the code the passenger shows them, only while the trip is `DRIVER_ARRIVED` and
+only for a `CONFIRMED` reservation that has not checked in. A wrong code raises
+`pickup_code_attempts` and answers `400` `wrong_pickup_code` naming the tries left; the third
+wrong code writes a `CHECK_IN_FAILED` event and answers `409` `pickup_code_locked`, as does every
+attempt after that. The right code sets `checked_in_at` and writes `CHECK_IN`.
+
+> The attempt counter has to survive the failure, so check-in runs with
+> `noRollbackFor = ApiException.class` — the same reason the auth module uses it for failed
+> sign-ins. Without it, the rollback would hand the driver unlimited guesses.
+
+### No-show
+
+Allowed once the trip has been `DRIVER_ARRIVED` for **5 min**, measured from the latest
+`DRIVER_ARRIVED` trip event against the injected `Clock`; exactly 5:00 is allowed, 4:59 is `409`
+`no_show_too_early`. The reservation becomes `NO_SHOW` and both `seats_available` and
+`confirmed_seats` are released with the atomic updates from step 5.
+
+### Deviation
+
+Only while `IN_PROGRESS`, and only when `route_polyline` is set — with no planned route the check
+is skipped rather than guessed. The distance is measured to the route's **segments**, not just its
+vertices, after decoding the Google encoded polyline. Over **300 m** sets `deviating = true` and
+writes `DEVIATION`; coming back under sets it false and writes `DEVIATION_RESOLVED`. Nothing is
+written while the state is unchanged, so a long detour raises one alert rather than one per fix.
+
+### The live view
+
+`GET /api/trips/{id}/live` answers the driver, or a passenger whose reservation on the trip is
+`CONFIRMED` **or `COMPLETED`**; anyone else gets `404`. `COMPLETED` is in that list because the
+drop-off geofence completes the trip and the reservation in the same request — without it the
+passenger's next poll would answer `404` instead of showing them the trip they just finished. It reports `tripStatus`, the last position, the current `target`
+(`PICKUP` before `PICKED_UP`, `DROPOFF` after), `distanceToTargetM` as a haversine,
+`etaSeconds` as that distance over the last known speed with a floor of **8.3 m/s** (~30 km/h,
+so a stopped car still gives a usable number), `deviating`, and for a passenger their own
+reservation status and whether they are aboard.
 
 ## Flutter screens (follow the Figma mockups)
 

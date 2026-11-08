@@ -34,7 +34,8 @@ public final class TripDtos {
             boolean instantBooking,
             @Size(max = 500) String notes,
             @Min(0) Integer distanceM,
-            @Min(0) Integer durationS) { }
+            @Min(0) Integer durationS,
+            @Size(max = 20_000) String routePolyline) { }
 
     public record UpdateTripRequest(
             UUID vehicleId,
@@ -50,7 +51,8 @@ public final class TripDtos {
             boolean instantBooking,
             @Size(max = 500) String notes,
             @Min(0) Integer distanceM,
-            @Min(0) Integer durationS) { }
+            @Min(0) Integer durationS,
+            @Size(max = 20_000) String routePolyline) { }
 
     public record CancelTripRequest(@NotBlank @Size(max = 300) String reason) { }
 
@@ -74,7 +76,7 @@ public final class TripDtos {
             Instant departureTime, int seatsTotal, int seatsAvailable, int confirmedSeats,
             BigDecimal pricePerSeat, String status, boolean instantBooking, boolean locked,
             String notes, String cancelReason, Integer distanceM, Integer durationS,
-            Instant createdAt, Instant updatedAt) {
+            String routePolyline, Instant createdAt, Instant updatedAt) {
         public static TripDetail from(Trip trip) {
             return new TripDetail(trip.getId(), trip.getDriver().getId(), trip.getDriver().getFullName(),
                     trip.getVehicleId(), trip.getOriginLabel(), trip.getOriginLat(), trip.getOriginLng(),
@@ -82,7 +84,8 @@ public final class TripDtos {
                     trip.getDepartureTime(), trip.getSeatsTotal(), trip.getSeatsAvailable(),
                     trip.getConfirmedSeats(), trip.getPricePerSeat(), trip.getStatus().name(),
                     trip.isInstantBooking(), trip.isLocked(), trip.getNotes(), trip.getCancelReason(),
-                    trip.getDistanceM(), trip.getDurationS(), trip.getCreatedAt(), trip.getUpdatedAt());
+                    trip.getDistanceM(), trip.getDurationS(), trip.getRoutePolyline(),
+                    trip.getCreatedAt(), trip.getUpdatedAt());
         }
     }
 

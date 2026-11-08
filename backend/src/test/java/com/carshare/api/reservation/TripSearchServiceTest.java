@@ -182,7 +182,7 @@ class TripSearchServiceTest {
         AppUser searcherAsDriver = new AppUser("Me", "+21622222222", "me@carshare.tn", "hash", UserRole.DRIVER);
         Trip ownTrip = new Trip(searcherAsDriver, null, "Origin", WANTED_ORIGIN_LAT, WANTED_ORIGIN_LNG,
                 "Destination", WANTED_DESTINATION_LAT, WANTED_DESTINATION_LNG, wantedDeparture, 4,
-                new BigDecimal("12.00"), false, null, null, null);
+                new BigDecimal("12.00"), false, null, null, null, null);
         givenCandidates(ownTrip, perfectTrip());
 
         List<TripDtos.TripSearchResult> results =
@@ -419,7 +419,7 @@ class TripSearchServiceTest {
             double destinationLng, Instant departure, String price, int seats) {
         return new Trip(otherDriver, null, "Origin", originLat, originLng, "Destination",
                 destinationLat, destinationLng, departure, seats, new BigDecimal(price), false,
-                null, null, null);
+                null, null, null, null);
     }
 
     /** Moves a latitude north by an exact number of metres on the sphere GeoUtils measures with. */

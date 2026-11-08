@@ -32,6 +32,11 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @EntityGraph(attributePaths = "trip")
     List<Reservation> findByTrip_IdAndStatusIn(UUID tripId, Collection<ReservationStatus> statuses);
 
+    /** Decides whether a passenger may watch a trip's live position. */
+    @EntityGraph(attributePaths = "trip")
+    Optional<Reservation> findByTrip_IdAndPassenger_IdAndStatusIn(UUID tripId, UUID passengerId,
+            Collection<ReservationStatus> statuses);
+
     /**
      * Candidates for the auto-refuse job: a reservation nobody answered within the waiting window,
      * or one whose trip is about to leave.

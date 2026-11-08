@@ -315,7 +315,7 @@ class ReservationServiceTest {
         // Leaves 10:00 and is known to take 30 minutes, so it is done well before 11:00.
         Trip quick = new Trip(driver, null, "A", 36.8, 10.18, "B", 35.82, 10.63,
                 DEPARTURE.minus(1, ChronoUnit.HOURS), 4, new BigDecimal("8.00"), false, null,
-                null, 1_800);
+                null, 1_800, null);
         givenHeldReservationOn(quick);
         givenSeatsCanBeHeld();
 
@@ -401,7 +401,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("only the trip's driver can answer its requests")
+    @DisplayName("another driver answering a request gets a 404, not a hint that it exists")
     void refusesAnotherDriver() {
         Trip trip = tripNotLookedUpById(4, false);
         Reservation reservation = pendingReservation(trip, 1);
@@ -410,8 +410,8 @@ class ReservationServiceTest {
         ApiException error = assertThrows(ApiException.class,
                 () -> service.accept(UUID.randomUUID(), reservation.getId()));
 
-        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
-        assertEquals("not_trip_owner", error.getCode());
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
+        assertEquals("trip_not_found", error.getCode());
         verify(trips, never()).addConfirmedSeats(any(), anyInt());
     }
 
@@ -639,15 +639,15 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("only the trip's driver can see who booked it")
+    @DisplayName("another driver listing the passengers gets a 404")
     void otherDriversCannotSeePassengers() {
         Trip trip = givenTrip(4, false);
 
         ApiException error = assertThrows(ApiException.class,
                 () -> service.listForTrip(UUID.randomUUID(), trip.getId()));
 
-        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
-        assertEquals("not_trip_owner", error.getCode());
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
+        assertEquals("trip_not_found", error.getCode());
     }
 
     @Test
@@ -792,7 +792,8 @@ class ReservationServiceTest {
 
     private Trip tripLeavingAt(Instant departure, int seatsTotal, boolean instantBooking) {
         return new Trip(driver, null, "Tunis Centre", 36.8065, 10.1815, "Sousse", 35.8256, 10.6360,
-                departure, seatsTotal, new BigDecimal("12.50"), instantBooking, null, 140_000, null);
+                departure, seatsTotal, new BigDecimal("12.50"), instantBooking, null, 140_000,
+                null, null);
     }
 
     private Reservation pendingReservation(Trip trip, int seats) {

@@ -53,7 +53,8 @@ public class TripService {
                 request.originLat(), request.originLng(), request.destinationLabel().trim(),
                 request.destinationLat(), request.destinationLng(), request.departureTime(),
                 request.seatsTotal(), request.pricePerSeat(), request.instantBooking(),
-                clean(request.notes()), request.distanceM(), request.durationS());
+                clean(request.notes()), request.distanceM(), request.durationS(),
+                clean(request.routePolyline()));
         trips.save(trip);
         // Publishing is not a transition, so it records its event directly. Every later status
         // change goes through changeStatus.
@@ -111,7 +112,7 @@ public class TripService {
                 request.originLng(), request.destinationLabel().trim(), request.destinationLat(),
                 request.destinationLng(), request.departureTime(), request.seatsTotal(),
                 request.pricePerSeat(), request.instantBooking(), clean(request.notes()),
-                request.distanceM(), request.durationS());
+                request.distanceM(), request.durationS(), clean(request.routePolyline()));
         tripEvents.save(new TripEvent(trip, TripEventType.UPDATED, driverId, null, null, null));
         return TripDtos.TripDetail.from(trip);
     }
@@ -134,6 +135,16 @@ public class TripService {
         Trip trip = requireOwnedTrip(driverId, tripId);
         if (request.lat() != null && request.lng() != null) {
             validatePoint(request.lat(), request.lng(), "position");
+        }
+        // Starting the pickup by hand must not leave a confirmed passenger behind: their
+        // reservation would stay confirmed for ever, since completion only closes checked-in
+        // ones. The automatic transition in TrackingService has already proved everybody is
+        // settled, and it does not come through here.
+        if (request.status() == TripStatus.PICKED_UP
+                && trip.getStatus() == TripStatus.DRIVER_ARRIVED
+                && reservationService.hasPassengersStillToBoard(tripId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "passengers_not_boarded",
+                    "Check in or mark a no-show for every passenger before you set off.");
         }
         return TripDtos.TripDetail.from(
                 changeStatus(trip, request.status(), driverId, request.lat(), request.lng(), null));

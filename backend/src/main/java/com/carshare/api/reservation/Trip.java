@@ -6,6 +6,8 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "trips")
@@ -35,6 +37,16 @@ public class Trip {
     @Column(name = "cancel_reason", length = 300) private String cancelReason;
     @Column(name = "distance_m") private Integer distanceM;
     @Column(name = "duration_s") private Integer durationS;
+    // Live tracking: the newest kept position, copied out of gps_points so the live view is
+    // a single row read rather than a sort over every point.
+    @Column(name = "last_lat") private Double lastLat;
+    @Column(name = "last_lng") private Double lastLng;
+    @Column(name = "last_position_at") private Instant lastPositionAt;
+    // Google encoded polyline of the planned route. TEXT, so the JDBC type is stated
+    // explicitly and ddl-auto=validate agrees with the migration.
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
+    @Column(name = "route_polyline") private String routePolyline;
+    @Column(nullable = false) private boolean deviating;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at") private Instant updatedAt;
 
@@ -43,7 +55,7 @@ public class Trip {
     public Trip(AppUser driver, UUID vehicleId, String originLabel, double originLat, double originLng,
             String destinationLabel, double destinationLat, double destinationLng, Instant departureTime,
             int seatsTotal, BigDecimal pricePerSeat, boolean instantBooking, String notes,
-            Integer distanceM, Integer durationS) {
+            Integer distanceM, Integer durationS, String routePolyline) {
         this.id = UUID.randomUUID();
         this.driver = driver;
         this.vehicleId = vehicleId;
@@ -61,6 +73,7 @@ public class Trip {
         this.notes = notes;
         this.distanceM = distanceM;
         this.durationS = durationS;
+        this.routePolyline = routePolyline;
     }
 
     @PrePersist void setCreatedAt() { if (createdAt == null) createdAt = Instant.now(); }
@@ -86,6 +99,11 @@ public class Trip {
     public String getCancelReason() { return cancelReason; }
     public Integer getDistanceM() { return distanceM; }
     public Integer getDurationS() { return durationS; }
+    public Double getLastLat() { return lastLat; }
+    public Double getLastLng() { return lastLng; }
+    public Instant getLastPositionAt() { return lastPositionAt; }
+    public String getRoutePolyline() { return routePolyline; }
+    public boolean isDeviating() { return deviating; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
@@ -116,7 +134,7 @@ public class Trip {
     void updateDetails(UUID vehicleId, String originLabel, double originLat, double originLng,
             String destinationLabel, double destinationLat, double destinationLng, Instant departureTime,
             int seatsTotal, BigDecimal pricePerSeat, boolean instantBooking, String notes,
-            Integer distanceM, Integer durationS) {
+            Integer distanceM, Integer durationS, String routePolyline) {
         int heldSeats = this.seatsTotal - this.seatsAvailable;
         this.vehicleId = vehicleId;
         this.originLabel = originLabel;
@@ -133,6 +151,7 @@ public class Trip {
         this.notes = notes;
         this.distanceM = distanceM;
         this.durationS = durationS;
+        this.routePolyline = routePolyline;
     }
 
     /**
@@ -162,5 +181,29 @@ public class Trip {
     public boolean overlaps(Trip other) {
         return departureTime.isBefore(other.expectedArrival())
                 && other.getDepartureTime().isBefore(expectedArrival());
+    }
+
+    /** Remembers the newest kept GPS fix. The service decides which points are worth keeping. */
+    void recordPosition(double lat, double lng, Instant recordedAt) {
+        lastLat = lat;
+        lastLng = lng;
+        lastPositionAt = recordedAt;
+    }
+
+    void markDeviating(boolean value) {
+        deviating = value;
+    }
+
+    /** Where the driver is heading now: the pickup point, or the drop-off once aboard. */
+    public double targetLat() {
+        return status.trackingTarget() == TrackingTarget.PICKUP ? originLat : destinationLat;
+    }
+
+    public double targetLng() {
+        return status.trackingTarget() == TrackingTarget.PICKUP ? originLng : destinationLng;
+    }
+
+    public boolean hasKnownPosition() {
+        return lastLat != null && lastLng != null;
     }
 }

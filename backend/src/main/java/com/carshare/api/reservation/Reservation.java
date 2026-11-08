@@ -38,6 +38,7 @@ public class Reservation {
     @Column(name = "cancel_reason", length = 255) private String cancelReason;
     @Column(name = "decided_at") private Instant decidedAt;
     @Column(name = "cancelled_at") private Instant cancelledAt;
+    @Column(name = "checked_in_at") private Instant checkedInAt;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at") private Instant updatedAt;
 
@@ -65,6 +66,7 @@ public class Reservation {
     public String getCancelReason() { return cancelReason; }
     public Instant getDecidedAt() { return decidedAt; }
     public Instant getCancelledAt() { return cancelledAt; }
+    public Instant getCheckedInAt() { return checkedInAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
@@ -100,6 +102,43 @@ public class Reservation {
     private void requireAwaitingDecision(String what) {
         if (!status.awaitsDecision()) {
             throw new IllegalStateException("A " + status + " reservation cannot be " + what + ".");
+        }
+    }
+
+    /** True once the driver has typed the right pickup code for this reservation. */
+    public boolean isCheckedIn() {
+        return checkedInAt != null;
+    }
+
+    /** True once the driver has used up every allowed attempt at the pickup code. */
+    public boolean isPickupCodeLocked() {
+        return pickupCodeAttempts >= PickupCode.MAX_ATTEMPTS;
+    }
+
+    void recordWrongPickupCode() {
+        pickupCodeAttempts++;
+    }
+
+    void recordCheckIn(Instant when) {
+        requireConfirmed("check in");
+        checkedInAt = when;
+    }
+
+    void markNoShow(Instant when) {
+        requireConfirmed("be marked a no-show");
+        status = ReservationStatus.NO_SHOW;
+        decidedAt = when;
+    }
+
+    void complete(Instant when) {
+        requireConfirmed("be completed");
+        status = ReservationStatus.COMPLETED;
+        decidedAt = when;
+    }
+
+    private void requireConfirmed(String what) {
+        if (!status.holdsConfirmedSeat()) {
+            throw new IllegalStateException("A " + status + " reservation cannot " + what + ".");
         }
     }
 }

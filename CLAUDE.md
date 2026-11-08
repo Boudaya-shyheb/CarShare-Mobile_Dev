@@ -14,6 +14,9 @@ exactly when adding a new module — do not refactor another module's files.
 > **Reservation module:** the agreed functional rules (state machine, match score,
 > reservation and tracking rules, screen list) live in [docs/reservation-spec.md](docs/reservation-spec.md).
 > Read it before changing anything under `com.carshare.api.reservation` or the reservation screens.
+> Every endpoint of that module — request and response JSON, who may call it, error codes, and the
+> order of calls for a full trip — is in [docs/reservation-api.md](docs/reservation-api.md), with a
+> Postman collection beside it at `docs/CarShare-Reservation.postman_collection.json`.
 
 
 ---

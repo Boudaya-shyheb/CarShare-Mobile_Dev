@@ -134,7 +134,7 @@ class TripServiceTest {
         when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
         TripDtos.PublishTripRequest request = new TripDtos.PublishTripRequest(null,
                 "Tunis Centre", TUNIS_LAT, TUNIS_LNG, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
-                departure, 3, PRICE, false, null, null, null);
+                departure, 3, PRICE, false, null, null, null, null);
 
         ApiException error = assertThrows(ApiException.class,
                 () -> service.publish(driver.getId(), request));
@@ -149,7 +149,7 @@ class TripServiceTest {
         when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
         TripDtos.PublishTripRequest request = new TripDtos.PublishTripRequest(null,
                 "Nowhere", 95.0, TUNIS_LNG, "Sousse", SOUSSE_LAT, SOUSSE_LNG,
-                departure, 3, PRICE, false, null, null, null);
+                departure, 3, PRICE, false, null, null, null, null);
 
         ApiException error = assertThrows(ApiException.class,
                 () -> service.publish(driver.getId(), request));
@@ -250,7 +250,7 @@ class TripServiceTest {
         when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
         TripDtos.UpdateTripRequest request = new TripDtos.UpdateTripRequest(null,
                 "Tunis Centre", TUNIS_LAT, TUNIS_LNG, "Monastir", 35.7643, 10.8113,
-                departure, 3, PRICE, false, null, null, null);
+                departure, 3, PRICE, false, null, null, null, null);
 
         ApiException error = assertThrows(ApiException.class,
                 () -> service.update(driver.getId(), trip.getId(), request));
@@ -522,23 +522,102 @@ class TripServiceTest {
         assertNull(service.publish(driver.getId(), publishRequest()).cancelReason());
     }
 
+    @Test
+    @DisplayName("setting off by hand is refused while a confirmed passenger has not boarded")
+    void refusesManualPickUpWithPassengersLeftBehind() {
+        Trip trip = arrivedTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+        when(reservationService.hasPassengersStillToBoard(trip.getId())).thenReturn(true);
+
+        ApiException error = assertThrows(ApiException.class, () -> service.changeStatus(
+                driver.getId(), trip.getId(),
+                new TripDtos.ChangeStatusRequest(TripStatus.PICKED_UP, null, null)));
+
+        assertEquals(HttpStatus.CONFLICT, error.getStatus());
+        assertEquals("passengers_not_boarded", error.getCode());
+        assertEquals(TripStatus.DRIVER_ARRIVED, trip.getStatus());
+        verifyNoInteractions(tripEvents);
+    }
+
+    @Test
+    @DisplayName("setting off by hand is allowed once everybody is settled")
+    void allowsManualPickUpWhenEverybodyIsSettled() {
+        Trip trip = arrivedTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+        when(reservationService.hasPassengersStillToBoard(trip.getId())).thenReturn(false);
+
+        TripDtos.TripDetail detail = service.changeStatus(driver.getId(), trip.getId(),
+                new TripDtos.ChangeStatusRequest(TripStatus.PICKED_UP, null, null));
+
+        assertEquals(TripStatus.PICKED_UP.name(), detail.status());
+        assertEquals(TripStatus.PICKED_UP, trip.getStatus());
+    }
+
+    @Test
+    @DisplayName("a trip with nobody aboard may still set off by hand")
+    void allowsManualPickUpWithNoPassengers() {
+        Trip trip = arrivedTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+        // No confirmed reservations at all, so nothing is left to board.
+        when(reservationService.hasPassengersStillToBoard(trip.getId())).thenReturn(false);
+
+        assertEquals(TripStatus.PICKED_UP.name(), service.changeStatus(driver.getId(), trip.getId(),
+                new TripDtos.ChangeStatusRequest(TripStatus.PICKED_UP, null, null)).status());
+    }
+
+    @Test
+    @DisplayName("the boarding check does not get in the way of the other transitions")
+    void boardingCheckOnlyGuardsPickUp() {
+        Trip trip = scheduledTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+
+        service.changeStatus(driver.getId(), trip.getId(),
+                new TripDtos.ChangeStatusRequest(TripStatus.DRIVER_EN_ROUTE, null, null));
+
+        assertEquals(TripStatus.DRIVER_EN_ROUTE, trip.getStatus());
+        verify(reservationService, never()).hasPassengersStillToBoard(any());
+    }
+
+    @Test
+    @DisplayName("an impossible transition is still reported as one, not as unboarded passengers")
+    void wrongStatusStillReportsTheTransition() {
+        Trip trip = scheduledTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+
+        ApiException error = assertThrows(ApiException.class, () -> service.changeStatus(
+                driver.getId(), trip.getId(),
+                new TripDtos.ChangeStatusRequest(TripStatus.PICKED_UP, null, null)));
+
+        assertEquals("invalid_trip_transition", error.getCode());
+        verify(reservationService, never()).hasPassengersStillToBoard(any());
+    }
+
+    /** A trip walked up to DRIVER_ARRIVED through the state machine. */
+    private Trip arrivedTrip() {
+        Trip trip = scheduledTrip();
+        trip.applyStatus(TripStatus.DRIVER_EN_ROUTE);
+        trip.applyStatus(TripStatus.DRIVER_ARRIVED);
+        return trip;
+    }
+
     // --- helpers ----------------------------------------------------------------------------
 
     private TripDtos.PublishTripRequest publishRequest() {
         return new TripDtos.PublishTripRequest(null, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
-                "Sousse", SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, 140_000, 7_200);
+                "Sousse", SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, 140_000,
+                7_200, null);
     }
 
     private TripDtos.UpdateTripRequest updateRequest(Instant departureTime, BigDecimal price,
             int seatsTotal, String notes) {
         return new TripDtos.UpdateTripRequest(null, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
                 "Sousse", SOUSSE_LAT, SOUSSE_LNG, departureTime, seatsTotal, price, false, notes,
-                null, null);
+                null, null, null);
     }
 
     private Trip scheduledTrip() {
         return new Trip(driver, null, "Tunis Centre", TUNIS_LAT, TUNIS_LNG, "Sousse",
-                SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, null, null);
+                SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, null, null, null);
     }
 
     private Trip lockedTrip() {
