@@ -71,20 +71,49 @@ own trips. Keep the bounding-box pre-filter in SQL followed by a haversine dista
 
 ## Reservations
 
-Statuses: `PENDING`, `CONFIRMED`, `REFUSED`, `CANCELLED`, `NO_SHOW`, `COMPLETED`.
+Statuses: `PENDING`, `CONFIRMED`, `REFUSED`, `CANCELLED`, `NO_SHOW`, `COMPLETED`. `PENDING` and
+`CONFIRMED` are the **active** statuses: they hold a seat and block an overlapping booking.
 
 - `instant_booking = true` → the reservation is `CONFIRMED` immediately; otherwise it stays
   `PENDING` until the driver accepts.
 - A `@Scheduled` job auto-refuses a `PENDING` reservation after **2 h** without an answer, or
-  **30 min** before departure, whichever comes first.
-- Rules: no booking your own trip; no two active reservations overlapping in time; suspended or
-  banned users cannot book.
-- Seat holding keeps the atomic decrement — `UPDATE … WHERE seats_available >= :n`, `409` when no
-  row changes — so two passengers can never take the same seat.
+  **30 min** before departure, whichever comes first, with `cancel_reason = 'no_answer'`.
+- Rules: no booking your own trip; the trip must be `SCHEDULED` and still in the future; no two
+  active reservations overlapping in time; suspended or banned users cannot book.
+- Seat holding keeps the atomic decrement — `UPDATE … WHERE seats_available >= :n`, `409`
+  `seats_unavailable` when no row changes — so two passengers can never take the same seat.
+  Seats are held the moment the seat is **requested**, not when it is accepted, and released on
+  `REFUSED`, `CANCELLED` and auto-refusal.
+- `trips.confirmed_seats` goes up when a reservation becomes `CONFIRMED` and down when a confirmed
+  one is cancelled. It is the edit lock from the publishing rules above.
 - Passenger cancellation is free until **2 h** before departure; later it is still allowed but
-  stored with `late_cancellation = true`.
-- Each reservation gets a **4-digit pickup code**. Only a hash is stored, with an attempts
-  counter capped at **3**.
+  stored with `late_cancellation = true`. Exactly 2 h before is still free.
+- When the driver cancels the trip, every active reservation on it becomes `CANCELLED` with
+  `cancel_reason = 'trip_cancelled'` and `late_cancellation = false`, and all seats are released.
+
+### Overlap rule
+
+A trip occupies the window `[departure_time, departure_time + duration_s)`, falling back to
+**2 h** when OSRM gave no `duration_s`. A booking is refused `409` `overlapping_reservation` when
+that window intersects the window of any trip the passenger already holds an active reservation
+on. Windows that merely touch — one trip arriving exactly as the next leaves — do not overlap.
+Re-booking a trip the passenger already holds is the same rule applied to itself, so it needs no
+separate check.
+
+### Pickup code
+
+Each reservation gets a **4-digit pickup code** from `SecureRandom`, stored **in plain text**
+(`CHAR(4)`).
+
+> Changed from the original plan, which stored only a hash. The driver has to read the code the
+> passenger shows them and type it in, so the server must be able to show it to the passenger; a
+> hash would only hide it from a database reader, not from anyone who can call the API as that
+> passenger. The protection that matters is who may read it, and that is enforced in the DTOs:
+> the code is returned **only** to the passenger who owns the reservation, and **only** once the
+> reservation is `CONFIRMED`. The driver-facing record has no pickup code field at all.
+
+`pickup_code_attempts` counts wrong codes typed by the driver; the cap of **3** is enforced by the
+service at check-in time (step 6), not by a database constraint.
 
 ## Live tracking
 

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -54,4 +55,43 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
             @Param("destinationLatMax") double destinationLatMax,
             @Param("destinationLngMin") double destinationLngMin,
             @Param("destinationLngMax") double destinationLngMax);
+
+    /**
+     * Holds seats for a new reservation. This conditional update is the only thing standing
+     * between two passengers and the same last seat: it returns 0 when the seats went to someone
+     * else, which the service turns into 409 seats_unavailable.
+     *
+     * <p>Every method below is a bulk update, so a Trip entity already loaded in the same
+     * transaction keeps its old seat counts. Callers must not read seat counts from such an
+     * entity afterwards.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Trip t set t.seatsAvailable = t.seatsAvailable - :seats
+            where t.id = :tripId and t.seatsAvailable >= :seats
+            """)
+    int holdSeats(@Param("tripId") UUID tripId, @Param("seats") int seats);
+
+    /** Gives seats back when a reservation is refused, cancelled or auto-refused. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Trip t set t.seatsAvailable = t.seatsAvailable + :seats
+            where t.id = :tripId and t.seatsAvailable + :seats <= t.seatsTotal
+            """)
+    int releaseSeats(@Param("tripId") UUID tripId, @Param("seats") int seats);
+
+    /** Confirmed seats lock the trip against time, route and price edits. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Trip t set t.confirmedSeats = t.confirmedSeats + :seats
+            where t.id = :tripId and t.confirmedSeats + :seats <= t.seatsTotal
+            """)
+    int addConfirmedSeats(@Param("tripId") UUID tripId, @Param("seats") int seats);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Trip t set t.confirmedSeats = t.confirmedSeats - :seats
+            where t.id = :tripId and t.confirmedSeats >= :seats
+            """)
+    int releaseConfirmedSeats(@Param("tripId") UUID tripId, @Param("seats") int seats);
 }

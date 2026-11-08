@@ -41,6 +41,7 @@ class TripSearchServiceTest {
     @Mock private TripRepository trips;
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
+    @Mock private ReservationService reservationService;
 
     private TripService service;
     private AppUser otherDriver;
@@ -49,7 +50,7 @@ class TripSearchServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TripService(trips, tripEvents, users);
+        service = new TripService(trips, tripEvents, users, reservationService);
         otherDriver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash", UserRole.DRIVER);
         searcherId = UUID.randomUUID();
         wantedDeparture = Instant.now().plus(5, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MINUTES);

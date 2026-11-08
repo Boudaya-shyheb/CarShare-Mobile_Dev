@@ -34,11 +34,14 @@ public class TripService {
     private final TripRepository trips;
     private final TripEventRepository tripEvents;
     private final UserRepository users;
+    private final ReservationService reservationService;
 
-    public TripService(TripRepository trips, TripEventRepository tripEvents, UserRepository users) {
+    public TripService(TripRepository trips, TripEventRepository tripEvents, UserRepository users,
+            ReservationService reservationService) {
         this.trips = trips;
         this.tripEvents = tripEvents;
         this.users = users;
+        this.reservationService = reservationService;
     }
 
     @Transactional
@@ -116,8 +119,10 @@ public class TripService {
     @Transactional
     public TripDtos.TripDetail cancel(UUID driverId, UUID tripId, String reason) {
         Trip trip = requireOwnedTrip(driverId, tripId);
-        return TripDtos.TripDetail.from(
-                changeStatus(trip, TripStatus.CANCELLED, driverId, null, null, reason.trim()));
+        changeStatus(trip, TripStatus.CANCELLED, driverId, null, null, reason.trim());
+        // Trip.cancel released every seat; this closes the reservations that held them.
+        reservationService.cancelAllForCancelledTrip(trip, driverId);
+        return TripDtos.TripDetail.from(trip);
     }
 
     @Transactional

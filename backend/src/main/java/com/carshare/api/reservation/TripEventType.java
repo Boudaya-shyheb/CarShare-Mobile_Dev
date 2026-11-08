@@ -12,7 +12,11 @@ public enum TripEventType {
     CANCELLED,
     CHECK_IN,
     NO_SHOW,
-    DEVIATION;
+    DEVIATION,
+    RESERVATION_REQUESTED,
+    RESERVATION_CONFIRMED,
+    RESERVATION_REFUSED,
+    RESERVATION_CANCELLED;
 
     public static TripEventType forStatus(TripStatus status) {
         return switch (status) {

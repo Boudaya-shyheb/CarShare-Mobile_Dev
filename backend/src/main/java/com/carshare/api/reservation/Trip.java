@@ -3,12 +3,16 @@ package com.carshare.api.reservation;
 import com.carshare.api.users.AppUser;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "trips")
 public class Trip {
+    /** Assumed journey time when OSRM has not given one, used for the overlap rule. */
+    public static final Duration DEFAULT_DURATION = Duration.ofHours(2);
+
     @Id private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "driver_id", nullable = false) private AppUser driver;
     // The Vehicles module adds the foreign key in a later migration.
@@ -131,9 +135,32 @@ public class Trip {
         this.durationS = durationS;
     }
 
-    /** Called by the reservation step when seats are confirmed or released. */
+    /**
+     * Adjusts the confirmed seat count in memory. Production code changes seat counts through the
+     * atomic updates on TripRepository instead, so two bookings can never lose each other's
+     * change; this stays for building a locked trip in tests.
+     */
     void recordConfirmedSeats(int delta) {
         confirmedSeats += delta;
         if (confirmedSeats < 0) confirmedSeats = 0;
+    }
+
+    /** How long this trip is expected to take; two hours when no route duration is known. */
+    public Duration expectedDuration() {
+        return durationS == null ? DEFAULT_DURATION : Duration.ofSeconds(durationS);
+    }
+
+    /** The end of the window this trip occupies in a passenger's diary. */
+    public Instant expectedArrival() {
+        return departureTime.plus(expectedDuration());
+    }
+
+    /**
+     * True when the two trips' [departure, expected arrival) windows intersect. Trips that merely
+     * touch — one arriving exactly as the other leaves — do not overlap.
+     */
+    public boolean overlaps(Trip other) {
+        return departureTime.isBefore(other.expectedArrival())
+                && other.getDepartureTime().isBefore(expectedArrival());
     }
 }

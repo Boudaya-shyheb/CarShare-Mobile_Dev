@@ -42,6 +42,7 @@ class TripServiceTest {
     @Mock private TripRepository trips;
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
+    @Mock private ReservationService reservationService;
 
     private TripService service;
     private AppUser driver;
@@ -49,7 +50,7 @@ class TripServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TripService(trips, tripEvents, users);
+        service = new TripService(trips, tripEvents, users, reservationService);
         driver = new AppUser("Yacine Jomni", "+21612345678", "driver@carshare.tn", "hash", UserRole.DRIVER);
         departure = Instant.now().plus(3, ChronoUnit.HOURS);
     }
@@ -342,6 +343,31 @@ class TripServiceTest {
         assertEquals(3, detail.seatsAvailable());
         assertEquals(0, detail.confirmedSeats());
         assertFalse(detail.locked());
+    }
+
+    @Test
+    @DisplayName("cancelling a trip hands its live reservations to the reservation service")
+    void cancelClosesReservations() {
+        Trip trip = scheduledTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+
+        service.cancel(driver.getId(), trip.getId(), "Car broke down");
+
+        verify(reservationService).cancelAllForCancelledTrip(trip, driver.getId());
+    }
+
+    @Test
+    @DisplayName("a trip that cannot be cancelled leaves its reservations alone")
+    void refusedCancelLeavesReservationsAlone() {
+        Trip trip = scheduledTrip();
+        trip.applyStatus(TripStatus.DRIVER_EN_ROUTE);
+        trip.applyStatus(TripStatus.DRIVER_ARRIVED);
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+
+        assertThrows(ApiException.class,
+                () -> service.cancel(driver.getId(), trip.getId(), "Changed my mind"));
+
+        verifyNoInteractions(reservationService);
     }
 
     // --- status transitions -----------------------------------------------------------------
