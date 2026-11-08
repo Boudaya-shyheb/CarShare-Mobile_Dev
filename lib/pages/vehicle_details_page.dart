@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/vehicle.dart';
+import '../models/vehicle_registration.dart';
 import '../services/vehicle_service.dart';
 import '../theme.dart';
 import '../widgets/vehicle_photo_image.dart';
@@ -190,7 +191,7 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                     _detail('Color', _vehicle.color, Icons.palette_outlined),
                     _detail(
                       'Registration number',
-                      _vehicle.registrationNumber,
+                      displayVehicleRegistration(_vehicle.registrationNumber),
                       Icons.pin_outlined,
                     ),
                     _detail(

@@ -18,7 +18,7 @@ public final class VehicleDtos {
             @NotBlank @Size(max = 60) String model,
             @Min(1900) @Max(2200) int year,
             @NotBlank @Size(max = 40) String color,
-            @NotBlank @Pattern(regexp = "(?i)^\\d{3}\\s+TU\\s+\\d{4}$") String registrationNumber,
+            @NotBlank @Pattern(regexp = "(?i)^(?:\\d{3}\\s*TU\\s*\\d{4}|RS\\s*\\d{6})$") String registrationNumber,
             @Min(1) @Max(9) int seatsNumber,
             @NotNull Vehicle.TrunkSize trunkSize,
             boolean airConditioning) { }

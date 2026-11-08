@@ -199,8 +199,7 @@ public class VehicleService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_vehicle_year",
                     "The manufacturing year cannot be in the future.");
         }
-        String registrationNumber = request.registrationNumber().trim()
-                .replaceAll("\\s+", " ").toUpperCase();
+        String registrationNumber = request.registrationNumber().replaceAll("\\s+", "").toUpperCase();
         boolean used = currentVehicleId == null
                 ? vehicles.existsByRegistrationNumber(registrationNumber)
                 : vehicles.existsByRegistrationNumberAndIdNot(registrationNumber, currentVehicleId);

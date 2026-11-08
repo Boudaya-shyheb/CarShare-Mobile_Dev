@@ -1,9 +1,10 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../data/vehicle_catalog.dart';
 import '../models/vehicle.dart';
+import '../models/vehicle_registration.dart';
 import '../services/api_client.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/primary_button.dart';
@@ -24,15 +25,18 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   final _brand = TextEditingController();
   final _model = TextEditingController();
   final _year = TextEditingController();
-  final _color = TextEditingController();
-  final _registrationNumber = TextEditingController();
+  final _plateDigits = TextEditingController();
   final _seats = TextEditingController();
   final _picker = ImagePicker();
   final _vehicleService = VehicleService.instance;
+  final _brandFocus = FocusNode();
+  final _modelFocus = FocusNode();
   final List<XFile> _newPhotos = [];
   final List<VehiclePhoto> _existingPhotos = [];
   final Set<String> _removedPhotoIds = {};
   Vehicle? _savedVehicle;
+  VehiclePlateType _plateType = VehiclePlateType.tunisian;
+  String _selectedColor = 'Grey';
   String _trunkSize = 'MEDIUM';
   bool _airConditioning = false;
   bool _saving = false;
@@ -45,18 +49,33 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     final vehicle = widget.vehicle;
     if (vehicle == null) {
       _year.text = DateTime.now().year.toString();
+      _seats.text = '4';
     } else {
       _brand.text = vehicle.brand;
       _model.text = vehicle.model;
       _year.text = vehicle.year.toString();
-      _color.text = vehicle.color;
-      _registrationNumber.text = vehicle.registrationNumber;
+      _selectedColor = vehicle.color;
+      final registration = vehicle.registrationNumber
+          .replaceAll(RegExp(r'\s+'), '')
+          .toUpperCase();
+      if (registration.startsWith('RS')) {
+        _plateType = VehiclePlateType.rs;
+        _plateDigits.text = registration.substring(2);
+      } else {
+        _plateType = VehiclePlateType.tunisian;
+        _plateDigits.text = registration.replaceAll(RegExp(r'\D'), '');
+      }
       _seats.text = vehicle.seatsNumber.toString();
       _trunkSize = vehicle.trunkSize;
       _airConditioning = vehicle.airConditioning;
       _existingPhotos.addAll(vehicle.photos);
       _savedVehicle = vehicle;
     }
+    _plateDigits.addListener(_onPlateDigitsChanged);
+  }
+
+  void _onPlateDigitsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -64,9 +83,10 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     _brand.dispose();
     _model.dispose();
     _year.dispose();
-    _color.dispose();
-    _registrationNumber.dispose();
+    _plateDigits.dispose();
     _seats.dispose();
+    _brandFocus.dispose();
+    _modelFocus.dispose();
     super.dispose();
   }
 
@@ -108,8 +128,9 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       }
       if (mounted) setState(() => _newPhotos.addAll(limited));
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _showMessage('Photos could not be selected. Please try again.');
+      }
     }
   }
 
@@ -136,15 +157,25 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   }
 
   String? _validateRegistration(String? value) {
-    if (value == null || value.trim().isEmpty) {
+    final digits = value?.trim() ?? '';
+    if (digits.isEmpty) {
       return 'Registration number is required.';
     }
-    return RegExp(
-          r'^\d{3}\s+TU\s+\d{4}$',
-          caseSensitive: false,
-        ).hasMatch(value.trim())
+    return isValidVehiclePlateDigits(digits, _plateType)
         ? null
-        : 'Use the Tunisian format: 123 TU 4567.';
+        : _plateType == VehiclePlateType.rs
+        ? 'Enter the 6 digits after RS.'
+        : 'Enter the 7 digits for the 123 TU 4567 format.';
+  }
+
+  String _platePreview() {
+    final digits = _plateDigits.text;
+    if (_plateType == VehiclePlateType.rs) {
+      return 'RS ${digits.isEmpty ? '123456' : digits}';
+    }
+    if (digits.isEmpty) return '123 TU 4567';
+    if (digits.length <= 3) return '$digits TU';
+    return '${digits.substring(0, 3)} TU ${digits.substring(3)}';
   }
 
   String? _validateSeats(String? value) {
@@ -160,8 +191,11 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     brand: _brand.text.trim(),
     model: _model.text.trim(),
     year: int.parse(_year.text.trim()),
-    color: _color.text.trim(),
-    registrationNumber: _registrationNumber.text.trim().toUpperCase(),
+    color: _selectedColor,
+    registrationNumber: formatVehicleRegistration(
+      _plateDigits.text.trim(),
+      _plateType,
+    ),
     seatsNumber: int.parse(_seats.text.trim()),
     trunkSize: _trunkSize,
     airConditioning: _airConditioning,
@@ -262,7 +296,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(_isEditing ? 'Edit Vehicle' : 'Add Vehicle')),
+    appBar: AppBar(title: Text(_isEditing ? 'Edit vehicle' : 'Add a vehicle')),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -270,113 +304,153 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               children: [
-                TextFormField(
-                  controller: _brand,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Brand'),
-                  validator: (value) => _required(value, 'Brand'),
+                _photoSection(),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(child: _catalogField(brand: true)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _catalogField(brand: false)),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _model,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Model'),
-                  validator: (value) => _required(value, 'Model'),
-                ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 TextFormField(
                   controller: _year,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Manufacturing year',
-                    hintText: '2024',
+                    labelText: 'Year',
+                    hintText: '2021',
                   ),
                   validator: _validateYear,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _color,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Color'),
-                  validator: (value) => _required(value, 'Color'),
+                _sectionTitle('Plate number'),
+                const SizedBox(height: 8),
+                SegmentedButton<VehiclePlateType>(
+                  segments: const [
+                    ButtonSegment(
+                      value: VehiclePlateType.tunisian,
+                      label: Text('123 TU 4567'),
+                    ),
+                    ButtonSegment(
+                      value: VehiclePlateType.rs,
+                      label: Text('RS 123456'),
+                    ),
+                  ],
+                  selected: {_plateType},
+                  showSelectedIcon: false,
+                  onSelectionChanged: _saving
+                      ? null
+                      : (value) {
+                          _plateType = value.first;
+                          _plateDigits.clear();
+                          setState(() {});
+                        },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 TextFormField(
-                  controller: _registrationNumber,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Registration number',
-                    hintText: '123 TU 4567',
+                  controller: _plateDigits,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(
+                      _plateType == VehiclePlateType.rs ? 6 : 7,
+                    ),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Numbers only',
+                    hintText: _plateType == VehiclePlateType.rs
+                        ? '123456'
+                        : '1234567',
+                    prefixText: _plateType == VehiclePlateType.rs ? 'RS ' : '',
+                    counterText: '',
                   ),
                   validator: _validateRegistration,
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _seats,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Number of seats',
+                Padding(
+                  padding: const EdgeInsets.only(top: 5, left: 4),
+                  child: Text(
+                    'Preview: ${_platePreview()}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF718096),
+                    ),
                   ),
-                  validator: _validateSeats,
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _trunkSize,
-                  decoration: const InputDecoration(labelText: 'Trunk size'),
-                  items: const [
-                    DropdownMenuItem(value: 'SMALL', child: Text('Small')),
-                    DropdownMenuItem(value: 'MEDIUM', child: Text('Medium')),
-                    DropdownMenuItem(value: 'LARGE', child: Text('Large')),
+                const SizedBox(height: 18),
+                _sectionTitle('Color'),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    for (final color in vehicleColors) _colorSwatch(color),
+                    if (!vehicleColors.any(
+                      (color) => color.name == _selectedColor,
+                    ))
+                      _colorSwatch(
+                        VehicleColorOption(_selectedColor, 0xFF9CA3AF),
+                      ),
                   ],
-                  onChanged: _saving
-                      ? null
-                      : (value) {
-                          if (value != null) setState(() => _trunkSize = value);
-                        },
                 ),
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionTitle('Seats offered'),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Not counting the driver',
+                            style: TextStyle(
+                              color: Color(0xFF718096),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _seatCounter(),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _sectionTitle('Trunk size'),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'SMALL', label: Text('Small')),
+                    ButtonSegment(value: 'MEDIUM', label: Text('Medium')),
+                    ButtonSegment(value: 'LARGE', label: Text('Large')),
+                  ],
+                  selected: {_trunkSize},
+                  showSelectedIcon: false,
+                  onSelectionChanged: _saving
+                      ? null
+                      : (value) => setState(() => _trunkSize = value.first),
+                ),
+                const SizedBox(height: 10),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Air conditioning'),
+                  secondary: const Icon(
+                    Icons.ac_unit,
+                    color: Color(0xFF00A884),
+                  ),
+                  title: const Text(
+                    'Air conditioning',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   value: _airConditioning,
                   onChanged: _saving
                       ? null
                       : (value) => setState(() => _airConditioning = value),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Vehicle photos',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Add up to four JPG, PNG, or WebP photos. Each photo must be 5 MB or smaller.',
-                  style: TextStyle(color: Color(0xFF718096)),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final photo in _existingPhotos)
-                      if (!_removedPhotoIds.contains(photo.id))
-                        _existingPhotoTile(photo),
-                    for (final image in _newPhotos) _newPhotoTile(image),
-                    if (_existingPhotos.length -
-                            _removedPhotoIds.length +
-                            _newPhotos.length <
-                        4)
-                      OutlinedButton.icon(
-                        onPressed: _saving ? null : _pickPhotos,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const Text('Add photos'),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 28),
                 PrimaryButton(
-                  label: _isEditing ? 'Save Changes' : 'Add Vehicle',
+                  label: 'Save vehicle',
                   loading: _saving,
                   onPressed: _save,
                 ),
@@ -388,14 +462,244 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     ),
   );
 
+  Widget _sectionTitle(String title) => Text(
+    title,
+    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+  );
+
+  Widget _catalogField({required bool brand}) {
+    final controller = brand ? _brand : _model;
+    final focusNode = brand ? _brandFocus : _modelFocus;
+    final label = brand ? 'Brand' : 'Model';
+    return RawAutocomplete<String>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      displayStringForOption: (option) => option,
+      optionsBuilder: (value) {
+        final options = brand ? vehicleModelsByBrand.keys : _modelsForBrand();
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty) return options.take(8);
+        return options
+            .where((option) => option.toLowerCase().contains(query))
+            .take(8);
+      },
+      onSelected: (value) {
+        if (brand) {
+          _brand.text = value;
+          _model.clear();
+        } else {
+          _model.text = value;
+        }
+      },
+      fieldViewBuilder: (context, textController, fieldFocus, onSubmitted) =>
+          TextFormField(
+            controller: textController,
+            focusNode: fieldFocus,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: brand ? 'Peugeot' : '208',
+            ),
+            validator: (value) => _required(value, label),
+            onFieldSubmitted: (_) => onSubmitted(),
+          ),
+      optionsViewBuilder: (context, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          elevation: 5,
+          borderRadius: BorderRadius.circular(12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220, maxWidth: 280),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              children: [
+                for (final option in options)
+                  ListTile(
+                    dense: true,
+                    title: Text(option),
+                    onTap: () => onSelected(option),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Iterable<String> _modelsForBrand() {
+    final brand = vehicleModelsByBrand.keys.where(
+      (key) => key.toLowerCase() == _brand.text.trim().toLowerCase(),
+    );
+    if (brand.isEmpty) return const [];
+    return vehicleModelsByBrand[brand.first] ?? const [];
+  }
+
+  Widget _colorSwatch(VehicleColorOption option) {
+    final selected = _selectedColor == option.name;
+    return Tooltip(
+      message: option.name,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '${option.name} color',
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: _saving
+              ? null
+              : () => setState(() => _selectedColor = option.name),
+          child: Container(
+            width: 34,
+            height: 34,
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: Color(option.value),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF00A884)
+                    : const Color(0xFFE2E8F0),
+                width: selected ? 3 : 1,
+              ),
+            ),
+            child: selected
+                ? Icon(
+                    Icons.check,
+                    size: 18,
+                    color: option.name == 'White'
+                        ? const Color(0xFF00A884)
+                        : Colors.white,
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _seatCounter() {
+    final count = int.tryParse(_seats.text) ?? 1;
+    return FormField<int>(
+      initialValue: count,
+      validator: (_) => _validateSeats(_seats.text),
+      builder: (field) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F5F9),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _saving || count <= 1
+                      ? null
+                      : () => setState(() {
+                          _seats.text = '${count - 1}';
+                          field.didChange(count - 1);
+                        }),
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  color: const Color(0xFF00A884),
+                  onPressed: _saving || count >= 9
+                      ? null
+                      : () => setState(() {
+                          _seats.text = '${count + 1}';
+                          field.didChange(count + 1);
+                        }),
+                  icon: const Icon(Icons.add_circle),
+                ),
+              ],
+            ),
+          ),
+          if (field.hasError)
+            Text(
+              field.errorText!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoSection() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _sectionTitle('Photos'),
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 94,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            if (_existingPhotos.length -
+                    _removedPhotoIds.length +
+                    _newPhotos.length <
+                4)
+              _addPhotosTile(),
+            for (final photo in _existingPhotos)
+              if (!_removedPhotoIds.contains(photo.id))
+                _existingPhotoTile(photo),
+            for (final image in _newPhotos) _newPhotoTile(image),
+          ],
+        ),
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        'Add up to four photos',
+        style: TextStyle(fontSize: 12, color: Color(0xFF718096)),
+      ),
+    ],
+  );
+
+  Widget _addPhotosTile() => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: OutlinedButton(
+      onPressed: _saving ? null : _pickPhotos,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF00A884),
+        backgroundColor: const Color(0xFFE4FFF4),
+        side: const BorderSide(color: Color(0xFF00A884)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+      ),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.add_a_photo_outlined, size: 21),
+          SizedBox(height: 4),
+          Text('Add photos', style: TextStyle(fontSize: 12)),
+          Text('up to 4', style: TextStyle(fontSize: 10)),
+        ],
+      ),
+    ),
+  );
+
   Widget _existingPhotoTile(VehiclePhoto photo) => Stack(
     children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: VehiclePhotoImage(
           url: photo.url,
-          width: 96,
-          height: 96,
+          width: 88,
+          height: 88,
           borderRadius: BorderRadius.circular(12),
         ),
       ),
@@ -419,8 +723,8 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 96,
-          height: 96,
+          width: 88,
+          height: 88,
           child: FutureBuilder<Uint8List>(
             future: image.readAsBytes(),
             builder: (context, snapshot) => snapshot.hasData

@@ -69,6 +69,8 @@ For a deployed API, use its HTTPS URL. The debug Android manifest allows clearte
 
 Vehicle photos are stored as UUID-named files in `public/uploads/vehicles` by default; the database stores only filenames and MIME types. Set `VEHICLE_UPLOAD_DIRECTORY` to change the storage directory. Vehicle images must be valid JPEG, PNG, or WebP files no larger than 5 MB each, and a vehicle can have at most four photos.
 
+Vehicle registration numbers support `123TU4567` and `RS123456`; spaces are accepted on input and removed for storage. The mobile make/model fields provide searchable suggestions for common vehicles, while still allowing drivers to enter a brand or model that is not suggested.
+
 The Trip and Support modules are not present in this backend yet. `VehicleService.validateForTrip` provides a server-side hook for checking vehicle status and seat capacity when trip publishing is added, and `VehicleService.markReported` is available for Support integration. Confirmed-ticket counting and preventing deletion of vehicles linked to upcoming trips require those modules and their data.
 
 Sessions are opaque random bearer tokens. Only SHA-256 hashes of session and reset tokens are stored in Neon; passwords use BCrypt. The Flutter app stores its bearer token in Android secure storage.

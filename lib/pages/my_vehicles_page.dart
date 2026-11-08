@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/vehicle.dart';
+import '../models/vehicle_registration.dart';
 import '../services/vehicle_service.dart';
 import '../theme.dart';
 import '../widgets/vehicle_photo_image.dart';
@@ -71,10 +72,11 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     try {
       await _service.setDefault(vehicle.id);
       await _loadVehicles();
-      if (mounted)
+      if (mounted) {
         _showMessage(
           '${vehicle.brand} ${vehicle.model} is now your default vehicle.',
         );
+      }
     } catch (error) {
       if (mounted) _showMessage(vehicleErrorMessage(error));
     }
@@ -118,11 +120,15 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('My Vehicles')),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _loading ? null : _addVehicle,
-      icon: const Icon(Icons.add),
-      label: const Text('Add Vehicle'),
+    appBar: AppBar(
+      title: const Text('My vehicles'),
+      actions: [
+        IconButton(
+          tooltip: 'Add a vehicle',
+          onPressed: _loading ? null : _addVehicle,
+          icon: const Icon(Icons.add_circle, color: Color(0xFF00A884)),
+        ),
+      ],
     ),
     body: SafeArea(
       child: Center(
@@ -137,11 +143,17 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
               : RefreshIndicator(
                   onRefresh: _loadVehicles,
                   child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                    itemCount: _vehicles.length,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    itemCount: _vehicles.length + 2,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) =>
-                        _vehicleCard(_vehicles[index]),
+                    itemBuilder: (context, index) {
+                      if (index < _vehicles.length) {
+                        return _vehicleCard(_vehicles[index]);
+                      }
+                      if (index == _vehicles.length) return _addVehicleTile();
+                      return _defaultVehicleTip();
+                    },
                   ),
                 ),
         ),
@@ -203,133 +215,213 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
   );
 
   Widget _vehicleCard(Vehicle vehicle) => Card(
+    margin: EdgeInsets.zero,
+    elevation: 2,
+    shadowColor: const Color(0x1A23344D),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: () => _openDetails(vehicle),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: vehicle.photos.isEmpty
-                  ? const SizedBox(
-                      width: 92,
-                      height: 92,
-                      child: ColoredBox(
-                        color: Color(0xFFF1F5F4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => _openDetails(vehicle),
+          child: Stack(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 112,
+                child: vehicle.photos.isEmpty
+                    ? const ColoredBox(
+                        color: Color(0xFFD8F9EA),
                         child: Icon(
                           Icons.directions_car_outlined,
-                          size: 34,
-                          color: Color(0xFF718096),
+                          size: 50,
+                          color: Color(0xFF00A884),
                         ),
+                      )
+                    : VehiclePhotoImage(
+                        url: vehicle.photos.first.url,
+                        width: double.infinity,
+                        height: 112,
                       ),
-                    )
-                  : VehiclePhotoImage(
-                      url: vehicle.photos.first.url,
-                      width: 92,
-                      height: 92,
-                      borderRadius: BorderRadius.circular(12),
+              ),
+              if (vehicle.isDefault)
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
                     ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00A884),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Default',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: _statusLabel(vehicle.status),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${vehicle.brand} ${vehicle.model}',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
+                  Expanded(
+                    child: Text(
+                      '${vehicle.brand} ${vehicle.model}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
                       ),
-                      if (vehicle.isDefault)
-                        const Icon(
-                          Icons.star_rounded,
-                          color: carShareGreen,
-                          size: 20,
-                        ),
-                      PopupMenuButton<String>(
-                        tooltip: 'Vehicle actions',
-                        onSelected: (action) {
-                          switch (action) {
-                            case 'view':
-                              _openDetails(vehicle);
-                            case 'edit':
-                              _editVehicle(vehicle);
-                            case 'default':
-                              _setDefault(vehicle);
-                            case 'delete':
-                              _deleteVehicle(vehicle);
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: 'view',
-                            child: Text('View details'),
-                          ),
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Edit vehicle'),
-                          ),
-                          if (!vehicle.isDefault)
-                            const PopupMenuItem(
-                              value: 'default',
-                              child: Text('Set as default'),
-                            ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete vehicle'),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
-                  Text(
-                    '${vehicle.year} · ${vehicle.color} · ${vehicle.registrationNumber}',
-                    style: const TextStyle(color: Color(0xFF718096)),
+                  IconButton(
+                    tooltip: 'Edit vehicle',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _editVehicle(vehicle),
+                    icon: const Icon(Icons.edit, size: 19),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${vehicle.seatsNumber} seats · ${_titleCase(vehicle.trunkSize)} trunk · ${vehicle.airConditioning ? 'Air conditioning' : 'No air conditioning'}',
-                    style: const TextStyle(color: Color(0xFF718096)),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _statusLabel(vehicle.status),
-                      if (vehicle.isDefault)
-                        const Chip(
-                          label: Text('Default'),
-                          visualDensity: VisualDensity.compact,
-                          labelStyle: TextStyle(
-                            color: carShareGreen,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                    ],
+                  IconButton(
+                    tooltip: 'Delete vehicle',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _deleteVehicle(vehicle),
+                    style: IconButton.styleFrom(
+                      foregroundColor: const Color(0xFFEF4444),
+                      backgroundColor: const Color(0xFFFFE7E7),
+                    ),
+                    icon: const Icon(Icons.delete_outline, size: 19),
                   ),
                 ],
               ),
-            ),
-          ],
+              Text(
+                '${vehicle.color} · ${vehicle.year} · ${_displayPlate(vehicle.registrationNumber)}',
+                style: const TextStyle(color: Color(0xFF718096), fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  _infoChip(Icons.people_alt, '${vehicle.seatsNumber} seats'),
+                  _infoChip(
+                    Icons.luggage_outlined,
+                    'Trunk: ${_titleCase(vehicle.trunkSize)}',
+                  ),
+                  _infoChip(
+                    Icons.ac_unit,
+                    vehicle.airConditioning ? 'A/C' : 'No A/C',
+                  ),
+                ],
+              ),
+              if (!vehicle.isDefault)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _setDefault(vehicle),
+                    icon: const Icon(Icons.star_outline, size: 17),
+                    label: const Text('Set as default'),
+                  ),
+                ),
+            ],
+          ),
         ),
+      ],
+    ),
+  );
+
+  Widget _statusLabel(String status) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: status == 'ACTIVE'
+          ? const Color(0xFFD1FAE5)
+          : status == 'REPORTED'
+          ? const Color(0xFFFFE4E6)
+          : const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      _titleCase(status),
+      style: TextStyle(
+        color: status == 'ACTIVE'
+            ? const Color(0xFF047857)
+            : status == 'REPORTED'
+            ? const Color(0xFFBE123C)
+            : const Color(0xFF64748B),
+        fontWeight: FontWeight.w600,
+        fontSize: 11,
       ),
     ),
   );
 
-  Widget _statusLabel(String status) => Chip(
-    label: Text(_titleCase(status)),
-    visualDensity: VisualDensity.compact,
-    backgroundColor: status == 'ACTIVE'
-        ? const Color(0xFFD1FAE5)
-        : const Color(0xFFFFE4E6),
+  Widget _infoChip(IconData icon, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F5F9),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: const Color(0xFF344054)),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    ),
   );
+
+  Widget _addVehicleTile() => OutlinedButton.icon(
+    onPressed: _addVehicle,
+    icon: const Icon(Icons.add, color: Color(0xFF00A884)),
+    label: const Text('Add another vehicle'),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: const Color(0xFF00A884),
+      backgroundColor: const Color(0xFFF8FFFB),
+      side: const BorderSide(color: Color(0xFF00A884)),
+      minimumSize: const Size.fromHeight(48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+
+  Widget _defaultVehicleTip() => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0FDF8),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Row(
+      children: [
+        Icon(Icons.info_outline, color: Color(0xFF00A884), size: 18),
+        SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Your default vehicle can be pre-selected when publishing a trip.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF718096)),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  String _displayPlate(String value) {
+    return displayVehicleRegistration(value);
+  }
 
   String _titleCase(String value) =>
       value[0] + value.substring(1).toLowerCase();
