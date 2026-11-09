@@ -353,8 +353,16 @@ adb reverse tcp:8081 tcp:8081
 
 - `adb reverse` has to be re-run **after every reconnect** (unplug, reboot, adb restart), or the
   app reaches nothing on 8081 and every call fails with a connection error.
-- **Clear `JAVA_TOOL_OPTIONS` before building.** The project path contains an apostrophe
-  (`stage d'ete`), which breaks the JVM argument parsing Gradle inherits from it.
+- **Clear `JAVA_TOOL_OPTIONS` before building.** The repo lives at
+  `C:\Users\YASSINE JOMNI\Documents\stage-ete\pi mobile\CarShare-Mobile_Dev`; the space in
+  `YASSINE JOMNI` breaks an unquoted `-Djava.io.tmpdir=<path>` (which is what
+  `run-android-phone.ps1` sets), so use `.\run-phone-me.ps1` or the manual sequence instead.
+- `PUB_CACHE` is `D:\flutter-pub-cache` while the repo is on C:. Kotlin's incremental compiler cannot
+  relate paths across drives (`Could not close incremental caches`), so
+  `D:\carshare-build\gradle-home\gradle.properties` (outside the repo) holds
+  `kotlin.incremental=false`. A fresh machine needs the same line in its own `GRADLE_USER_HOME`.
+- `flutter test` runs from the repo root; the old `D:\carshare-test` copy and the `subst` trick are
+  no longer needed now that the path has no apostrophe.
 
 ### 7.3 Build, install, launch
 
