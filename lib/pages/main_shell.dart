@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import 'profile_page.dart';
 import 'reservation/home_search_page.dart';
+import 'reservation/live_page.dart';
+import 'reservation/my_trips_page.dart';
+
+/// Which shell tab is showing. A page pushed on top of the shell — the booking screen, say —
+/// sets this to send the user to another tab as it pops, which it cannot do through the
+/// Navigator because the tabs are not routes.
+final ValueNotifier<int> carShareShellTab = ValueNotifier<int>(0);
+
+/// Which trip the Live tab should open. "Track live" on a My trips card sets it before
+/// switching tabs; null lets the tab pick whichever trip is under way.
+final ValueNotifier<String?> carShareLiveTripId = ValueNotifier<String?>(null);
 
 /// The four-tab shell every signed-in non-admin user lands on.
 ///
@@ -22,6 +34,48 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
+  bool _signingOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    carShareShellTab.addListener(_followTabRequest);
+  }
+
+  @override
+  void dispose() {
+    carShareShellTab.removeListener(_followTabRequest);
+    super.dispose();
+  }
+
+  void _followTabRequest() {
+    if (mounted && carShareShellTab.value != _tab) {
+      setState(() => _tab = carShareShellTab.value);
+    }
+  }
+
+  void _showTab(int index) {
+    carShareShellTab.value = index;
+    setState(() => _tab = index);
+  }
+
+  /// Ends the session. No navigation is needed afterwards: the gate in app.dart listens to
+  /// AuthService.currentUser and swaps this shell for the Welcome page on its own. Popping to
+  /// the first route first makes sure a pushed sub-page (Preferences, say) does not stay up.
+  Future<void> _signOut() async {
+    setState(() => _signingOut = true);
+    try {
+      await AuthService.instance.signOut();
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _signingOut = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -30,19 +84,39 @@ class _MainShellState extends State<MainShell> {
       index: _tab,
       children: [
         HomeSearchPage(user: widget.user),
-        const _ComingSoon(
-          icon: Icons.route_outlined,
-          title: 'My trips',
-          line: 'Your reservations and published trips will appear here.',
-          step: 'Step 8',
+        MyTripsPage(user: widget.user),
+        LivePage(user: widget.user),
+        // ProfilePage belongs to the user module and builds its own Scaffold and AppBar, so
+        // the sign-out control is laid over that AppBar's action slot rather than edited in.
+        Stack(
+          children: [
+            const ProfilePage(),
+            Positioned(
+              // Lines the button up with the AppBar's own action slot: the status bar, then
+              // the toolbar. Align would not do, as it does not stretch inside this stack.
+              top: MediaQuery.of(context).padding.top,
+              right: 4,
+              height: kToolbarHeight,
+              child: Center(
+                child: _signingOut
+                    ? const Padding(
+                        padding: EdgeInsets.only(right: 16),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.logout_rounded),
+                        color: carShareText,
+                        tooltip: 'Sign out',
+                        onPressed: _signOut,
+                      ),
+              ),
+            ),
+          ],
         ),
-        const _ComingSoon(
-          icon: Icons.navigation_outlined,
-          title: 'Live',
-          line: 'Follow a trip on the map once one is under way.',
-          step: 'Step 9',
-        ),
-        const ProfilePage(),
       ],
     ),
     bottomNavigationBar: DecoratedBox(
@@ -72,7 +146,7 @@ class _MainShellState extends State<MainShell> {
         ),
         child: NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (index) => setState(() => _tab = index),
+          onDestinationSelected: _showTab,
           height: 68,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
@@ -97,83 +171,6 @@ class _MainShellState extends State<MainShell> {
               label: 'Profile',
             ),
           ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({
-    required this.icon,
-    required this.title,
-    required this.line,
-    required this.step,
-  });
-
-  final IconData icon;
-  final String title;
-  final String line;
-  final String step;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: carShareBackground,
-    appBar: AppBar(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.white,
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: carShareText,
-        ),
-      ),
-    ),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: const BoxDecoration(
-                  color: carShareTint,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 34, color: carShareGreen),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                line,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 15, color: carShareMuted),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: carShareTint,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '$step — coming next',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: carShareGreen,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     ),

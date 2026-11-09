@@ -43,14 +43,17 @@ public class ReservationService {
     private final TripRepository trips;
     private final TripEventRepository tripEvents;
     private final UserRepository users;
+    private final ReputationService reputationService;
     private final Clock clock;
 
     public ReservationService(ReservationRepository reservations, TripRepository trips,
-            TripEventRepository tripEvents, UserRepository users, Clock clock) {
+            TripEventRepository tripEvents, UserRepository users,
+            ReputationService reputationService, Clock clock) {
         this.reservations = reservations;
         this.trips = trips;
         this.tripEvents = tripEvents;
         this.users = users;
+        this.reputationService = reputationService;
         this.clock = clock;
     }
 
@@ -142,8 +145,21 @@ public class ReservationService {
     @Transactional(readOnly = true)
     public List<ReservationDtos.PassengerView> listForTrip(UUID driverId, UUID tripId) {
         requireOwnTrip(driverId, tripId);
-        return reservations.findByTrip_IdOrderByCreatedAtAsc(tripId).stream()
-                .map(ReservationDtos.PassengerView::from).toList();
+        List<Reservation> rows = reservations.findByTrip_IdOrderByCreatedAtAsc(tripId);
+        // One lookup for the whole list: the driver sees each passenger's stars before deciding.
+        java.util.Set<UUID> passengerIds = new java.util.HashSet<>();
+        for (Reservation row : rows) passengerIds.add(row.getPassenger().getId());
+        java.util.Map<UUID, ReputationService.Reputation> reputations =
+                reputationService.ratingsFor(passengerIds);
+        return rows.stream().map(row -> withRating(row, reputations)).toList();
+    }
+
+    private ReservationDtos.PassengerView withRating(Reservation reservation,
+            java.util.Map<UUID, ReputationService.Reputation> reputations) {
+        ReputationService.Reputation reputation = reputations.getOrDefault(
+                reservation.getPassenger().getId(), ReputationService.Reputation.NONE);
+        return ReservationDtos.PassengerView.from(reservation, reputation.average(),
+                reputation.count());
     }
 
     @Transactional
@@ -161,7 +177,10 @@ public class ReservationService {
         }
         tripEvents.save(new TripEvent(trip, TripEventType.RESERVATION_CONFIRMED, driverId,
                 null, null, seatsDetail(reservation.getSeats())));
-        return ReservationDtos.PassengerView.from(reservation);
+        ReputationService.Reputation reputation =
+                reputationService.forUser(reservation.getPassenger().getId());
+        return ReservationDtos.PassengerView.from(reservation, reputation.average(),
+                reputation.count());
     }
 
     @Transactional
@@ -173,7 +192,10 @@ public class ReservationService {
         releaseSeats(trip, reservation.getSeats(), false);
         tripEvents.save(new TripEvent(trip, TripEventType.RESERVATION_REFUSED, driverId,
                 null, null, REFUSED_BY_DRIVER));
-        return ReservationDtos.PassengerView.from(reservation);
+        ReputationService.Reputation reputation =
+                reputationService.forUser(reservation.getPassenger().getId());
+        return ReservationDtos.PassengerView.from(reservation, reputation.average(),
+                reputation.count());
     }
 
     // --- driven by other parts of the module -------------------------------------------------
@@ -219,6 +241,17 @@ public class ReservationService {
      * no-show. TripService uses it to refuse a manual PICKED_UP that would drive off and leave
      * their reservation confirmed for ever.
      */
+    /**
+     * Whether this passenger really rode, or was due to ride, the trip. Used by the events
+     * endpoint so the completion screen can show its timeline to both sides.
+     */
+    @Transactional(readOnly = true)
+    boolean wasPassengerOnTrip(UUID tripId, UUID passengerId) {
+        return reservations.findByTrip_IdAndPassenger_IdAndStatusIn(tripId, passengerId,
+                Set.of(ReservationStatus.CONFIRMED, ReservationStatus.COMPLETED,
+                        ReservationStatus.NO_SHOW)).isPresent();
+    }
+
     @Transactional(readOnly = true)
     boolean hasPassengersStillToBoard(UUID tripId) {
         return reservations.findByTrip_IdAndStatusIn(tripId, Set.of(ReservationStatus.CONFIRMED))

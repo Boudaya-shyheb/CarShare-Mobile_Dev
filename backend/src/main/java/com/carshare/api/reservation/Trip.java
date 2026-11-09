@@ -74,8 +74,11 @@ public class Trip {
         this.distanceM = distanceM;
         this.durationS = durationS;
         this.routePolyline = routePolyline;
+        this.createdAt = Instant.now();
     }
 
+    /** Kept as a guard: createdAt is stamped in the constructor so a create response
+     *  carries it, and this only fills in rows built some other way. */
     @PrePersist void setCreatedAt() { if (createdAt == null) createdAt = Instant.now(); }
     @PreUpdate void touch() { updatedAt = Instant.now(); }
 

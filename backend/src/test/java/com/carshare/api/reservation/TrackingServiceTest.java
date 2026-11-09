@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,6 +52,7 @@ class TrackingServiceTest {
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
     @Mock private ReservationService reservationService;
+    @Mock private ReputationService reputationService;
 
     private TrackingService service;
     private AppUser driver;
@@ -61,7 +63,13 @@ class TrackingServiceTest {
     void setUp() {
         // A real TripService, so a geofence actually moves the trip through the state machine
         // and writes its event, rather than only recording that a mock was called.
-        TripService tripService = new TripService(trips, tripEvents, users, reservationService);
+        TripService tripService = new TripService(trips, tripEvents, users,
+                reservationService, reputationService);
+        lenient().when(reputationService.forUser(any()))
+                .thenReturn(ReputationService.Reputation.NONE);
+        lenient().when(reputationService.forUsers(any())).thenReturn(java.util.Map.of());
+        lenient().when(reputationService.ratingsFor(any())).thenReturn(java.util.Map.of());
+
         service = new TrackingService(trips, reservations, gpsPoints, tripEvents, tripService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         driver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash",

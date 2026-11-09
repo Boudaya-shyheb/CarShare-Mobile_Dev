@@ -67,7 +67,7 @@ class Reservation {
     required this.seats,
     required this.status,
     required this.lateCancellation,
-    required this.createdAt,
+    this.createdAt,
     this.pickupCode,
     this.cancelReason,
     this.decidedAt,
@@ -82,7 +82,11 @@ class Reservation {
   /// PENDING, CONFIRMED, REFUSED, CANCELLED, NO_SHOW or COMPLETED.
   final String status;
   final bool lateCancellation;
-  final DateTime createdAt;
+
+  /// Null on the response to `POST /trips/{tripId}/reservations`: the API builds that body
+  /// before the row is flushed, so the timestamp only appears on a later read. Casting it
+  /// as non-null threw after the seat had already been taken, losing the booking screen.
+  final DateTime? createdAt;
 
   /// The 4-digit code shown at pickup. The server fills it in only once the reservation is
   /// CONFIRMED, and only for the passenger who owns it, so it is null the rest of the time.
@@ -101,7 +105,9 @@ class Reservation {
     seats: json['seats'] as int,
     status: json['status'] as String,
     lateCancellation: json['lateCancellation'] as bool? ?? false,
-    createdAt: DateTime.parse(json['createdAt'] as String),
+    createdAt: json['createdAt'] == null
+        ? null
+        : DateTime.parse(json['createdAt'] as String),
     pickupCode: json['pickupCode'] as String?,
     cancelReason: json['cancelReason'] as String?,
     decidedAt: json['decidedAt'] == null
@@ -123,7 +129,7 @@ class Reservation {
     'cancelReason': cancelReason,
     'decidedAt': decidedAt?.toUtc().toIso8601String(),
     'cancelledAt': cancelledAt?.toUtc().toIso8601String(),
-    'createdAt': createdAt.toUtc().toIso8601String(),
+    'createdAt': createdAt?.toUtc().toIso8601String(),
   };
 }
 
@@ -138,8 +144,10 @@ class PassengerView {
     required this.seats,
     required this.status,
     required this.lateCancellation,
-    required this.createdAt,
+    this.createdAt,
     this.cancelReason,
+    this.passengerRating,
+    this.passengerRatingCount = 0,
     this.decidedAt,
     this.cancelledAt,
   });
@@ -150,8 +158,14 @@ class PassengerView {
   final int seats;
   final String status;
   final bool lateCancellation;
-  final DateTime createdAt;
+
+  /// Nullable for the same reason as on [Reservation].
+  final DateTime? createdAt;
   final String? cancelReason;
+
+  /// The passenger's own stars, so a driver can see who they are accepting.
+  final double? passengerRating;
+  final int passengerRatingCount;
   final DateTime? decidedAt;
   final DateTime? cancelledAt;
 
@@ -164,8 +178,12 @@ class PassengerView {
     seats: json['seats'] as int,
     status: json['status'] as String,
     lateCancellation: json['lateCancellation'] as bool? ?? false,
-    createdAt: DateTime.parse(json['createdAt'] as String),
+    createdAt: json['createdAt'] == null
+        ? null
+        : DateTime.parse(json['createdAt'] as String),
     cancelReason: json['cancelReason'] as String?,
+    passengerRating: (json['passengerRating'] as num?)?.toDouble(),
+    passengerRatingCount: json['passengerRatingCount'] as int? ?? 0,
     decidedAt: json['decidedAt'] == null
         ? null
         : DateTime.parse(json['decidedAt'] as String),
@@ -184,6 +202,6 @@ class PassengerView {
     'cancelReason': cancelReason,
     'decidedAt': decidedAt?.toUtc().toIso8601String(),
     'cancelledAt': cancelledAt?.toUtc().toIso8601String(),
-    'createdAt': createdAt.toUtc().toIso8601String(),
+    'createdAt': createdAt?.toUtc().toIso8601String(),
   };
 }

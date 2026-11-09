@@ -24,6 +24,16 @@ class HomeSearchPage extends StatefulWidget {
 class _HomeSearchPageState extends State<HomeSearchPage> {
   final MapController _map = MapController();
 
+  /// Measures the sheet so the map can lift its centre clear of it.
+  final GlobalKey _sheetKey = GlobalKey();
+
+  /// The camera starts here and only ever moves through [_moveTo]; binding the camera to
+  /// [_centre] instead would make the view depend on how flutter_map reacts to new options.
+  static const LatLng _initialCentre = LatLng(
+    LocationService.tunisLat,
+    LocationService.tunisLng,
+  );
+
   /// Where the map sits. Starts on Tunis and moves to the device position once it arrives, so
   /// the screen is usable the whole time — including when location is refused.
   LatLng _centre = const LatLng(
@@ -91,7 +101,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
       _hasRealPosition = true;
       _locating = false;
     });
-    if (recentre) _map.move(point, 15);
+    _moveTo(point, zoom: recentre ? 15 : null);
 
     // Name the street behind the map, for the FROM row. A failure here is not worth a message:
     // describePoint already falls back to the coordinates.
@@ -106,6 +116,29 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
         lat: position.lat!,
         lng: position.lng!,
       );
+    });
+  }
+
+  /// Centres the map on [point] while keeping it in the band of map the sheet does not cover.
+  ///
+  /// The map is full-bleed, so its true centre sits behind the sheet: centring on the device
+  /// position there would hide the dot entirely. Shifting the camera half a sheet south puts
+  /// the dot in the middle of what the user can actually see, as in mockup 04.
+  void _moveTo(LatLng point, {double? zoom}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+      final camera = _map.camera;
+      final target = zoom ?? camera.zoom;
+      if (box == null) {
+        _map.move(point, target);
+        return;
+      }
+      final lifted = camera.unprojectAtZoom(
+        camera.projectAtZoom(point, target) + Offset(0, box.size.height / 2),
+        target,
+      );
+      _map.move(lifted, target);
     });
   }
 
@@ -303,7 +336,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
   Widget _buildMap() => FlutterMap(
     mapController: _map,
     options: MapOptions(
-      initialCenter: _centre,
+      initialCenter: _initialCentre,
       initialZoom: 15,
       minZoom: 4,
       maxZoom: 18,
@@ -359,6 +392,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
   );
 
   Widget _buildSheet() => Container(
+    key: _sheetKey,
     width: double.infinity,
     decoration: const BoxDecoration(
       color: Colors.white,
@@ -513,6 +547,9 @@ class _GreetingCard extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Column(
+            // Without this the Column takes the Stack's full loose height, which stretches
+            // the whole card down the screen and pushes the avatar and bell to mid-screen.
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -710,13 +747,19 @@ class _SwapButton extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: Colors.white,
     shape: const CircleBorder(),
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: onTap,
-      child: const SizedBox(
-        width: 42,
-        height: 42,
-        child: Icon(Icons.swap_vert, size: 20, color: carShareGreen),
+    // An icon-only button reaches the semantics tree with no name at all, so a screen reader
+    // announces nothing here. Every other control on this screen is labelled.
+    child: Semantics(
+      button: true,
+      label: 'Swap pick-up and destination',
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(Icons.swap_vert, size: 20, color: carShareGreen),
+        ),
       ),
     ),
   );

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -43,6 +44,7 @@ class TripServiceTest {
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
     @Mock private ReservationService reservationService;
+    @Mock private ReputationService reputationService;
 
     private TripService service;
     private AppUser driver;
@@ -50,7 +52,13 @@ class TripServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TripService(trips, tripEvents, users, reservationService);
+        service = new TripService(trips, tripEvents, users, reservationService,
+                reputationService);
+        lenient().when(reputationService.forUser(any()))
+                .thenReturn(ReputationService.Reputation.NONE);
+        lenient().when(reputationService.forUsers(any())).thenReturn(java.util.Map.of());
+        lenient().when(reputationService.ratingsFor(any())).thenReturn(java.util.Map.of());
+
         driver = new AppUser("Yacine Jomni", "+21612345678", "driver@carshare.tn", "hash", UserRole.DRIVER);
         departure = Instant.now().plus(3, ChronoUnit.HOURS);
     }
@@ -503,13 +511,29 @@ class TripServiceTest {
     }
 
     @Test
-    @DisplayName("the event log is only readable by the trip's driver")
-    void listEventsRequiresOwnership() {
-        UUID tripId = UUID.randomUUID();
-        when(trips.findByIdAndDriver_Id(tripId, driver.getId())).thenReturn(Optional.empty());
+    @DisplayName("the event log is readable by the driver and by a passenger who was aboard")
+    void listEventsIsOpenToParticipants() {
+        Trip trip = scheduledTrip();
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+        when(tripEvents.findByTrip_IdOrderByCreatedAtAsc(trip.getId())).thenReturn(List.of());
+
+        assertTrue(service.listEvents(driver.getId(), trip.getId()).isEmpty());
+
+        UUID passengerId = UUID.randomUUID();
+        when(reservationService.wasPassengerOnTrip(trip.getId(), passengerId)).thenReturn(true);
+        assertTrue(service.listEvents(passengerId, trip.getId()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("somebody who was never on the trip cannot read its event log")
+    void listEventsHidesTheTripFromStrangers() {
+        Trip trip = scheduledTrip();
+        UUID stranger = UUID.randomUUID();
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+        when(reservationService.wasPassengerOnTrip(trip.getId(), stranger)).thenReturn(false);
 
         ApiException error = assertThrows(ApiException.class,
-                () -> service.listEvents(driver.getId(), tripId));
+                () -> service.listEvents(stranger, trip.getId()));
 
         assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
         assertEquals("trip_not_found", error.getCode());

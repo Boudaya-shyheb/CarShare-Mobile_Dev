@@ -45,6 +45,11 @@ dependencies:
   geolocator: ^14.0.1          # permissions + the device position
   intl: ^0.20.2                # DateFormat for the trip date and time
 
+  # Live tracking (step 9).
+  qr_flutter: ^4.1.0           # the pickup code as a QR for the driver to scan
+  mobile_scanner: ^7.1.4       # the driver scanning that QR
+  wakelock_plus: ^1.4.1        # keep the screen on while driving
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,4 +1,5 @@
 import '../models/live_view.dart';
+import '../models/rating.dart';
 import '../models/reservation.dart';
 import '../models/trip.dart';
 import '../models/trip_event.dart';
@@ -159,4 +160,43 @@ class ReservationService {
       PassengerView.fromJson(
         await _api.post('/reservations/$reservationId/no-show'),
       );
+
+  // --- after the trip -----------------------------------------------------------------------
+
+  /// Every fix the driver's phone sent, oldest first, for the replay.
+  Future<List<TrackPoint>> trackPoints(String tripId) async =>
+      (await _api.getList('/trips/$tripId/track'))
+          .map(TrackPoint.fromJson)
+          .toList(growable: false);
+
+  /// Who the signed-in user may rate on this trip, and what they already said.
+  Future<MyRatings> myRatings(String tripId) async =>
+      MyRatings.fromJson(await _api.get('/trips/$tripId/ratings/mine'));
+
+  /// Leaves a rating. Only once the trip is COMPLETED, and once per person.
+  Future<Rating> rate(
+    String tripId, {
+    required String toUserId,
+    required int stars,
+    String? comment,
+  }) async => Rating.fromJson(
+    await _api.post('/trips/$tripId/ratings', {
+      'toUserId': toUserId,
+      'stars': stars,
+      'comment': comment,
+    }),
+  );
+
+  /// Changes a rating already left, while the server's 24 h window is still open.
+  Future<Rating> reviseRating(
+    String tripId, {
+    required String toUserId,
+    required int stars,
+    String? comment,
+  }) async => Rating.fromJson(
+    await _api.put('/trips/$tripId/ratings/$toUserId', {
+      'stars': stars,
+      'comment': comment,
+    }),
+  );
 }

@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -50,6 +51,7 @@ class ReservationServiceTest {
     @Mock private TripRepository trips;
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
+    @Mock private ReputationService reputationService;
 
     private ReservationService service;
     private AppUser driver;
@@ -59,7 +61,11 @@ class ReservationServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReservationService(reservations, trips, tripEvents, users,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                reputationService, Clock.fixed(NOW, ZoneOffset.UTC));
+        // A mock answers null by default, which would NPE wherever a reputation is read.
+        lenient().when(reputationService.forUser(any()))
+                .thenReturn(ReputationService.Reputation.NONE);
+        lenient().when(reputationService.ratingsFor(any())).thenReturn(java.util.Map.of());
         driver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash",
                 UserRole.DRIVER);
         passenger = new AppUser("Mouna Passenger", "+21622222222", "mouna@carshare.tn", "hash",
@@ -82,6 +88,9 @@ class ReservationServiceTest {
 
         assertEquals(ReservationStatus.CONFIRMED.name(), result.status());
         assertEquals(2, result.seats());
+        // The write response is built before the flush, so createdAt has to be stamped by
+        // the constructor or it reaches the client as null.
+        assertNotNull(result.createdAt());
         verify(trips).holdSeats(trip.getId(), 2);
         verify(trips).addConfirmedSeats(trip.getId(), 2);
         assertEquals(TripEventType.RESERVATION_CONFIRMED, savedEvent().getType());
@@ -760,8 +769,8 @@ class ReservationServiceTest {
     @DisplayName("a fixed clock makes the job's windows reproducible")
     void autoRefuseFollowsTheClock() {
         Instant later = NOW.plus(3, ChronoUnit.HOURS);
-        ReservationService atLater = new ReservationService(reservations, trips, tripEvents, users,
-                Clock.fixed(later, ZoneOffset.UTC));
+        ReservationService atLater = new ReservationService(reservations, trips, tripEvents,
+                users, reputationService, Clock.fixed(later, ZoneOffset.UTC));
         when(reservations.findAutoRefusable(any(), any(), any())).thenReturn(List.of());
 
         atLater.autoRefusePending();

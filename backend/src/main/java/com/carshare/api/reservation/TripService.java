@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -35,13 +36,15 @@ public class TripService {
     private final TripEventRepository tripEvents;
     private final UserRepository users;
     private final ReservationService reservationService;
+    private final ReputationService reputationService;
 
     public TripService(TripRepository trips, TripEventRepository tripEvents, UserRepository users,
-            ReservationService reservationService) {
+            ReservationService reservationService, ReputationService reputationService) {
         this.trips = trips;
         this.tripEvents = tripEvents;
         this.users = users;
         this.reservationService = reservationService;
+        this.reputationService = reputationService;
     }
 
     @Transactional
@@ -79,14 +82,26 @@ public class TripService {
 
     @Transactional(readOnly = true)
     public TripDtos.TripDetail get(UUID tripId) {
-        return TripDtos.TripDetail.from(trips.findById(tripId)
+        return detailWithDriverRating(trips.findById(tripId)
                 .orElseThrow(TripService::tripNotFound));
     }
 
+    /** The detail a passenger opens, with the driver's stars beside their name. */
+    private TripDtos.TripDetail detailWithDriverRating(Trip trip) {
+        ReputationService.Reputation reputation =
+                reputationService.forUser(trip.getDriver().getId());
+        return TripDtos.TripDetail.from(trip, reputation.average(), reputation.count());
+    }
+
     @Transactional(readOnly = true)
-    public List<TripDtos.EventView> listEvents(UUID driverId, UUID tripId) {
-        // TODO(step 5): also allow passengers holding a CONFIRMED reservation on this trip.
-        requireOwnedTrip(driverId, tripId);
+    public List<TripDtos.EventView> listEvents(UUID callerId, UUID tripId) {
+        // The driver, or a passenger who was on the trip: the completion screen shows the same
+        // timeline to both sides. A 404 for anyone else, as everywhere else in this module.
+        Trip trip = trips.findById(tripId).orElseThrow(TripService::tripNotFound);
+        if (!trip.isDrivenBy(callerId)
+                && !reservationService.wasPassengerOnTrip(tripId, callerId)) {
+            throw tripNotFound();
+        }
         return tripEvents.findByTrip_IdOrderByCreatedAtAsc(tripId).stream()
                 .map(TripDtos.EventView::from).toList();
     }
@@ -197,6 +212,13 @@ public class TripService {
                 destinationLng - GeoUtils.longitudeDelta(SEARCH_RADIUS_M, destinationLat),
                 destinationLng + GeoUtils.longitudeDelta(SEARCH_RADIUS_M, destinationLat));
 
+        // One lookup for every driver on the page: asking per candidate would be up to 50
+        // extra round trips to Neon for a single screen.
+        Set<UUID> driverIds = new java.util.HashSet<>();
+        for (Trip candidate : candidates) driverIds.add(candidate.getDriver().getId());
+        Map<UUID, ReputationService.Reputation> reputations =
+                reputationService.forUsers(driverIds);
+
         List<TripDtos.TripSearchResult> matches = new ArrayList<>();
         for (Trip trip : candidates) {
             // The query already applies these, but a passenger must never be shown their own trip
@@ -212,11 +234,14 @@ public class TripService {
 
             long timeGapMin = Math.abs(
                     Duration.between(wantedDeparture, trip.getDepartureTime()).toMinutes());
+            ReputationService.Reputation reputation = reputations.getOrDefault(
+                    trip.getDriver().getId(), ReputationService.Reputation.NONE);
             int score = MatchScorer.score(pickupDistance, dropoffDistance, timeGapMin,
-                    trip.getDriver().getId());
+                    reputation.average(), reputation.punctuality());
             if (!MatchScorer.isMatch(score)) continue;
 
-            matches.add(TripDtos.TripSearchResult.from(trip, (int) Math.round(pickupDistance),
+            matches.add(TripDtos.TripSearchResult.from(trip, reputation.average(),
+                    reputation.count(), (int) Math.round(pickupDistance),
                     (int) Math.round(dropoffDistance), (int) timeGapMin, score));
         }
         matches.sort(sort.comparator());

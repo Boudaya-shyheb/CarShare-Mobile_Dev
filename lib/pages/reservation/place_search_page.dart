@@ -380,7 +380,9 @@ class _MapPickerPageState extends State<_MapPickerPage> {
         Positioned(
           left: 20,
           right: 20,
-          bottom: 24,
+          // The map is full-bleed under the system navigation bar, so the button has to be
+          // lifted clear of it by hand: without this inset the label is cut in half.
+          bottom: 24 + MediaQuery.of(context).padding.bottom,
           child: SizedBox(
             height: carShareButtonHeight,
             child: FilledButton(

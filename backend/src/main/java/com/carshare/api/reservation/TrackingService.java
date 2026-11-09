@@ -53,6 +53,10 @@ public class TrackingService {
      * completes the trip and the reservation in the same request, still lets the passenger's next
      * poll land on the finished state instead of a 404.
      */
+    /** Who may replay a finished trip: anyone who was actually on it. */
+    private static final Set<ReservationStatus> MAY_REPLAY =
+            Set.of(ReservationStatus.COMPLETED, ReservationStatus.NO_SHOW);
+
     private static final Set<ReservationStatus> MAY_WATCH =
             Set.of(ReservationStatus.CONFIRMED, ReservationStatus.COMPLETED);
 
@@ -126,6 +130,29 @@ public class TrackingService {
                 .findByTrip_IdAndPassenger_IdAndStatusIn(tripId, viewerId, MAY_WATCH)
                 .orElseThrow(TrackingService::tripNotFound);
         return liveView(trip, mine);
+    }
+
+    // --- the replay --------------------------------------------------------------------------
+
+    /**
+     * Every fix the driver's phone sent, in the order it recorded them, for the replay on the
+     * completion screen.
+     *
+     * <p>Open to the driver and to a passenger who was actually on the trip — COMPLETED, or
+     * NO_SHOW, since someone marked as a no-show may well want to see where the car went.
+     */
+    @Transactional(readOnly = true)
+    public List<TrackingDtos.TrackPoint> track(UUID viewerId, UUID tripId) {
+        Trip trip = trips.findById(tripId).orElseThrow(TrackingService::tripNotFound);
+        if (!trip.isDrivenBy(viewerId)) {
+            // 404 rather than 403, same as the live view: no probing other people's trips.
+            reservations
+                    .findByTrip_IdAndPassenger_IdAndStatusIn(tripId, viewerId, MAY_REPLAY)
+                    .orElseThrow(TrackingService::tripNotFound);
+        }
+        return gpsPoints.findByTrip_IdOrderByRecordedAtAsc(tripId).stream()
+                .map(TrackingDtos.TrackPoint::from)
+                .toList();
     }
 
     // --- pickup check-in ---------------------------------------------------------------------

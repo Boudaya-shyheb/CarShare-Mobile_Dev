@@ -38,9 +38,14 @@ class GeoService {
   static const _osrm = 'https://router.project-osrm.org';
 
   /// Nominatim's usage policy requires an identifying User-Agent on every call.
+  ///
+  /// Accept-Language matters as much: without it Nominatim answers in the local language, so a
+  /// Tunisian search returns Arabic script ("سوسة") in an app that is otherwise English. French
+  /// first, then English, gives the Latin names people here actually use ("Sousse", "Ennasr").
   static const _headers = {
     'User-Agent': 'CarShare-student-app',
     'Accept': 'application/json',
+    'Accept-Language': 'fr,en',
   };
 
   static const _timeout = Duration(seconds: 15);

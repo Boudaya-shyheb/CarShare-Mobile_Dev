@@ -1,12 +1,14 @@
 package com.carshare.api.reservation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -20,7 +22,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +47,7 @@ class TripSearchServiceTest {
     @Mock private TripEventRepository tripEvents;
     @Mock private UserRepository users;
     @Mock private ReservationService reservationService;
+    @Mock private ReputationService reputationService;
 
     private TripService service;
     private AppUser otherDriver;
@@ -50,7 +56,8 @@ class TripSearchServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TripService(trips, tripEvents, users, reservationService);
+        service = new TripService(trips, tripEvents, users, reservationService,
+                reputationService);
         otherDriver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash", UserRole.DRIVER);
         searcherId = UUID.randomUUID();
         wantedDeparture = Instant.now().plus(5, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MINUTES);
@@ -277,6 +284,69 @@ class TripSearchServiceTest {
     }
 
     @Test
+    @DisplayName("a driver's stars and punctuality move the score, a newcomer sits between")
+    void reputationFeedsTheScore() {
+        givenCandidates(perfectTrip());
+        int spotless = service.search(searcherId, request(wantedDeparture.toString(), 1, null))
+                .get(0).matchScore();
+
+        givenCandidates(perfectTrip());
+        givenDriverReputation(ReputationService.Reputation.NONE);
+        int newcomer = service.search(searcherId, request(wantedDeparture.toString(), 1, null))
+                .get(0).matchScore();
+
+        givenCandidates(perfectTrip());
+        givenDriverReputation(new ReputationService.Reputation(1.0d, 30L, 0.0d));
+        int poor = service.search(searcherId, request(wantedDeparture.toString(), 1, null))
+                .get(0).matchScore();
+
+        assertEquals(100, spotless);
+        assertEquals(95, newcomer);
+        assertTrue(poor < newcomer);
+    }
+
+    @Test
+    @DisplayName("the driver's rating travels with the result so the card can show it")
+    void carriesTheDriverRating() {
+        givenCandidates(perfectTrip());
+
+        TripDtos.TripSearchResult result =
+                service.search(searcherId, request(wantedDeparture.toString(), 1, null)).get(0);
+
+        assertEquals(5.0d, result.driverRating());
+        assertEquals(12L, result.driverRatingCount());
+    }
+
+    @Test
+    @DisplayName("a result carries the route duration and the arrival it implies")
+    void reportsDurationAndExpectedArrival() {
+        Trip routed = new Trip(otherDriver, null, "Origin", WANTED_ORIGIN_LAT, WANTED_ORIGIN_LNG,
+                "Destination", WANTED_DESTINATION_LAT, WANTED_DESTINATION_LNG, wantedDeparture,
+                4, new BigDecimal("12.00"), false, null, null, 5_400, null);
+        givenCandidates(routed);
+
+        TripDtos.TripSearchResult result =
+                service.search(searcherId, request(wantedDeparture.toString(), 1, null)).get(0);
+
+        // The card shows "departure -> arrival" without opening each trip.
+        assertEquals(5_400, result.durationS());
+        assertEquals(wantedDeparture.plus(90, ChronoUnit.MINUTES), result.expectedArrival());
+    }
+
+    @Test
+    @DisplayName("a trip published without a route falls back to the two-hour window")
+    void fallsBackToTheDefaultWindow() {
+        givenCandidates(perfectTrip());
+
+        TripDtos.TripSearchResult result =
+                service.search(searcherId, request(wantedDeparture.toString(), 1, null)).get(0);
+
+        // durationS stays null so a client can tell a measured route from the assumption.
+        assertNull(result.durationS());
+        assertEquals(wantedDeparture.plus(Trip.DEFAULT_DURATION), result.expectedArrival());
+    }
+
+    @Test
     @DisplayName("the measured distances and time gap match what was asked for")
     void measuresDistancesAndTimeGap() {
         Trip nearby = tripAt(latPlus(WANTED_ORIGIN_LAT, 500), WANTED_ORIGIN_LNG,
@@ -431,5 +501,18 @@ class TripSearchServiceTest {
         when(trips.searchCandidates(any(), any(), any(), any(), anyInt(), any(), anyDouble(),
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
                 anyDouble())).thenReturn(List.of(candidates));
+        givenDriverReputation(new ReputationService.Reputation(5.0d, 12L, 1.0d));
+    }
+
+    /** Every candidate's driver gets the same history, so the score under test is the geometry. */
+    private void givenDriverReputation(ReputationService.Reputation reputation) {
+        // doAnswer, not when(...): calling forUsers(any()) on the mock to re-stub it would run
+        // the answer already registered, with a null argument.
+        lenient().doAnswer(invocation -> {
+            Map<UUID, ReputationService.Reputation> out = new HashMap<>();
+            Collection<UUID> ids = invocation.getArgument(0);
+            if (ids != null) for (UUID id : ids) out.put(id, reputation);
+            return out;
+        }).when(reputationService).forUsers(any());
     }
 }

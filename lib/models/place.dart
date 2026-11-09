@@ -22,6 +22,17 @@ class Place {
   bool isSameSpotAs(Place other) =>
       (lat - other.lat).abs() < 0.0001 && (lng - other.lng).abs() < 0.0001;
 
+  /// Just the first part of the label, for a header that has to fit on one line:
+  /// "Sousse" out of "Sousse, Délégation Sousse Medina", and the "Current location"
+  /// prefix dropped so a route reads "Ennozha → Sousse".
+  String get shortLabel {
+    final withoutPrefix = label.startsWith('Current location · ')
+        ? label.substring('Current location · '.length)
+        : label;
+    final first = withoutPrefix.split(',').first.trim();
+    return first.isEmpty ? withoutPrefix : first;
+  }
+
   @override
   String toString() => label;
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
-import 'home_page.dart';
 import 'reset_password_page.dart';
 import 'sign_up_page.dart';
 import 'welcome_page.dart';
@@ -47,12 +46,10 @@ class _SignInPageState extends State<SignInPage> {
       final user = _service.currentUser.value;
       if (!mounted || user == null) return;
 
-      // Replace the sign-in route explicitly so the authenticated screen is
-      // visible immediately instead of relying on the previous route to rebuild.
-      await Navigator.of(context).pushAndRemoveUntil<void>(
-        MaterialPageRoute<void>(builder: (_) => HomePage(user: user)),
-        (_) => false,
-      );
+      // Pop back to the _AuthenticationGate instead of pushing a screen: the gate listens to
+      // AuthService.currentUser and builds MainShell (or the admin screen) for the signed-in
+      // user. Pushing HomePage here bypassed it, so the reservation shell never appeared.
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (error) {
       if (mounted) _showMessage(authErrorMessage(error));
     } finally {

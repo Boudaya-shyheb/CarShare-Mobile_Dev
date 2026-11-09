@@ -59,12 +59,20 @@ public final class ReservationDtos {
      */
     public record PassengerView(UUID reservationId, UUID passengerId, String passengerName,
             int seats, String status, boolean lateCancellation, String cancelReason,
+            Double passengerRating, long passengerRatingCount,
             Instant decidedAt, Instant cancelledAt, Instant createdAt) {
+        /** Without a reputation to hand. */
         public static PassengerView from(Reservation reservation) {
+            return from(reservation, null, 0L);
+        }
+
+        public static PassengerView from(Reservation reservation, Double passengerRating,
+                long passengerRatingCount) {
             return new PassengerView(reservation.getId(), reservation.getPassenger().getId(),
                     reservation.getPassenger().getFullName(), reservation.getSeats(),
                     reservation.getStatus().name(), reservation.isLateCancellation(),
-                    reservation.getCancelReason(), reservation.getDecidedAt(),
+                    reservation.getCancelReason(), passengerRating, passengerRatingCount,
+                    reservation.getDecidedAt(),
                     reservation.getCancelledAt(), reservation.getCreatedAt());
         }
     }

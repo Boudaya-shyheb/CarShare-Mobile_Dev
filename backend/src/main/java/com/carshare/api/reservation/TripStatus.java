@@ -18,6 +18,13 @@ public enum TripStatus {
     COMPLETED,
     CANCELLED;
 
+    /**
+     * The statuses a trip can be in while it still has a claim on things: a vehicle on one of
+     * these must not be deleted. Read by ReservationQueries for the vehicle module.
+     */
+    public static final Set<TripStatus> UNFINISHED =
+            Set.of(SCHEDULED, DRIVER_EN_ROUTE, DRIVER_ARRIVED, PICKED_UP, IN_PROGRESS);
+
     public Set<TripStatus> allowedNext() {
         return switch (this) {
             case SCHEDULED -> Set.of(DRIVER_EN_ROUTE, CANCELLED);

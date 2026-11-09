@@ -196,6 +196,56 @@ passenger's next poll would answer `404` instead of showing them the trip they j
 so a stopped car still gives a usable number), `deviating`, and for a passenger their own
 reservation status and whether they are aboard.
 
+## Ratings and reputation
+
+Decided in step 10, and the rules the code enforces:
+
+- A rating exists only **after the trip is `COMPLETED`**. Nothing can be rated mid-trip.
+- **Who may rate whom** comes from what happened, never from the request. A passenger must hold
+  a `COMPLETED` reservation *and* have been checked in; the driver may rate exactly those
+  people. A no-show, a refusal or a cancellation leaves nobody to rate.
+- **One rating per rater/rated pair per trip**, enforced by a unique index rather than a check
+  in Java, so two taps cannot create two rows.
+- **Editable for 24 hours** from when it was left, then locked. Long enough to fix a mis-tap,
+  short enough that an average stops moving under people's feet.
+- 1–5 stars, an optional comment of at most 500 characters. A blank comment is stored as null.
+- Nobody rates themselves (a database check as well as a service rule).
+
+### The figure people see
+
+A user's rating is the **mean of the last 50 ratings received**, to one decimal, and is null
+until somebody rates them. The count beside it is every rating they ever received, so a driver
+with 200 ratings reads "4.8 · 200 ratings" while the average only reflects the recent fifty.
+Old history fades out without ever being deleted.
+
+### Reliability in the match score
+
+The 15 reliability points of the match score are
+`15 x (0.6 x rating/5 + 0.4 x punctuality)`.
+
+**Punctuality** is the share of the driver's completed trips whose `DRIVER_ARRIVED` event
+landed within 5 minutes of the departure time they advertised — taken from `trip_events`, so it
+is measured, not self-reported.
+
+A driver with **neither** figure scores **10**, not 0 and not 15: a newcomer should not be
+buried under established drivers, nor beat them before doing anything. When only one of the two
+is known, that half is scaled up to stand for the whole component, so a missing figure neither
+helps nor hurts.
+
+## Replay
+
+`gps_points` is append-only, so a finished trip can be redrawn. The completion screen asks for
+the trail in `recordedAt` order — the phone's own clock, not arrival order, so a buffer sent
+late after a dead spot still sits in the right place. The planned route is drawn dashed and
+grey underneath; what the car actually did is green on top.
+
+## Talking to other modules
+
+Other modules never touch our tables. They inject `ReservationQueries`, a read-only service
+that answers in small records, and they call the REST API when they need something changed so
+the business rules run. See "Using the Reservation module from another module" in
+[reservation-api.md](reservation-api.md).
+
 ## Flutter screens (follow the Figma mockups)
 
 - Bottom navigation bar: **Home, Trips, Live, Profile**.
@@ -217,5 +267,5 @@ reservation status and whether they are aboard.
 7. Flutter models + `ReservationService`
 8. Flutter publish / search / details / my-trips screens + bottom navigation
 9. Maps (`flutter_map`, Nominatim, OSRM) and the live tracking screen
-10. Trip completion screen: replay of `gps_points` plus the event log
-11. Ratings: 1–5 stars, once per side, only after `COMPLETED`, editable for 24 h
+10. `V10` migration, ratings and reputation, the replay endpoint, the completion screen,
+    and `ReservationQueries` for the other modules

@@ -325,7 +325,97 @@ Run the API with `.\backend\run-local.ps1` (port 8081, loads `.env.local`), then
 Note: the root `README.md` still says port 8080 in places; the real local port is **8081**,
 as in `backend/README.md` and `ApiClient.baseUrl`.
 
-## 7. Git
+## 7. How to verify Flutter work
+
+Do not ask the user to test a screen. Build it, put it on the phone, look at it, drive it, and
+compare it with the mockup before reporting. Every command below is run from the repository root.
+
+### 7.1 Backend
+
+```powershell
+$env:GRADLE_USER_HOME = 'D:\carshare-build\gradle-home'
+$env:JAVA_TOOL_OPTIONS = ''
+.\backend\run-local.ps1
+```
+
+Run it in the background and wait for `Started CarShareApiApplication` in its output before
+touching the app. **Stop it at the end of the session.** `GRADLE_USER_HOME` must point at D:
+because C: has little room left; never free space by deleting things.
+
+### 7.2 Phone
+
+Samsung SM A165F over USB (`RF8YA066Y4M`).
+
+```bash
+adb devices
+adb reverse tcp:8081 tcp:8081
+```
+
+- `adb reverse` has to be re-run **after every reconnect** (unplug, reboot, adb restart), or the
+  app reaches nothing on 8081 and every call fails with a connection error.
+- **Clear `JAVA_TOOL_OPTIONS` before building.** The project path contains an apostrophe
+  (`stage d'ete`), which breaks the JVM argument parsing Gradle inherits from it.
+
+### 7.3 Build, install, launch
+
+```bash
+flutter build apk --debug --dart-define=CARSHARE_API_BASE_URL=http://127.0.0.1:8081/api
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.example.carshare/.MainActivity
+```
+
+`127.0.0.1:8081` works on the phone only because of the `adb reverse` above; the default
+`10.0.2.2` is the emulator's host alias and is wrong for a real device.
+
+### 7.4 See the screen
+
+```bash
+adb exec-out screencap -p > .dart_tool/shots/<name>.png
+```
+
+Then **open the PNG and look at it** — a command that exits 0 is not evidence a screen is right.
+`.dart_tool/` is already git-ignored, so screenshots stay out of the repository. Give each shot a
+name that says what it shows (`07-home-passenger.png`), and let a screen settle (animation, map
+tiles, a network call) before capturing it.
+
+### 7.5 Interact
+
+```bash
+adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml   # find bounds
+adb shell input tap <x> <y>
+adb shell input text "Sousse"
+adb shell input swipe <x1> <y1> <x2> <y2> <ms>
+adb shell input keyevent 4        # back
+```
+
+Read the real bounds out of the dump rather than guessing coordinates from a screenshot, and
+wait for the screen to settle between a tap and the next dump or capture.
+
+### 7.6 Test accounts
+
+Two accounts on the Neon dev branch, one `DRIVER` and one `PASSENGER`, created with
+`POST /api/auth/signup`. Their emails and passwords live in `.dart_tool/test-accounts.json`
+(git-ignored, and never echoed into the transcript or a commit).
+
+The phone holds one side of a trip; play the other side with `curl` and that account's bearer
+token — the driver publishes and accepts while the phone is the passenger, for instance. To
+switch the phone to the other account, `adb shell pm clear com.example.carshare` (the app has no
+sign-out control outside the admin screen).
+
+### 7.7 Compare with the mockup
+
+Every screen has a file in `docs/mockups/` whose name starts with the screen number
+(`04 · Home – Search`, `05 · Matching Results`, …). Open the mockup next to the screenshot and
+fix the visible differences before reporting. A difference kept on purpose gets said out loud,
+with the reason.
+
+### 7.8 Never
+
+- Never read, print or modify `.env.local` or `.neon`.
+- Never run `dart format` on `lib/` as a whole — only on the files of the module being worked on.
+- Never commit or push; the user commits.
+
+## 8. Git
 
 - Never commit `.env.local`, `.neon`, build output, or `.dart_tool/`.
 - Commit messages: `feat: …`, `fix: …`, short and in English (matching `feat: complete user

@@ -12,6 +12,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface TripRepository extends JpaRepository<Trip, UUID> {
+
+    /**
+     * Whether a vehicle is still committed to a trip. Asked by the vehicle module through
+     * ReservationQueries before it lets a car be removed.
+     */
+    boolean existsByVehicleIdAndStatusIn(UUID vehicleId, Collection<TripStatus> statuses);
     @EntityGraph(attributePaths = "driver")
     List<Trip> findByDriver_IdOrderByDepartureTimeDesc(UUID driverId);
 

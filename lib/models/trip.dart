@@ -28,6 +28,8 @@ class Trip {
     this.notes,
     this.cancelReason,
     this.routePolyline,
+    this.driverRating,
+    this.driverRatingCount = 0,
     this.createdAt,
     this.updatedAt,
   });
@@ -58,6 +60,10 @@ class Trip {
   final String? notes;
   final String? cancelReason;
   final String? routePolyline;
+
+  /// The driver's reputation, on the shapes that carry it.
+  final double? driverRating;
+  final int driverRatingCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -88,6 +94,8 @@ class Trip {
     notes: json['notes'] as String?,
     cancelReason: json['cancelReason'] as String?,
     routePolyline: json['routePolyline'] as String?,
+    driverRating: (json['driverRating'] as num?)?.toDouble(),
+    driverRatingCount: json['driverRatingCount'] as int? ?? 0,
     createdAt: json['createdAt'] == null
         ? null
         : DateTime.parse(json['createdAt'] as String),

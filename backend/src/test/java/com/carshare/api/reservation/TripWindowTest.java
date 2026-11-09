@@ -2,6 +2,7 @@ package com.carshare.api.reservation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.carshare.api.users.AppUser;
@@ -99,6 +100,20 @@ class TripWindowTest {
             assertEquals(first.overlaps(second), second.overlaps(first),
                     "asymmetric at " + minutes + " minutes");
         }
+    }
+
+    @Test
+    @DisplayName("createdAt is stamped at construction, not left for the flush")
+    void stampsCreatedAtAtConstruction() {
+        Instant before = Instant.now();
+        Trip trip = tripAt(NOON, null);
+        Instant after = Instant.now();
+
+        // The create endpoint maps the entity to its DTO before the transaction flushes,
+        // so a createdAt left to @PrePersist came back null in the response body.
+        assertNotNull(trip.getCreatedAt());
+        assertFalse(trip.getCreatedAt().isBefore(before));
+        assertFalse(trip.getCreatedAt().isAfter(after));
     }
 
     private Trip tripAt(Instant departure, Integer durationS) {

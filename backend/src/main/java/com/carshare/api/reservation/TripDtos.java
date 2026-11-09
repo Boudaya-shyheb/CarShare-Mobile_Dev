@@ -76,8 +76,14 @@ public final class TripDtos {
             Instant departureTime, int seatsTotal, int seatsAvailable, int confirmedSeats,
             BigDecimal pricePerSeat, String status, boolean instantBooking, boolean locked,
             String notes, String cancelReason, Integer distanceM, Integer durationS,
-            String routePolyline, Instant createdAt, Instant updatedAt) {
+            String routePolyline, Double driverRating, long driverRatingCount,
+            Instant createdAt, Instant updatedAt) {
+        /** Without a reputation to hand — the driver's own views, where it is not shown. */
         public static TripDetail from(Trip trip) {
+            return from(trip, null, 0L);
+        }
+
+        public static TripDetail from(Trip trip, Double driverRating, long driverRatingCount) {
             return new TripDetail(trip.getId(), trip.getDriver().getId(), trip.getDriver().getFullName(),
                     trip.getVehicleId(), trip.getOriginLabel(), trip.getOriginLat(), trip.getOriginLng(),
                     trip.getDestinationLabel(), trip.getDestinationLat(), trip.getDestinationLng(),
@@ -85,6 +91,7 @@ public final class TripDtos {
                     trip.getConfirmedSeats(), trip.getPricePerSeat(), trip.getStatus().name(),
                     trip.isInstantBooking(), trip.isLocked(), trip.getNotes(), trip.getCancelReason(),
                     trip.getDistanceM(), trip.getDurationS(), trip.getRoutePolyline(),
+                    driverRating, driverRatingCount,
                     trip.getCreatedAt(), trip.getUpdatedAt());
         }
     }
@@ -97,16 +104,33 @@ public final class TripDtos {
     public record SearchRequest(Double originLat, Double originLng, Double destinationLat,
             Double destinationLng, String departureTime, Integer seats, String sort) { }
 
+    /**
+     * One row of the results list. It carries {@code durationS} and {@code expectedArrival} so a
+     * result card can show "08:15 -> 09:30" without fetching each trip: {@code expectedArrival}
+     * falls back to the default two-hour window when the trip was published without a route,
+     * while {@code durationS} stays null so a client can tell a real duration from the fallback.
+     */
     public record TripSearchResult(UUID tripId, UUID driverId, String driverName,
-            String originLabel, String destinationLabel, Instant departureTime, int seatsAvailable,
-            BigDecimal pricePerSeat, boolean instantBooking, int pickupDistanceM,
+            String originLabel, String destinationLabel, Instant departureTime,
+            Instant expectedArrival, Integer durationS, int seatsAvailable,
+            BigDecimal pricePerSeat, boolean instantBooking, Double driverRating,
+            long driverRatingCount, int pickupDistanceM,
             int dropoffDistanceM, int timeGapMin, int matchScore) {
-        public static TripSearchResult from(Trip trip, int pickupDistanceM, int dropoffDistanceM,
+        /** Without a reputation to hand, which is what the search passes today. */
+        public static TripSearchResult from(Trip trip, int pickupDistanceM,
+                int dropoffDistanceM, int timeGapMin, int matchScore) {
+            return from(trip, null, 0L, pickupDistanceM, dropoffDistanceM, timeGapMin, matchScore);
+        }
+
+        public static TripSearchResult from(Trip trip, Double driverRating,
+                long driverRatingCount, int pickupDistanceM, int dropoffDistanceM,
                 int timeGapMin, int matchScore) {
             return new TripSearchResult(trip.getId(), trip.getDriver().getId(),
                     trip.getDriver().getFullName(), trip.getOriginLabel(), trip.getDestinationLabel(),
-                    trip.getDepartureTime(), trip.getSeatsAvailable(), trip.getPricePerSeat(),
-                    trip.isInstantBooking(), pickupDistanceM, dropoffDistanceM, timeGapMin, matchScore);
+                    trip.getDepartureTime(), trip.expectedArrival(), trip.getDurationS(),
+                    trip.getSeatsAvailable(), trip.getPricePerSeat(),
+                    trip.isInstantBooking(), driverRating, driverRatingCount,
+                    pickupDistanceM, dropoffDistanceM, timeGapMin, matchScore);
         }
     }
 

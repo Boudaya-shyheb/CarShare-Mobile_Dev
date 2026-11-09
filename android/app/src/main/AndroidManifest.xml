@@ -4,6 +4,9 @@
          sends positions while a trip is under way. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Live tracking: the driver may scan the passenger's pickup-code QR at check-in. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="carshare"
         android:name="${applicationName}"

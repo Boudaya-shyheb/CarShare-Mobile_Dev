@@ -1,6 +1,7 @@
 package com.carshare.api.reservation;
 
 import com.carshare.api.security.SessionPrincipal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,5 +37,12 @@ public class TripTrackingController {
     public TrackingDtos.LiveView live(@AuthenticationPrincipal SessionPrincipal principal,
             @PathVariable UUID tripId) {
         return trackingService.live(principal.userId(), tripId);
+    }
+
+    /** The driven track of a finished trip, for the replay on the completion screen. */
+    @GetMapping("/{tripId}/track")
+    public List<TrackingDtos.TrackPoint> track(@AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable UUID tripId) {
+        return trackingService.track(principal.userId(), tripId);
     }
 }

@@ -22,6 +22,13 @@ public final class TrackingDtos {
 
     public record CheckInRequest(@NotBlank @Size(max = 8) String code) { }
 
+    /** One fix of the driven track, for the replay. Speed is left out: the map does not use it. */
+    public record TrackPoint(double lat, double lng, Instant recordedAt) {
+        public static TrackPoint from(GpsPoint point) {
+            return new TrackPoint(point.getLat(), point.getLng(), point.getRecordedAt());
+        }
+    }
+
     /**
      * What the live tracking screen polls every five seconds.
      *

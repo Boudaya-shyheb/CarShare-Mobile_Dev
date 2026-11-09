@@ -200,7 +200,8 @@ caller's own, sit within 2 km of **both** ends, and score ≥ 50 come back — a
 [{
   "tripId": "4f1c...", "driverId": "9ab2...", "driverName": "Ahmed Ben Salah",
   "originLabel": "Tunis Centre", "destinationLabel": "Sousse",
-  "departureTime": "2026-11-21T07:30:00Z", "seatsAvailable": 3,
+  "departureTime": "2026-11-21T07:30:00Z", "expectedArrival": "2026-11-21T09:30:00Z",
+  "durationS": 7200, "seatsAvailable": 3,
   "pricePerSeat": 12.50, "instantBooking": false,
   "pickupDistanceM": 0, "dropoffDistanceM": 0, "timeGapMin": 0, "matchScore": 100
 }]
@@ -208,6 +209,11 @@ caller's own, sit within 2 km of **both** ends, and score ≥ 50 come back — a
 
 `matchScore` is the percentage the results screen shows: 35 points for pickup distance, 25 for
 drop-off distance, 25 for the time gap, 15 for driver reliability (flat for now).
+
+`expectedArrival` is always present, so a result card can show "08:15 → 09:30" without opening
+each trip. `durationS` is the route duration the driver published and is **null** when the trip
+carries no route — in that case `expectedArrival` is the default two-hour window, and a client
+that wants to distinguish a measured arrival from an assumed one checks `durationS`.
 
 Errors: `invalid_search`, `invalid_coordinates`, `same_origin_and_destination`.
 
@@ -483,3 +489,138 @@ Notes on the automatic steps:
   and the code is in that response.
 - If the driver never answers, the auto-refuse job ends the reservation after 2 h, or 30 minutes
   before departure.
+
+## Ratings
+
+A rating is left after the trip is `COMPLETED`. The passenger rates the driver; the driver rates
+each passenger who actually boarded. One rating per rater/rated pair per trip, changeable for
+**24 hours** after it was left, then locked.
+
+Whether somebody may rate at all is decided by what happened on the trip, never by a field in
+the request: a passenger must hold a `COMPLETED` reservation **and** have been checked in. A
+no-show, a refusal or a cancellation leaves nobody to rate and nobody to be rated.
+
+### `POST /api/trips/{tripId}/ratings`
+
+```json
+{ "toUserId": "9ab2...", "stars": 5, "comment": "Smooth drive" }
+```
+
+`stars` is 1–5, `comment` is optional and at most 500 characters (blank is stored as null).
+→ `RatingView`:
+
+```json
+{
+  "id": "7c1d...", "tripId": "4f1c...", "fromUserId": "c1bd...", "toUserId": "9ab2...",
+  "toUserName": "Ahmed Ben Salah", "stars": 5, "comment": "Smooth drive",
+  "editable": true, "createdAt": "2026-11-21T10:02:00Z", "updatedAt": null
+}
+```
+
+Errors: `trip_not_found` (also when the caller was not on the trip — a 404 so the route cannot
+be used to probe other people's trips), `trip_not_completed`, `not_on_this_trip`,
+`cannot_rate_yourself`, `already_rated`, `validation_error`.
+
+### `PUT /api/trips/{tripId}/ratings/{toUserId}`
+
+```json
+{ "stars": 4, "comment": "Was a little harsh" }
+```
+
+→ the same `RatingView`. Errors: `rating_not_found`, `rating_locked` (the 24 h window closed),
+`trip_not_found`, `trip_not_completed`, `validation_error`.
+
+### `GET /api/trips/{tripId}/ratings/mine`
+
+Everyone the caller may rate on this trip, and what they have already said. The completion
+screen draws itself from this one call.
+
+```json
+{
+  "tripId": "4f1c...", "tripCompleted": true,
+  "parties": [
+    { "userId": "9ab2...", "name": "Ahmed Ben Salah", "role": "DRIVER", "myRating": null }
+  ]
+}
+```
+
+A passenger gets one party (their driver); a driver gets one per passenger who boarded.
+Errors: `trip_not_found`.
+
+### Where ratings show up
+
+A user's rating is the **mean of the last 50 ratings they received**, to one decimal, and is
+`null` until somebody rates them. The count beside it is **every** rating they ever received,
+not just the fifty the average used.
+
+| Shape | Fields |
+| --- | --- |
+| `TripSearchResult` | `driverRating`, `driverRatingCount` |
+| `TripDetail` | `driverRating`, `driverRatingCount` |
+| `PassengerView` | `passengerRating`, `passengerRatingCount` |
+
+The reliability component of the match score uses it:
+`15 x (0.6 x rating/5 + 0.4 x punctuality)`, where punctuality is the share of the driver's
+completed trips whose `DRIVER_ARRIVED` event landed within 5 minutes of the advertised
+departure. A driver with neither figure scores **10** — a newcomer is not buried under
+established drivers, nor placed above them. When only one of the two is known, that half stands
+for the whole component.
+
+### `GET /api/trips/{tripId}/track`
+
+The whole driven trail, oldest first, for the replay on the completion screen. Open to the
+driver, and to a passenger whose reservation is `COMPLETED` or `NO_SHOW`.
+
+```json
+[
+  { "lat": 36.8071, "lng": 10.1822, "recordedAt": "2026-11-21T07:28:00Z" },
+  { "lat": 36.8068, "lng": 10.1819, "recordedAt": "2026-11-21T07:28:04Z" }
+]
+```
+
+Ordered by `recordedAt`, not by arrival, so a buffer sent late after a dead spot still sits in
+the right place on the map. Errors: `trip_not_found`.
+
+## Using the Reservation module from another module
+
+Do not read or write our tables directly, and do not inject our repositories. Inject
+**`com.carshare.api.reservation.ReservationQueries`**, a read-only service that answers in small
+records — never JPA entities, whose lazy associations would fail once the transaction closes.
+
+```java
+@Service
+public class VehicleService {
+    private final ReservationQueries reservations;
+
+    public VehicleService(ReservationQueries reservations) {
+        this.reservations = reservations;
+    }
+
+    public void delete(UUID vehicleId) {
+        if (reservations.vehicleHasUpcomingTrips(vehicleId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "vehicle_in_use",
+                    "This car is booked for a trip that has not finished yet.");
+        }
+        // ...
+    }
+}
+```
+
+| Method | Answers |
+| --- | --- |
+| `tripFacts(tripId)` | `Optional<TripFacts>` — route, times, status, seats, vehicle |
+| `participants(tripId)` | the driver, then every passenger who held a seat |
+| `wasOnTrip(tripId, userId)` | the authorisation check: did this person drive it or ride it |
+| `events(tripId)` | the audit trail, oldest first |
+| `gpsTrack(tripId)` | every GPS fix, in `recordedAt` order |
+| `vehicleHasUpcomingTrips(vehicleId)` | true while a trip using that car has not finished |
+
+Three rules:
+
+1. **Never write to our tables.** A module that needs a trip or a reservation changed calls the
+   REST API like any other client, so the business rules actually run.
+2. **Never return our entities** out of your own code either; copy what you need into your own
+   record.
+3. **Take the next free migration number after pulling `main`.** Flyway versions are global to
+   the schema, so two students both adding `V11` is a merge conflict that only shows up when the
+   app refuses to start.

@@ -53,3 +53,5 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 backend/.gradle/
+
+Claude outputs/
