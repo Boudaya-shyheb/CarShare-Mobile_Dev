@@ -56,7 +56,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   void _goToSignIn() => Navigator.of(context).pushAndRemoveUntil<void>(
     MaterialPageRoute<void>(builder: (_) => const SignInPage()),
-    (_) => false,
+    (route) => route.isFirst,
   );
 
   @override

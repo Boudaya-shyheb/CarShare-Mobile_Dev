@@ -1,0 +1,1101 @@
+{
+  "info": {
+    "name": "CarShare — Reservation module",
+    "description": "Every endpoint of the reservation module, ordered as a full trip: publish, search, book, accept, drive, check in, complete.\n\n**Before you run it:** fill in driverEmail / driverPassword / passengerEmail / passengerPassword in the collection variables. They are left empty on purpose so no password is committed to the repository. The two accounts must be different, and the driver one must have role 'driver' — create them with POST /api/auth/signup if you need to.\n\nRun the 'Full trip' folders in order, or use the collection runner: each request saves what the next one needs (driverToken, passengerToken, tripId, reservationId, pickupCode). Start the API with backend/run-local.ps1 on port 8081.\n\nReference: docs/reservation-api.md. Rules: docs/reservation-spec.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Sign in",
+      "item": [
+        {
+          "name": "1. Sign in as the driver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signin"
+            },
+            "description": "Fills driverToken. The account must have role 'driver'; create one with POST /api/auth/signup if you have not already.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set(\"driverToken\", body.accessToken);",
+                  "    console.log(\"driverToken =\", pm.collectionVariables.get(\"driverToken\"));",
+                  "    pm.collectionVariables.set(\"driverId\", body.user.id);",
+                  "    pm.test(\"the account is a driver\", function () {",
+                  "        pm.expect(body.user.role).to.eql(\"driver\");",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Sign in as the passenger",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signin"
+            },
+            "description": "Fills passengerToken. Must be a different account from the driver: nobody may book a seat on their own trip.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{passengerEmail}}\",\n  \"password\": \"{{passengerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set(\"passengerToken\", body.accessToken);",
+                  "    console.log(\"passengerToken =\", pm.collectionVariables.get(\"passengerToken\"));",
+                  "    pm.collectionVariables.set(\"passengerId\", body.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Publish and search",
+      "item": [
+        {
+          "name": "3. Publish a trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips"
+            },
+            "description": "Fills tripId. departureTime is set to tomorrow by the collection pre-request script, so this request always has a publishable time.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": null,\n  \"originLabel\": \"Tunis Centre\",\n  \"originLat\": 36.8065,\n  \"originLng\": 10.1815,\n  \"destinationLabel\": \"Sousse\",\n  \"destinationLat\": 35.8256,\n  \"destinationLng\": 10.636,\n  \"departureTime\": \"{{departureTime}}\",\n  \"seatsTotal\": 3,\n  \"pricePerSeat\": 12.5,\n  \"instantBooking\": false,\n  \"notes\": \"Meet by the station.\",\n  \"distanceM\": 140000,\n  \"durationS\": 7200,\n  \"routePolyline\": \"{{routePolyline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set(\"tripId\", body.id);",
+                  "    console.log(\"tripId =\", pm.collectionVariables.get(\"tripId\"));",
+                  "    pm.test(\"starts scheduled with every seat free\", function () {",
+                  "        pm.expect(body.status).to.eql(\"SCHEDULED\");",
+                  "        pm.expect(body.seatsAvailable).to.eql(body.seatsTotal);",
+                  "        pm.expect(body.locked).to.eql(false);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Search for it",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/search?originLat=36.8065&originLng=10.1815&destinationLat=35.8256&destinationLng=10.636&departureTime={{departureTime}}&seats=1&sort=best"
+            },
+            "description": "Searching from exactly the trip's own endpoints at its own departure time scores 100: no pickup or drop-off distance, no time gap."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the published trip is a perfect match\", function () {",
+                  "    const found = pm.response.json().find(function (t) { return t.tripId === pm.collectionVariables.get(\"tripId\"); });",
+                  "    pm.expect(found, \"the trip should be in the results\").to.not.be.undefined;",
+                  "    pm.expect(found.matchScore).to.eql(100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Book and accept",
+      "item": [
+        {
+          "name": "5. Book a seat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/reservations"
+            },
+            "description": "Fills reservationId. Seats are held now, not when the driver accepts. On an instantBooking trip this would come back CONFIRMED with the pickupCode.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seats\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set(\"reservationId\", body.id);",
+                  "    console.log(\"reservationId =\", pm.collectionVariables.get(\"reservationId\"));",
+                  "    pm.test(\"pending, with no code yet\", function () {",
+                  "        pm.expect(body.status).to.eql(\"PENDING\");",
+                  "        pm.expect(body.pickupCode, \"a pending reservation hides the code\").to.be.null;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. See who booked",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/reservations"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the driver never sees a pickup code\", function () {",
+                  "    pm.response.json().forEach(function (r) {",
+                  "        pm.expect(r).to.not.have.property(\"pickupCode\");",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Accept it",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/accept"
+            },
+            "description": "Raises the trip's confirmedSeats, which locks its time, route and price."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"confirmed\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"CONFIRMED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Read the pickup code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/mine?scope=upcoming"
+            },
+            "description": "Fills pickupCode. This is the only endpoint that ever returns it, and only to the passenger who owns the reservation."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const mine = pm.response.json().find(function (r) {",
+                  "    return r.id === pm.collectionVariables.get(\"reservationId\");",
+                  "});",
+                  "pm.test(\"a confirmed reservation shows its code\", function () {",
+                  "    pm.expect(mine, \"the reservation should be here\").to.not.be.undefined;",
+                  "    pm.expect(mine.status).to.eql(\"CONFIRMED\");",
+                  "    pm.expect(mine.pickupCode).to.match(/^[0-9]{4}$/);",
+                  "});",
+                  "if (mine && mine.pickupCode) {",
+                  "    pm.collectionVariables.set(\"pickupCode\", mine.pickupCode);",
+                  "    console.log(\"pickupCode =\", mine.pickupCode);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Drive, check in, arrive",
+      "item": [
+        {
+          "name": "9. Set off",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/status"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DRIVER_EN_ROUTE\",\n  \"lat\": 36.81,\n  \"lng\": 10.19\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"en route\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"DRIVER_EN_ROUTE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Send positions on the way",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/positions"
+            },
+            "description": "Timestamps come from the collection pre-request script, which keeps a monotonic clock so repeated runs always send points newer than the last kept one.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": 36.82,\n      \"lng\": 10.2,\n      \"speedMps\": 11.4,\n      \"recordedAt\": \"{{ts1}}\"\n    },\n    {\n      \"lat\": 36.815,\n      \"lng\": 10.195,\n      \"speedMps\": 9.8,\n      \"recordedAt\": \"{{ts2}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"still heading for the pickup point\", function () {",
+                  "    const view = pm.response.json();",
+                  "    pm.expect(view.tripStatus).to.eql(\"DRIVER_EN_ROUTE\");",
+                  "    pm.expect(view.target).to.eql(\"PICKUP\");",
+                  "    pm.expect(view.distanceToTargetM).to.be.above(100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Passenger watches the trip",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/live"
+            },
+            "description": "Poll this every 5 seconds from the live tracking screen."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the passenger sees their own reservation too\", function () {",
+                  "    const view = pm.response.json();",
+                  "    pm.expect(view.myReservationStatus).to.eql(\"CONFIRMED\");",
+                  "    pm.expect(view.checkedIn).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Arrive at the pickup point",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/positions"
+            },
+            "description": "A position within 100 m of the trip's origin moves DRIVER_EN_ROUTE to DRIVER_ARRIVED with no call of its own.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": 36.8065,\n      \"lng\": 10.1815,\n      \"speedMps\": 0.4,\n      \"recordedAt\": \"{{ts2}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the geofence moved the trip on its own\", function () {",
+                  "    pm.expect(pm.response.json().tripStatus).to.eql(\"DRIVER_ARRIVED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13. Check the passenger in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/check-in"
+            },
+            "description": "With this the last confirmed passenger aboard, the trip moves itself to PICKED_UP. A wrong code gives 400 wrong_pickup_code; the third one locks check-in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{pickupCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"aboard\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"CONFIRMED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14. Start the ride",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/status"
+            },
+            "description": "The trip should already be PICKED_UP from step 13. A manual PICKED_UP is refused with 409 passengers_not_boarded while anyone confirmed is still unchecked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"under way\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"IN_PROGRESS\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15. Send positions en route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/positions"
+            },
+            "description": "With a routePolyline set, a point more than 300 m off it flips deviating to true and writes a DEVIATION event. These points follow the published route.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": 36.4,\n      \"lng\": 10.4,\n      \"speedMps\": 24.5,\n      \"recordedAt\": \"{{ts1}}\"\n    },\n    {\n      \"lat\": 36.1,\n      \"lng\": 10.5,\n      \"speedMps\": 25.2,\n      \"recordedAt\": \"{{ts2}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"now counting down to the drop-off\", function () {",
+                  "    const view = pm.response.json();",
+                  "    pm.expect(view.tripStatus).to.eql(\"IN_PROGRESS\");",
+                  "    pm.expect(view.target).to.eql(\"DROPOFF\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16. Reach the drop-off point",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/positions"
+            },
+            "description": "Within 100 m of the destination the trip completes and every checked-in reservation becomes COMPLETED.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": 35.8256,\n      \"lng\": 10.636,\n      \"speedMps\": 0.2,\n      \"recordedAt\": \"{{ts2}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the trip completed itself\", function () {",
+                  "    pm.expect(pm.response.json().tripStatus).to.eql(\"COMPLETED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17. Passenger sees the finished trip",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/live"
+            },
+            "description": "The live view stays open to a COMPLETED reservation, so the arrival lands on the passenger's screen instead of a 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the final state reaches the passenger\", function () {",
+                  "    const view = pm.response.json();",
+                  "    pm.expect(view.tripStatus).to.eql(\"COMPLETED\");",
+                  "    pm.expect(view.myReservationStatus).to.eql(\"COMPLETED\");",
+                  "    pm.expect(view.checkedIn).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18. Read the audit trail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/events"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"the whole trip is on record\", function () {",
+                  "    const types = pm.response.json().map(function (e) { return e.type; });",
+                  "    console.log(\"events:\", types.join(\", \"));",
+                  "    [\"PUBLISHED\", \"RESERVATION_REQUESTED\", \"RESERVATION_CONFIRMED\",",
+                  "     \"DRIVER_EN_ROUTE\", \"DRIVER_ARRIVED\", \"CHECK_IN\", \"PICKED_UP\",",
+                  "     \"IN_PROGRESS\", \"COMPLETED\"].forEach(function (expected) {",
+                  "        pm.expect(types, expected + \" should be recorded\").to.include(expected);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Other endpoints (not part of the happy path)",
+      "description": "The rest of the module, for reference. These change state, so running them mid-flow will break the steps above — use them on a trip of their own.",
+      "item": [
+        {
+          "name": "Get one trip",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}"
+            }
+          }
+        },
+        {
+          "name": "My trips (driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/mine?scope=upcoming"
+            }
+          }
+        },
+        {
+          "name": "My reservations (passenger)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/mine?scope=past"
+            }
+          }
+        },
+        {
+          "name": "Edit a trip",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}"
+            },
+            "description": "Only while SCHEDULED. Once a reservation is CONFIRMED the time, route and price are frozen: changing any of them gives 409 trip_locked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": null,\n  \"originLabel\": \"Tunis Centre\",\n  \"originLat\": 36.8065,\n  \"originLng\": 10.1815,\n  \"destinationLabel\": \"Sousse\",\n  \"destinationLat\": 35.8256,\n  \"destinationLng\": 10.636,\n  \"departureTime\": \"{{departureTime}}\",\n  \"seatsTotal\": 4,\n  \"pricePerSeat\": 12.5,\n  \"instantBooking\": true,\n  \"notes\": \"Now taking instant bookings.\",\n  \"distanceM\": 140000,\n  \"durationS\": 7200,\n  \"routePolyline\": \"{{routePolyline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Refuse a reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/refuse"
+            },
+            "description": "The other answer to a PENDING request. Releases the held seats and stores cancel_reason refused_by_driver."
+          }
+        },
+        {
+          "name": "Cancel a reservation (passenger)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{passengerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/cancel"
+            },
+            "description": "Free until exactly 2 h before departure; later it still works but comes back with lateCancellation true.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Plans changed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mark a no-show",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}/no-show"
+            },
+            "description": "Only once the trip has been DRIVER_ARRIVED for 5 minutes, for a CONFIRMED reservation that never checked in. Earlier gives 409 no_show_too_early."
+          }
+        },
+        {
+          "name": "Cancel a trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/cancel"
+            },
+            "description": "Releases every seat and closes every active reservation with cancel_reason trip_cancelled.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Car broke down\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// A monotonic clock for GPS timestamps. Positions are kept only when they are at",
+          "// least 2 s newer than the last one kept, so a fixed or re-used timestamp would be",
+          "// dropped on a second run. This walks forward from ten minutes ago.",
+          "let next = Number(pm.collectionVariables.get(\"posClock\") || 0);",
+          "if (!next || next > Date.now()) {",
+          "    next = Date.now() - 10 * 60 * 1000;",
+          "}",
+          "pm.collectionVariables.set(\"ts1\", new Date(next).toISOString());",
+          "pm.collectionVariables.set(\"ts2\", new Date(next + 4000).toISOString());",
+          "pm.collectionVariables.set(\"posClock\", next + 8000);",
+          "",
+          "// Publishing needs a departure time in the future.",
+          "if (!pm.collectionVariables.get(\"departureTime\")) {",
+          "    pm.collectionVariables.set(\"departureTime\",",
+          "        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081/api",
+      "type": "string",
+      "description": "The API root. Use http://10.0.2.2:8081/api from an Android emulator."
+    },
+    {
+      "key": "driverEmail",
+      "value": "",
+      "type": "string",
+      "description": "An existing account with role 'driver'."
+    },
+    {
+      "key": "driverPassword",
+      "value": "",
+      "type": "secret",
+      "description": "Left empty on purpose: fill it in Postman, not in the file."
+    },
+    {
+      "key": "passengerEmail",
+      "value": "",
+      "type": "string",
+      "description": "A second account, any role, different from the driver."
+    },
+    {
+      "key": "passengerPassword",
+      "value": "",
+      "type": "secret",
+      "description": "Left empty on purpose: fill it in Postman, not in the file."
+    },
+    {
+      "key": "driverToken",
+      "value": "",
+      "type": "string",
+      "description": "Filled by request 1."
+    },
+    {
+      "key": "passengerToken",
+      "value": "",
+      "type": "string",
+      "description": "Filled by request 2."
+    },
+    {
+      "key": "driverId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passengerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tripId",
+      "value": "",
+      "type": "string",
+      "description": "Filled by request 3."
+    },
+    {
+      "key": "reservationId",
+      "value": "",
+      "type": "string",
+      "description": "Filled by request 5."
+    },
+    {
+      "key": "pickupCode",
+      "value": "",
+      "type": "string",
+      "description": "Filled by request 8, from the passenger's own reservation."
+    },
+    {
+      "key": "departureTime",
+      "value": "",
+      "type": "string",
+      "description": "Set to tomorrow by the pre-request script."
+    },
+    {
+      "key": "ts1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ts2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "posClock",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "routePolyline",
+      "value": "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+      "type": "string",
+      "description": "Google's documented example polyline. Replace with the real OSRM route to exercise the deviation alert properly."
+    }
+  ]
+}

@@ -118,6 +118,52 @@ Ne mettez pas une URL locale `localhost` dans l’application pour un téléphon
 
 Le backend chiffre les mots de passe avec BCrypt et ne stocke que les empreintes des jetons de session. L’application conserve le jeton dans le stockage sécurisé Android et l’envoie comme jeton Bearer aux routes protégées.
 
+## Module Réservation
+
+Le module couvre tout le trajet partagé : publier un trajet, le chercher avec un score de
+correspondance, réserver une place, suivre la voiture en direct, confirmer la prise en charge
+avec un code à 4 chiffres, puis noter l'autre partie une fois le trajet terminé.
+
+Côté serveur : `com.carshare.api.reservation` (migrations `V7` à `V10`).
+Côté application : `lib/pages/reservation/`, `lib/services/reservation_service.dart` et
+`lib/services/tracking_service.dart`.
+
+### Lancer la démo passager / conducteur
+
+Il faut deux comptes : un `driver` et un `passenger` (créés via `POST /api/auth/signup`).
+
+```powershell
+# 1. le backend, port 8081
+.ackendun-local.ps1
+```
+
+```powershell
+# 2. l'application sur un téléphone branché en USB
+.un-android-phone.ps1
+```
+
+Le script fait le `adb reverse tcp:8081 tcp:8081` et passe
+`--dart-define=CARSHARE_API_BASE_URL=http://127.0.0.1:8081/api`. Sur un émulateur, `flutter run`
+suffit : l'adresse par défaut `10.0.2.2` désigne déjà le poste hôte.
+
+Le téléphone tient un rôle, l'autre se joue en `curl` avec le jeton du second compte : le
+conducteur publie un trajet dont le départ est proche de votre position, le passager le trouve
+dans la recherche et réserve, le conducteur accepte puis passe en `DRIVER_EN_ROUTE` et envoie
+des positions le long de la polyline — la voiture avance alors sur la carte du passager.
+L'ordre complet des appels est dans [docs/reservation-api.md](docs/reservation-api.md).
+
+### Documentation
+
+| Fichier | Contenu |
+| --- | --- |
+| [docs/reservation-spec.md](docs/reservation-spec.md) | les règles : machine à états, score de correspondance, notations |
+| [docs/reservation-api.md](docs/reservation-api.md) | chaque endpoint, le JSON, les codes d'erreur, l'ordre des appels |
+| [docs/CarShare-Reservation.postman_collection.json](docs/CarShare-Reservation.postman_collection.json) | collection Postman prête à l'emploi |
+| [docs/mockups/](docs/mockups/) | les maquettes, numérotées par écran |
+
+Les autres modules n'écrivent jamais dans nos tables : ils injectent `ReservationQueries`
+(service en lecture seule) et passent par l'API REST pour toute modification.
+
 ## Configuration de la récupération du mot de passe
 
 La demande **Forgot password?** nécessite un fournisseur SMTP. Définir ces variables dans l’environnement du backend, ou dans la configuration locale appropriée :
