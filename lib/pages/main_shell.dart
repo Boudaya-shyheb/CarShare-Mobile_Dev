@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
 import '../theme.dart';
+import 'lost_and_found_page.dart';
 import 'profile_page.dart';
 import 'reservation/home_search_page.dart';
 
-/// The four-tab shell every signed-in non-admin user lands on.
-///
-/// The Profile tab shows the user module's existing [ProfilePage] unchanged. Trips and Live are
-/// placeholders until steps 8 and 9.
+/// Navigation shell for signed-in users.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.user});
 
@@ -25,7 +23,6 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    // The home tab draws its own full-bleed map, so the body goes behind nothing.
     body: IndexedStack(
       index: _tab,
       children: [
@@ -43,6 +40,10 @@ class _MainShellState extends State<MainShell> {
           step: 'Step 9',
         ),
         const ProfilePage(),
+        LostAndFoundPage(
+          key: ValueKey(widget.user.id),
+          userId: widget.user.id,
+        ),
       ],
     ),
     bottomNavigationBar: DecoratedBox(
@@ -54,7 +55,7 @@ class _MainShellState extends State<MainShell> {
           backgroundColor: Colors.white,
           indicatorColor: carShareTint,
           labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => TextStyle(
+                (states) => TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: states.contains(WidgetState.selected)
@@ -63,7 +64,7 @@ class _MainShellState extends State<MainShell> {
             ),
           ),
           iconTheme: WidgetStateProperty.resolveWith(
-            (states) => IconThemeData(
+                (states) => IconThemeData(
               color: states.contains(WidgetState.selected)
                   ? carShareGreen
                   : carShareMuted,
@@ -95,6 +96,11 @@ class _MainShellState extends State<MainShell> {
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person_rounded),
               label: 'Profile',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined),
+              selectedIcon: Icon(Icons.inventory_2),
+              label: 'Lost & Found',
             ),
           ],
         ),
