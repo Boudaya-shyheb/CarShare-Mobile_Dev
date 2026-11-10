@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
 import 'profile_page.dart';
+import 'my_vehicles_page.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 
@@ -9,6 +10,14 @@ class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.user});
 
   final UserProfile user;
+
+  bool get _isDriver => user.role.toLowerCase() == 'driver';
+
+  void _openVehicles(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const MyVehiclesPage()),
+    );
+  }
 
   Future<void> _signOut(BuildContext context) async {
     try {
@@ -32,6 +41,12 @@ class HomePage extends StatelessWidget {
         style: TextStyle(fontWeight: FontWeight.w800),
       ),
       actions: [
+        if (_isDriver)
+          IconButton(
+            tooltip: 'My Vehicles',
+            onPressed: () => _openVehicles(context),
+            icon: const Icon(Icons.directions_car_outlined),
+          ),
         IconButton(
           tooltip: 'Profile',
           onPressed: () => Navigator.of(
@@ -104,13 +119,79 @@ class HomePage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(24),
                         ),
                         child: Text(
-                          user.role == 'driver' ? 'Driver' : 'Passenger',
+                          _isDriver ? 'Driver' : 'Passenger',
                           style: const TextStyle(
                             color: carShareGreen,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
+                      if (_isDriver) ...[
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 20),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _openVehicles(context),
+                            borderRadius: BorderRadius.circular(16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD1FAE5),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.directions_car_outlined,
+                                      color: carShareGreen,
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'My Vehicles',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'Add or manage your vehicles',
+                                          style: TextStyle(
+                                            color: Color(0xFF718096),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _openVehicles(context),
+                            icon: const Icon(Icons.directions_car_filled),
+                            label: const Text('Open Vehicle Management'),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(

@@ -2,7 +2,7 @@
 
 CarShare est une application Flutter Android pour la gestion des comptes de covoiturage. Le client mobile communique avec une API **Spring Boot** ; les comptes et sessions sont stockés dans **PostgreSQL sur Neon**.
 
-> Le module pris en charge est la gestion des utilisateurs : authentification, profil, photo, préférences, contacts d’urgence, statut du compte et consultation de l’historique des sanctions. Les trajets, réservations, paiements, messages, géolocalisation et statistiques de profil ne sont pas inclus.
+> Les modules pris en charge sont la gestion des utilisateurs (authentification, profil, préférences, contacts d’urgence et statut du compte) et la gestion des véhicules des conducteurs. Les trajets, réservations, paiements, messages, géolocalisation et statistiques de profil ne sont pas inclus.
 
 ## Architecture
 
@@ -110,11 +110,12 @@ Ne mettez pas une URL locale `localhost` dans l’application pour un téléphon
 
 1. **Sign Up / Sign In / Sign Out** : gérer le compte Neon ; cinq mots de passe incorrects verrouillent la connexion pendant 15 minutes.
 2. **Profil** : consulter et modifier nom, téléphone, e-mail et rôle, ajouter ou retirer une photo, ou supprimer le compte après confirmation du mot de passe.
-3. **Préférences** : enregistrer langue, domicile, travail, campus, musique, tabac, animaux et bagages.
-4. **Contacts d’urgence** : ajouter, modifier et supprimer des contacts.
-5. **Statut et sanctions** : consulter son statut calculé et l’historique des sanctions. Les sanctions sont créées par le module Support.
-6. **Administration** : un compte promu `ADMIN` peut consulter la liste des comptes. Le statut reste calculé à partir des points de sanction.
-7. **Forgot password?** : demander un code à six chiffres par e-mail, puis le saisir dans l’application. SMTP doit être configuré.
+3. **Véhicules** : ajouter, consulter, modifier et supprimer ses véhicules, gérer jusqu’à quatre photos et choisir le véhicule par défaut.
+4. **Préférences** : enregistrer langue, domicile, travail, campus, musique, tabac, animaux et bagages.
+5. **Contacts d’urgence** : ajouter, modifier et supprimer des contacts.
+6. **Statut et sanctions** : consulter son statut calculé et l’historique des sanctions. Les sanctions sont créées par le module Support.
+7. **Administration** : un compte promu `ADMIN` peut consulter la liste des comptes. Le statut reste calculé à partir des points de sanction.
+8. **Forgot password?** : demander un code à six chiffres par e-mail, puis le saisir dans l’application. SMTP doit être configuré.
 
 Le backend chiffre les mots de passe avec BCrypt et ne stocke que les empreintes des jetons de session. L’application conserve le jeton dans le stockage sécurisé Android et l’envoie comme jeton Bearer aux routes protégées.
 
@@ -134,12 +135,12 @@ Il faut deux comptes : un `driver` et un `passenger` (créés via `POST /api/aut
 
 ```powershell
 # 1. le backend, port 8081
-.ackendun-local.ps1
+.\backend\run-local.ps1
 ```
 
 ```powershell
 # 2. l'application sur un téléphone branché en USB
-.un-android-phone.ps1
+.\run-android-phone.ps1
 ```
 
 Le script fait le `adb reverse tcp:8081 tcp:8081` et passe

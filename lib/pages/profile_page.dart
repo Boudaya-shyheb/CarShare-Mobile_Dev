@@ -12,6 +12,7 @@ import '../widgets/primary_button.dart';
 import 'preferences_page.dart';
 import 'sanctions_page.dart';
 import 'emergency_contacts_page.dart';
+import 'my_vehicles_page.dart';
 import 'welcome_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -256,6 +257,24 @@ class _ProfilePageState extends State<ProfilePage> {
                   Card(
                     child: Column(
                       children: [
+                        // Vehicles belong to drivers only; a passenger never sees this row.
+                        if (user.role.toLowerCase() == 'driver') ...[
+                          ListTile(
+                            leading: const Icon(
+                              Icons.directions_car_outlined,
+                              color: carShareGreen,
+                            ),
+                            title: const Text('My vehicles'),
+                            subtitle: const Text('Add or manage your vehicles'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const MyVehiclesPage(),
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                        ],
                         ListTile(
                           leading: const Icon(
                             Icons.tune_rounded,

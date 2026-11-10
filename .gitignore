@@ -37,6 +37,8 @@ migrate_working_dir/
 .pub/
 /build/
 /backend/build/
+/backend/.gradle/
+/backend/public/uploads/vehicles/
 /coverage/
 
 # Symbolication related
