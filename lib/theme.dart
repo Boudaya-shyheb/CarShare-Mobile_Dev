@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 const carShareGreen = Color(0xFF059669);
+const supportGreen = Color(0xFF079B70);
+const supportDarkGreen = Color(0xFF047857);
+const supportWarningBackground = Color(0xFFFFF1C2);
+const supportWarningText = Color(0xFFD97706);
 
 // Reservation module palette. Added alongside the existing colours, not in place of them:
 // the user module's screens keep carShareGreen and the 14 px field radius above.

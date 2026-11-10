@@ -12,10 +12,13 @@ import '../widgets/primary_button.dart';
 import 'preferences_page.dart';
 import 'sanctions_page.dart';
 import 'emergency_contacts_page.dart';
+import 'support/support_page.dart';
 import 'welcome_page.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.onOpenSupport});
+
+  final VoidCallback? onOpenSupport;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -299,6 +302,25 @@ class _ProfilePageState extends State<ProfilePage> {
                               builder: (_) => const SanctionsPage(),
                             ),
                           ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.support_agent_outlined,
+                            color: carShareGreen,
+                          ),
+                          title: const Text('Support'),
+                          subtitle: const Text(
+                            'Report a problem or view tickets',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap:
+                              widget.onOpenSupport ??
+                              () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const SupportPage(),
+                                ),
+                              ),
                         ),
                       ],
                     ),

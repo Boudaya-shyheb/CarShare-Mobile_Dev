@@ -10,6 +10,9 @@ class CarShareTextField extends StatelessWidget {
     this.keyboardType,
     this.obscureText = false,
     this.textInputAction,
+    this.minLines,
+    this.maxLines = 1,
+    this.hintText,
   });
 
   final TextEditingController controller;
@@ -19,6 +22,9 @@ class CarShareTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final bool obscureText;
   final TextInputAction? textInputAction;
+  final int? minLines;
+  final int? maxLines;
+  final String? hintText;
 
   @override
   Widget build(BuildContext context) => TextFormField(
@@ -27,6 +33,13 @@ class CarShareTextField extends StatelessWidget {
     keyboardType: keyboardType,
     obscureText: obscureText,
     textInputAction: textInputAction,
-    decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+    minLines: minLines,
+    maxLines: maxLines,
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hintText,
+      alignLabelWithHint: maxLines != 1,
+      prefixIcon: Icon(icon),
+    ),
   );
 }

@@ -4,6 +4,7 @@ import '../models/user_profile.dart';
 import '../theme.dart';
 import 'profile_page.dart';
 import 'reservation/home_search_page.dart';
+import 'support/support_page.dart';
 
 /// The four-tab shell every signed-in non-admin user lands on.
 ///
@@ -22,29 +23,39 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
+  bool _showSupport = false;
+
+  void _openSupport() => setState(() => _showSupport = true);
+
+  void _selectTab(int index) => setState(() {
+    _tab = index;
+    _showSupport = false;
+  });
 
   @override
   Widget build(BuildContext context) => Scaffold(
     // The home tab draws its own full-bleed map, so the body goes behind nothing.
-    body: IndexedStack(
-      index: _tab,
-      children: [
-        HomeSearchPage(user: widget.user),
-        const _ComingSoon(
-          icon: Icons.route_outlined,
-          title: 'My trips',
-          line: 'Your reservations and published trips will appear here.',
-          step: 'Step 8',
-        ),
-        const _ComingSoon(
-          icon: Icons.navigation_outlined,
-          title: 'Live',
-          line: 'Follow a trip on the map once one is under way.',
-          step: 'Step 9',
-        ),
-        const ProfilePage(),
-      ],
-    ),
+    body: _showSupport
+        ? SupportPage(onNavigateToTab: _selectTab)
+        : IndexedStack(
+            index: _tab,
+            children: [
+              HomeSearchPage(user: widget.user),
+              const _ComingSoon(
+                icon: Icons.route_outlined,
+                title: 'My trips',
+                line: 'Your reservations and published trips will appear here.',
+                step: 'Step 8',
+              ),
+              const _ComingSoon(
+                icon: Icons.navigation_outlined,
+                title: 'Live',
+                line: 'Follow a trip on the map once one is under way.',
+                step: 'Step 9',
+              ),
+              ProfilePage(onOpenSupport: _openSupport),
+            ],
+          ),
     bottomNavigationBar: DecoratedBox(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: carShareBorder)),
@@ -72,7 +83,7 @@ class _MainShellState extends State<MainShell> {
         ),
         child: NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (index) => setState(() => _tab = index),
+          onDestinationSelected: _selectTab,
           height: 68,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
