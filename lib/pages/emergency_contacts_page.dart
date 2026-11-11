@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/user_management_service.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/form_field.dart';
 
 class EmergencyContactsPage extends StatefulWidget {
@@ -76,7 +77,11 @@ class _EmergencyContactsPageState extends State<EmergencyContactsPage> {
         }
         final contacts = snapshot.data ?? const <Map<String, dynamic>>[];
         if (contacts.isEmpty) {
-          return const Center(child: Text('No emergency contacts added yet.'));
+          return const EmptyState(
+            icon: Icons.contact_phone_outlined,
+            title: 'No emergency contacts yet',
+            line: 'Add someone we can reach if something goes wrong on a ride.',
+          );
         }
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
-import '../services/auth_service.dart';
 import '../theme.dart';
 import 'profile_page.dart';
 import 'reservation/home_search_page.dart';
@@ -19,8 +18,7 @@ final ValueNotifier<String?> carShareLiveTripId = ValueNotifier<String?>(null);
 
 /// The four-tab shell every signed-in non-admin user lands on.
 ///
-/// The Profile tab shows the user module's existing [ProfilePage] unchanged. Trips and Live are
-/// placeholders until steps 8 and 9.
+/// The Profile tab shows the user module's [ProfilePage], which carries its own Log out row.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.user});
 
@@ -34,7 +32,6 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
-  bool _signingOut = false;
 
   @override
   void initState() {
@@ -59,24 +56,6 @@ class _MainShellState extends State<MainShell> {
     setState(() => _tab = index);
   }
 
-  /// Ends the session. No navigation is needed afterwards: the gate in app.dart listens to
-  /// AuthService.currentUser and swaps this shell for the Welcome page on its own. Popping to
-  /// the first route first makes sure a pushed sub-page (Preferences, say) does not stay up.
-  Future<void> _signOut() async {
-    setState(() => _signingOut = true);
-    try {
-      await AuthService.instance.signOut();
-      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
-      }
-    } finally {
-      if (mounted) setState(() => _signingOut = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
     // The home tab draws its own full-bleed map, so the body goes behind nothing.
@@ -86,37 +65,8 @@ class _MainShellState extends State<MainShell> {
         HomeSearchPage(user: widget.user),
         MyTripsPage(user: widget.user),
         LivePage(user: widget.user),
-        // ProfilePage belongs to the user module and builds its own Scaffold and AppBar, so
-        // the sign-out control is laid over that AppBar's action slot rather than edited in.
-        Stack(
-          children: [
-            const ProfilePage(),
-            Positioned(
-              // Lines the button up with the AppBar's own action slot: the status bar, then
-              // the toolbar. Align would not do, as it does not stretch inside this stack.
-              top: MediaQuery.of(context).padding.top,
-              right: 4,
-              height: kToolbarHeight,
-              child: Center(
-                child: _signingOut
-                    ? const Padding(
-                        padding: EdgeInsets.only(right: 16),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : IconButton(
-                        icon: const Icon(Icons.logout_rounded),
-                        color: carShareText,
-                        tooltip: 'Sign out',
-                        onPressed: _signOut,
-                      ),
-              ),
-            ),
-          ],
-        ),
+        // ProfilePage belongs to the user module; it carries its own Log out row.
+        const ProfilePage(),
       ],
     ),
     bottomNavigationBar: DecoratedBox(

@@ -4,6 +4,7 @@ import '../models/user_sanction.dart';
 import '../services/auth_service.dart';
 import '../services/user_management_service.dart';
 import '../theme.dart';
+import '../widgets/empty_state.dart';
 
 class SanctionsPage extends StatefulWidget {
   const SanctionsPage({super.key});
@@ -52,18 +53,19 @@ class _SanctionsPageState extends State<SanctionsPage> {
                   Icons.shield_outlined,
                   color: carShareGreen,
                 ),
-                title: Text('Account status: ${status.toLowerCase()}'),
+                title: Text(
+                  'Account status: ${status[0].toUpperCase()}'
+                  '${status.substring(1).toLowerCase()}',
+                ),
                 subtitle: Text('$activePoints active penalty points'),
               ),
             ),
             const SizedBox(height: 12),
             if (entries.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Text(
-                  'You have no sanctions.',
-                  textAlign: TextAlign.center,
-                ),
+              const EmptyState(
+                icon: Icons.verified_user_outlined,
+                title: 'No sanctions',
+                line: 'Your record is clean. Keep it up.',
               )
             else
               ...entries.map(

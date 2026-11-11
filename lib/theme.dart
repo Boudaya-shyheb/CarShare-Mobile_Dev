@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 const carShareGreen = Color(0xFF059669);
+const carShareGreenDark = Color(0xFF065F46); // second stop of the green header gradients
 
 // Reservation module palette. Added alongside the existing colours, not in place of them:
 // the user module's screens keep carShareGreen and the 14 px field radius above.
