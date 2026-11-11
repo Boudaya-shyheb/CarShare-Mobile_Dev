@@ -168,21 +168,23 @@ class _SignInPageState extends State<SignInPage> {
                     onPressed: _signIn,
                   ),
                   const SizedBox(height: 24),
-                  Center(
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      children: [
-                        const Text('Don’t have an account? '),
-                        TextButton(
-                          onPressed: () => Navigator.pushNamed(
-                            context,
-                            SignUpPage.routeName,
-                          ),
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                          child: const Text('Sign Up'),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      const Text('Don’t have an account? '),
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pushNamed(context, SignUpPage.routeName),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                      ],
-                    ),
+                        child: const Text('Sign Up'),
+                      ),
+                    ],
                   ),
                 ],
               ),

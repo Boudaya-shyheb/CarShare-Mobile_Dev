@@ -101,7 +101,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                         ),
                         isThreeLine: true,
                         trailing: Text(
-                          status,
+                          status[0].toUpperCase() + status.substring(1),
                           style: TextStyle(
                             color: status == 'active'
                                 ? carShareGreen

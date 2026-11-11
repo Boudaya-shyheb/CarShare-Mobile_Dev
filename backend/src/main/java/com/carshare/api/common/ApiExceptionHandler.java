@@ -6,8 +6,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.mail.MailException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -34,6 +36,17 @@ public class ApiExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "The service is temporarily unavailable. Please try again later.");
         detail.setProperty("code", "service_unavailable");
+        return detail;
+    }
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ProblemDetail handleUploadTooLarge(
+            MaxUploadSizeExceededException exception, HttpServletRequest request) {
+        String message = request.getRequestURI().endsWith("/users/me/photo")
+                ? "Profile photos must be 2 MB or smaller."
+                : "Each vehicle photo must be 5 MB or smaller.";
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                message);
+        detail.setProperty("code", "invalid_photo_size");
         return detail;
     }
 }

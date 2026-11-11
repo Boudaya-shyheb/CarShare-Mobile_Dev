@@ -170,6 +170,85 @@ class ApiClient {
     await _send('DELETE', '/users/me/photo');
   }
 
+  Future<Map<String, dynamic>> uploadMultipart({
+    required String path,
+    required String fieldName,
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+  }) async {
+    final token = await readToken();
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: fileName,
+        contentType: MediaType.parse(mimeType),
+      ),
+    );
+    try {
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 20),
+      );
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _exceptionForResponse(response.statusCode, response.body);
+      }
+      if (response.body.isEmpty) return {};
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw const ApiException('The server returned an unreadable response.');
+    } on ApiException {
+      rethrow;
+    } on SocketException {
+      throw ApiException(_connectionErrorMessage);
+    } on TimeoutException {
+      throw const ApiException(
+        'The CarShare service did not respond. Check that the backend is running, then try again.',
+      );
+    } on HandshakeException {
+      throw const ApiException(
+        'Could not establish a secure connection to the CarShare service.',
+      );
+    } on http.ClientException {
+      throw ApiException(_connectionErrorMessage);
+    } on FormatException {
+      throw const ApiException('The server returned an unreadable response.');
+    }
+  }
+
+  Future<Uint8List> getBytes(String path) async {
+    final token = await readToken();
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl$path'),
+            headers: {if (token != null) 'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _exceptionForResponse(response.statusCode, response.body);
+      }
+      return response.bodyBytes;
+    } on ApiException {
+      rethrow;
+    } on SocketException {
+      throw ApiException(_connectionErrorMessage);
+    } on TimeoutException {
+      throw const ApiException(
+        'The CarShare service did not respond. Check that the backend is running, then try again.',
+      );
+    } on HandshakeException {
+      throw const ApiException(
+        'Could not establish a secure connection to the CarShare service.',
+      );
+    } on http.ClientException {
+      throw ApiException(_connectionErrorMessage);
+    }
+  }
+
   Future<Map<String, dynamic>> _send(
     String method,
     String path, {
@@ -247,6 +326,23 @@ class ApiClient {
         'The CarShare service did not respond. Check that the backend is running, then try again.',
       );
     }
+  }
+
+  ApiException _exceptionForResponse(int statusCode, String body) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException {
+      decoded = null;
+    }
+    final data = decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{};
+    return ApiException(
+      data['detail'] as String? ?? _messageForStatus(statusCode),
+      statusCode: statusCode,
+      code: data['code'] as String?,
+    );
   }
 
   String get _connectionErrorMessage {

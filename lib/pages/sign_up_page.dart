@@ -125,7 +125,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           vertical: 7,
                         ),
                         child: Text(
-                          'Create your account',
+                          'Join CarShare',
                           style: TextStyle(
                             color: carShareGreen,
                             fontWeight: FontWeight.w700,
