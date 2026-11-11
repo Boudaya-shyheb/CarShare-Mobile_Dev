@@ -31,7 +31,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/signin",
-                        "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        "/api/auth/forgot-password", "/api/auth/reset-password",
+                        "/api/auth/social/google", "/api/auth/social/facebook").permitAll()
                 .requestMatchers(HttpMethod.GET, "/reset-password.html").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(new TokenAuthenticationFilter(sessions), UsernamePasswordAuthenticationFilter.class);

@@ -17,7 +17,7 @@ Application Flutter  →  API REST Spring Boot  →  PostgreSQL (Neon)
 - `run-android-phone.ps1` : démarrage Flutter sur un téléphone USB avec redirection vers l’API locale.
 - `backend/run-local.ps1` : démarrage local de l’API à partir de la configuration Neon.
 
-Firebase n’est plus utilisé par le code actuel. Les anciens comptes Firebase ne sont pas transférés automatiquement vers Neon : il faut créer un compte dans CarShare, sauf si l’équipe organise une migration des comptes.
+L’authentification et les comptes sont gérés par le backend CarShare et stockés dans Neon. Les comptes d’un ancien système ne sont pas transférés automatiquement : ils doivent être recréés, sauf si l’équipe organise une migration dédiée.
 
 ## Prérequis
 
@@ -114,7 +114,7 @@ Ne mettez pas une URL locale `localhost` dans l’application pour un téléphon
 4. **Préférences** : enregistrer langue, domicile, travail, campus, musique, tabac, animaux et bagages.
 5. **Contacts d’urgence** : ajouter, modifier et supprimer des contacts.
 6. **Statut et sanctions** : consulter son statut calculé et l’historique des sanctions. Les sanctions sont créées par le module Support.
-7. **Administration** : un compte promu `ADMIN` peut consulter la liste des comptes. Le statut reste calculé à partir des points de sanction.
+7. **Administration** : l’espace admin regroupe les comptes, la validation des véhicules, la consultation des trajets et réservations, le support et objets trouvés, et les sanctions. Un véhicule doit être approuvé avant d’être utilisé pour un nouveau trajet. Les décisions de sanction demandent un motif et suivent les seuils existants (3 points : avertissement, 6 : suspension de 7 jours, 9 : suspension de 30 jours, 12 : bannissement) ; chaque sanction expire après 90 jours. Les trajets et réservations restent soumis à leurs règles normales de transition.
 8. **Forgot password?** : demander un code à six chiffres par e-mail, puis le saisir dans l’application. SMTP doit être configuré.
 
 Le backend chiffre les mots de passe avec BCrypt et ne stocke que les empreintes des jetons de session. L’application conserve le jeton dans le stockage sécurisé Android et l’envoie comme jeton Bearer aux routes protégées.
@@ -180,7 +180,16 @@ PUBLIC_API_URL
 
 Le courriel contient un code à six chiffres valable 30 minutes. Après cinq codes incorrects, il faut demander un nouveau code. Aucun lien public ni tunnel n’est nécessaire. Sans SMTP configuré, les autres fonctions de compte restent disponibles.
 
-Les migrations Flyway ajoutent les tables et champs nécessaires lors du prochain démarrage du backend. Exécuter ces changements d’abord sur une branche Neon de développement. Pour activer l’écran administrateur, un administrateur de la base doit promouvoir explicitement un compte existant (`role = 'ADMIN'`) après application des migrations ; l’inscription mobile ne permet jamais de choisir ce rôle.
+Les migrations Flyway ajoutent les tables et champs nécessaires lors du prochain démarrage du backend. Exécuter ces changements d’abord sur une branche Neon de développement. Pour activer l’écran administrateur, le premier compte doit être promu manuellement par un administrateur de la base (`role = 'ADMIN'`) après application des migrations ; ensuite, les admins peuvent gérer les rôles depuis l’application. L’inscription mobile ne permet jamais de choisir ce rôle.
+
+### Connexion Google et Facebook
+
+Les connexions sociales sont vérifiées par le backend Spring, puis créent une session CarShare normale. Google vérifie l’ID token et son audience côté serveur. Facebook vérifie le jeton auprès de Meta. Aucun identifiant de fournisseur n’est fourni par le dépôt : créez/configurez les applications dans Google Cloud et Meta Developers avant d’activer les boutons.
+
+- Backend : configurez `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID` et `FACEBOOK_APP_SECRET` dans votre environnement local. Gardez le secret Meta uniquement côté serveur.
+- Android : définissez les variables d’environnement `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID` et `FACEBOOK_CLIENT_TOKEN` dans PowerShell avant `.un-android-phone.ps1`. Enregistrez aussi l’empreinte SHA-1 Android dans Google Cloud et l’empreinte de clé Android dans Meta Developers.
+- Au premier accès social, l’application demande le téléphone et le rôle passager/conducteur. Un compte administrateur ne peut jamais être créé par ce parcours.
+- La migration `V16__admin_operations_and_social_accounts.sql` ajoute les comptes fournisseurs, les demandes support et les informations de validation véhicule. Appliquez-la d’abord sur une branche Neon de développement.
 
 ## Vérifications de développement
 
@@ -207,7 +216,7 @@ La méthode recommandée reste `backend/run-local.ps1`, qui charge les variables
 | L’inscription ou la connexion expire | Vérifier que le backend tourne sur le port 8080, que Neon est joignable et que le téléphone utilise `run-android-phone.ps1`. |
 | `Connection problem` sur émulateur | Démarrer d’abord le backend ; vérifier que l’émulateur utilise la configuration par défaut `10.0.2.2`. |
 | `Connection problem` sur téléphone USB | Vérifier ADB et le débogage USB, puis lancer `run-android-phone.ps1` depuis la racine. |
-| E-mail ou mot de passe refusé | Vérifier l’adresse et le mot de passe du compte Neon. Un ancien compte Firebase n’est pas automatiquement disponible dans le nouveau backend. |
+| E-mail ou mot de passe refusé | Vérifier l’adresse et le mot de passe du compte CarShare. Les comptes d’un ancien système ne sont pas automatiquement disponibles dans le backend actuel. |
 | Erreur Flyway ou connexion à la base | Vérifier la branche Neon liée et la présence locale de `.env.local` sans révéler ses secrets. |
 | Espace disque insuffisant pendant Flutter | `run-android-phone.ps1` place les fichiers temporaires Flutter et Gradle dans `.dart_tool/codex-temp` sur le disque du projet. Vérifier l’espace libre sur ce disque. |
 | Réinitialisation du mot de passe non envoyée | Configurer les variables SMTP du backend et vérifier `PUBLIC_API_URL`. |

@@ -25,6 +25,7 @@ import java.util.UUID;
 public class Vehicle {
     public enum TrunkSize { SMALL, MEDIUM, LARGE }
     public enum Status { ACTIVE, INACTIVE, REPORTED }
+    public enum ReviewStatus { PENDING, APPROVED, REJECTED }
 
     @Id
     private UUID id;
@@ -61,6 +62,13 @@ public class Vehicle {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private Status status = Status.ACTIVE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status", nullable = false, length = 16)
+    private ReviewStatus reviewStatus = ReviewStatus.PENDING;
+
+    @Column(name = "review_reason", length = 500)
+    private String reviewReason;
 
     @Column(name = "is_default", nullable = false)
     private boolean defaultVehicle;
@@ -105,6 +113,8 @@ public class Vehicle {
         airConditioning = request.airConditioning();
         insuranceExpiryDate = request.insuranceExpiryDate();
         inspectionExpiryDate = request.inspectionExpiryDate();
+        reviewStatus = ReviewStatus.PENDING;
+        reviewReason = null;
     }
 
     public void setDefault(Instant usedAt) {
@@ -122,6 +132,11 @@ public class Vehicle {
 
     public void markReported() {
         status = Status.REPORTED;
+    }
+
+    public void review(ReviewStatus reviewStatus, String reason) {
+        this.reviewStatus = reviewStatus;
+        this.reviewReason = reason;
     }
 
     public void markUsed(Instant usedAt) {
@@ -148,6 +163,8 @@ public class Vehicle {
     public TrunkSize getTrunkSize() { return trunkSize; }
     public boolean isAirConditioning() { return airConditioning; }
     public Status getStatus() { return status; }
+    public ReviewStatus getReviewStatus() { return reviewStatus; }
+    public String getReviewReason() { return reviewReason; }
     public boolean isDefaultVehicle() { return defaultVehicle; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getLastUsedAt() { return lastUsedAt; }

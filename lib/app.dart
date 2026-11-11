@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'models/user_profile.dart';
 import 'navigation.dart';
 import 'pages/main_shell.dart';
-import 'pages/admin_users_page.dart';
+import 'pages/admin_dashboard_page.dart';
 import 'pages/sign_in_page.dart';
 import 'pages/sign_up_page.dart';
 import 'pages/welcome_page.dart';
@@ -40,7 +40,7 @@ class _AuthenticationGate extends StatelessWidget {
             builder: (context, user, _) => user == null
                 ? const WelcomePage()
                 : user.role == 'admin'
-                ? const AdminUsersPage()
+                ? const AdminDashboardPage()
                 : MainShell(user: user),
           ),
   );

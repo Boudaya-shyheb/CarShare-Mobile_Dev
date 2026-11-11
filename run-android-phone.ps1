@@ -44,7 +44,18 @@ $env:JAVA_TOOL_OPTIONS = (@($previousJavaToolOptions, $javaTempOption) |
 
 Push-Location -LiteralPath $repoRoot
 try {
-    flutter run --dart-define=CARSHARE_API_BASE_URL=http://127.0.0.1:$apiPort/api
+    $flutterArgs = @('--dart-define=CARSHARE_API_BASE_URL=http://127.0.0.1:' + $apiPort + '/api')
+    if ($env:GOOGLE_SERVER_CLIENT_ID) {
+        $flutterArgs += '--dart-define=GOOGLE_SERVER_CLIENT_ID=' + $env:GOOGLE_SERVER_CLIENT_ID
+    }
+    if ($env:FACEBOOK_APP_ID) {
+        $flutterArgs += '--dart-define=FACEBOOK_APP_ID=' + $env:FACEBOOK_APP_ID
+        $flutterArgs += '-PfacebookAppId=' + $env:FACEBOOK_APP_ID
+    }
+    if ($env:FACEBOOK_CLIENT_TOKEN) {
+        $flutterArgs += '-PfacebookClientToken=' + $env:FACEBOOK_CLIENT_TOKEN
+    }
+    flutter run @flutterArgs
     exit $LASTEXITCODE
 }
 finally {

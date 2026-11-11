@@ -15,6 +15,8 @@ public class AppUser {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) private UserRole role;
     @Enumerated(EnumType.STRING) @Column(name = "account_status", nullable = false, length = 16) private UserStatus accountStatus = UserStatus.ACTIVE;
     @Column(name = "status_until") private Instant statusUntil;
+    @Column(name = "status_reason", length = 500) private String statusReason;
+    @Column(name = "status_manually_set", nullable = false) private boolean statusManuallySet;
     @Column(name = "failed_sign_in_attempts", nullable = false) private int failedSignInAttempts;
     @Column(name = "sign_in_locked_until") private Instant signInLockedUntil;
     @Column(name = "profile_photo", columnDefinition = "bytea") private byte[] profilePhoto;
@@ -41,6 +43,8 @@ public class AppUser {
     public UserRole getRole() { return role; }
     public UserStatus getAccountStatus() { return accountStatus; }
     public Instant getStatusUntil() { return statusUntil; }
+    public String getStatusReason() { return statusReason; }
+    public boolean isStatusManuallySet() { return statusManuallySet; }
     public int getFailedSignInAttempts() { return failedSignInAttempts; }
     public Instant getSignInLockedUntil() { return signInLockedUntil; }
     public byte[] getProfilePhoto() { return profilePhoto; }
@@ -74,6 +78,22 @@ public class AppUser {
     public void updateAccountStatus(UserStatus status, Instant until) {
         accountStatus = status;
         statusUntil = until;
+        statusReason = null;
+        statusManuallySet = false;
+    }
+    public void updateAccountStatusByAdmin(UserStatus status, Instant until, String reason) {
+        accountStatus = status;
+        statusUntil = until;
+        statusReason = reason;
+        statusManuallySet = status != UserStatus.ACTIVE;
+    }
+    public void clearAdminStatusOverride() {
+        statusManuallySet = false;
+        statusReason = null;
+    }
+    public void clearExpiredAdminStatus() {
+        statusManuallySet = false;
+        statusReason = null;
     }
     public void updateProfilePhoto(byte[] photo, String mimeType) {
         profilePhoto = photo;

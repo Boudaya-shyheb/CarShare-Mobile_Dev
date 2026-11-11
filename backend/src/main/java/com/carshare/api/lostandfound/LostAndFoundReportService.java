@@ -104,6 +104,15 @@ public class LostAndFoundReportService {
         return toView(report, userId);
     }
 
+    @Transactional
+    public ReportView resolveByAdmin(UUID reportId) {
+        LostAndFoundReport report = reports.findById(reportId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "report_not_found", "Report not found."));
+        report.resolve();
+        return toView(report, report.getReporter().getId());
+    }
+
     private Trip requireParticipant(UUID userId, UUID tripId) {
         Trip trip = trips.findById(tripId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,

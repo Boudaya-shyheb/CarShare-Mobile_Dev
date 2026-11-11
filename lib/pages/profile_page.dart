@@ -33,6 +33,8 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = false;
   bool _photoLoading = false;
   Future<Uint8List>? _photoFuture;
+  final ExpansibleController _editTileController = ExpansibleController();
+  final GlobalKey _editTileKey = GlobalKey();
 
   UserProfile? get _user => AuthService.instance.currentUser.value;
 
@@ -56,6 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _fullName.dispose();
     _phone.dispose();
     _email.dispose();
+    _editTileController.dispose();
     super.dispose();
   }
 
@@ -105,6 +108,19 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openEditProfile() async {
+    _editTileController.expand();
+    await WidgetsBinding.instance.endOfFrame;
+    final tileContext = _editTileKey.currentContext;
+    if (tileContext != null && tileContext.mounted) {
+      await Scrollable.ensureVisible(
+        tileContext,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -235,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Profile')),
+      backgroundColor: carShareBackground,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -243,13 +259,16 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                padding: const EdgeInsets.only(bottom: 32),
                 children: [
                   _buildHeader(user),
-                  const SizedBox(height: 16),
-                  _statusCard(user.status, user.statusUntil),
-                  const SizedBox(height: 12),
-                  Card(
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Column(
+                      children: [
+                        _statusCard(user.status, user.statusUntil),
+                        const SizedBox(height: 12),
+                        Card(
                     color: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -333,6 +352,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         // The existing edit form, unchanged, behind one row. It stays built
                         // while collapsed so the Form key and the controllers keep working.
                         ExpansionTile(
+                          key: _editTileKey,
+                          controller: _editTileController,
                           maintainState: true,
                           shape: const Border(),
                           collapsedShape: const Border(),
@@ -466,6 +487,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -514,11 +538,13 @@ class _ProfilePageState extends State<ProfilePage> {
     _ => 'Passenger',
   };
 
-  /// Avatar, name and role badge on the brand gradient. The role is shown, not switched here.
+  /// Profile summary styled to match the reference screen.
   Widget _buildHeader(UserProfile user) => Container(
-    padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(carShareCardRadius + 4),
+      borderRadius: const BorderRadius.vertical(
+        bottom: Radius.circular(30),
+      ),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -527,6 +553,29 @@ class _ProfilePageState extends State<ProfilePage> {
     ),
     child: Column(
       children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Profile',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            IconButton.filledTonal(
+              tooltip: 'Edit profile',
+              onPressed: _openEditProfile,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white24,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ],
+        ),
         Container(
           padding: const EdgeInsets.all(3),
           decoration: const BoxDecoration(
@@ -535,30 +584,23 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: _buildAvatar(user.hasProfilePhoto),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
         Text(
           user.fullName,
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.white24,
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: Colors.transparent),
           child: Text(
             '${_roleLabel(user.role)} · Member since ${user.createdAt.year}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ),
       ],

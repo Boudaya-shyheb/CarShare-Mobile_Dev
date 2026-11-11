@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../services/api_client.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
 import '../../widgets/primary_button.dart';
-import '../../widgets/support_evidence_section.dart';
 
 class ReportProblemPage extends StatefulWidget {
   const ReportProblemPage({super.key});
@@ -15,22 +15,39 @@ class ReportProblemPage extends StatefulWidget {
 class _ReportProblemPageState extends State<ReportProblemPage> {
   final _formKey = GlobalKey<FormState>();
   final _description = TextEditingController();
-  final _evidenceController = SupportEvidenceController();
   String _category = 'Driver was late';
-  int _tripIndex = 0;
+  bool _saving = false;
+  List<_TripOption> _tripOptions = const [];
+  String? _selectedTripId;
 
-  static const _trips = [
-    _TripSample(
-      route: 'Ennasr 2 → Lac 2',
-      dateTime: 'Today · 08:15',
-      participant: 'Driver: Ahmed B.',
-    ),
-    _TripSample(
-      route: 'Lac 2 → Ennasr 2',
-      dateTime: '2 Oct · 17:30',
-      participant: 'Passenger: Mariem K.',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadTrips();
+  }
+
+  Future<void> _loadTrips() async {
+    try {
+      final options = <String, _TripOption>{};
+      final trips = await ApiClient.instance.getList('/trips/mine');
+      for (final trip in trips) {
+        final id = trip['id'] as String?;
+        if (id == null) continue;
+        options[id] = _TripOption(id, '${trip['originLabel']} → ${trip['destinationLabel']}');
+      }
+      final reservations = await ApiClient.instance.getList('/reservations/mine');
+      for (final reservation in reservations) {
+        final trip = reservation['trip'];
+        if (trip is! Map<String, dynamic>) continue;
+        final id = trip['tripId'] as String?;
+        if (id == null) continue;
+        options[id] = _TripOption(id, '${trip['originLabel']} → ${trip['destinationLabel']}');
+      }
+      if (mounted) setState(() => _tripOptions = options.values.toList(growable: false));
+    } catch (_) {
+      // A general support ticket can still be submitted without a trip reference.
+    }
+  }
 
   static const _categories = [
     'Driver was late',
@@ -44,15 +61,27 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
   @override
   void dispose() {
     _description.dispose();
-    _evidenceController.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ticket submitted (demo only).')),
-    );
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.post('/support/tickets', {
+        if (_selectedTripId != null) 'tripId': _selectedTripId,
+        'category': _category,
+        'title': _category,
+        'description': _description.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your support request was sent.')));
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -75,14 +104,16 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                _TripCard(
-                  trip: _trips[_tripIndex],
-                  onChange: () => setState(
-                    () => _tripIndex = (_tripIndex + 1) % _trips.length,
-                  ),
-                ),
-                const SizedBox(height: 22),
                 const _SectionTitle('What happened?'),
+                if (_tripOptions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedTripId,
+                    decoration: const InputDecoration(labelText: 'Related trip (optional)'),
+                    items: _tripOptions.map((trip) => DropdownMenuItem(value: trip.id, child: Text(trip.label, overflow: TextOverflow.ellipsis))).toList(),
+                    onChanged: (value) => setState(() => _selectedTripId = value),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ..._categories.map(
                   (category) => _CategoryOption(
@@ -106,33 +137,8 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                       ? 'Please describe the problem.'
                       : null,
                 ),
-                const SizedBox(height: 18),
-                SupportEvidenceSection(controller: _evidenceController),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(13),
-                  decoration: BoxDecoration(
-                    color: carShareTint,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.route_outlined, color: supportDarkGreen),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Trip data attached\nTimes, GPS route and trip events',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: supportDarkGreen,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 26),
-                PrimaryButton(label: 'Submit Ticket', onPressed: _submit),
+                PrimaryButton(label: 'Submit Ticket', loading: _saving, onPressed: _saving ? null : _submit),
               ],
             ),
           ),
@@ -142,59 +148,10 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
   );
 }
 
-class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip, required this.onChange});
-
-  final _TripSample trip;
-  final VoidCallback onChange;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: carShareBorder),
-    ),
-    child: Row(
-      children: [
-        const CircleAvatar(
-          backgroundColor: carShareTint,
-          child: Icon(Icons.directions_car_outlined, color: supportDarkGreen),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                trip.route,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${trip.dateTime}\n${trip.participant}',
-                style: const TextStyle(fontSize: 11, color: carShareMuted),
-              ),
-            ],
-          ),
-        ),
-        TextButton(onPressed: onChange, child: const Text('Change')),
-      ],
-    ),
-  );
-}
-
-class _TripSample {
-  const _TripSample({
-    required this.route,
-    required this.dateTime,
-    required this.participant,
-  });
-
-  final String route;
-  final String dateTime;
-  final String participant;
+class _TripOption {
+  const _TripOption(this.id, this.label);
+  final String id;
+  final String label;
 }
 
 class _CategoryOption extends StatelessWidget {

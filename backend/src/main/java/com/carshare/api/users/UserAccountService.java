@@ -127,25 +127,35 @@ public class UserAccountService {
     public void recomputeAccountStatuses() {
         Instant now = Instant.now();
         for (AppUser user : users.findAll()) {
-            long points = sanctions.sumActivePoints(user.getId(), now);
-            Instant lastSanction = sanctions.lastActiveSanction(user.getId(), now);
-            UserStatus status = UserStatus.ACTIVE;
-            Instant until = null;
-            if (points >= 12) {
-                status = UserStatus.BANNED;
-            } else if (points >= 9 && lastSanction != null
-                    && lastSanction.plusSeconds(30L * 24 * 60 * 60).isAfter(now)) {
-                status = UserStatus.SUSPENDED;
-                until = lastSanction.plusSeconds(30L * 24 * 60 * 60);
-            } else if (points >= 6 && lastSanction != null
-                    && lastSanction.plusSeconds(7L * 24 * 60 * 60).isAfter(now)) {
-                status = UserStatus.SUSPENDED;
-                until = lastSanction.plusSeconds(7L * 24 * 60 * 60);
-            } else if (points >= 3) {
-                status = UserStatus.WARNING;
-            }
-            user.updateAccountStatus(status, until);
+            refreshStatus(user, now);
         }
+    }
+
+    public void refreshStatus(AppUser user, Instant now) {
+        if (user.isStatusManuallySet()) {
+            if (user.getStatusUntil() == null || user.getStatusUntil().isAfter(now)) {
+                return;
+            }
+            user.clearExpiredAdminStatus();
+        }
+        long points = sanctions.sumActivePoints(user.getId(), now);
+        Instant lastSanction = sanctions.lastActiveSanction(user.getId(), now);
+        UserStatus status = UserStatus.ACTIVE;
+        Instant until = null;
+        if (points >= 12) {
+            status = UserStatus.BANNED;
+        } else if (points >= 9 && lastSanction != null
+                && lastSanction.plusSeconds(30L * 24 * 60 * 60).isAfter(now)) {
+            status = UserStatus.SUSPENDED;
+            until = lastSanction.plusSeconds(30L * 24 * 60 * 60);
+        } else if (points >= 6 && lastSanction != null
+                && lastSanction.plusSeconds(7L * 24 * 60 * 60).isAfter(now)) {
+            status = UserStatus.SUSPENDED;
+            until = lastSanction.plusSeconds(7L * 24 * 60 * 60);
+        } else if (points >= 3) {
+            status = UserStatus.WARNING;
+        }
+        user.updateAccountStatus(status, until);
     }
 
     private AppUser requireUser(UUID userId) {

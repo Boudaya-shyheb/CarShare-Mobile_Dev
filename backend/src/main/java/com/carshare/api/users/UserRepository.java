@@ -22,4 +22,8 @@ public interface UserRepository extends JpaRepository<AppUser, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from AppUser u where u.id = :id")
     Optional<AppUser> findForUpdate(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from AppUser u where u.role = :role order by u.id")
+    List<AppUser> findAllByRoleForUpdate(@Param("role") UserRole role);
 }

@@ -104,6 +104,10 @@ public class VehicleService {
             throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_available",
                     "Only an active vehicle can be set as your default.");
         }
+        if (vehicle.getReviewStatus() != Vehicle.ReviewStatus.APPROVED) {
+            throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_reviewed",
+                    "This vehicle must be approved by CarShare support before it can be used for a trip.");
+        }
 
         vehicles.findByOwner_IdAndDefaultVehicleTrue(ownerId)
                 .filter(current -> !current.getId().equals(vehicleId))
@@ -123,6 +127,10 @@ public class VehicleService {
         if (vehicle.getStatus() != Vehicle.Status.ACTIVE) {
             throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_available",
                     "This vehicle cannot be used for a new trip.");
+        }
+        if (vehicle.getReviewStatus() != Vehicle.ReviewStatus.APPROVED) {
+            throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_reviewed",
+                    "This vehicle must be approved by CarShare support before it can be used for a trip.");
         }
         if (proposedSeats < 1 || proposedSeats > vehicle.getSeatsNumber()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "trip_seats_exceed_vehicle_capacity",
@@ -177,6 +185,17 @@ public class VehicleService {
     public PhotoContent getPhoto(UUID ownerId, UUID vehicleId, UUID photoId) {
         requireDriver(ownerId);
         requireVehicle(ownerId, vehicleId);
+        VehiclePhoto photo = photos.findByIdAndVehicle_Id(photoId, vehicleId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
+                        "Vehicle photo not found."));
+        return new PhotoContent(photoStorage.read(photo.getFileName()), photo.getMimeType());
+    }
+
+    @Transactional(readOnly = true)
+    public PhotoContent getAdminPhoto(UUID vehicleId, UUID photoId) {
+        if (!vehicles.existsById(vehicleId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "vehicle_not_found", "Vehicle not found.");
+        }
         VehiclePhoto photo = photos.findByIdAndVehicle_Id(photoId, vehicleId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
                         "Vehicle photo not found."));

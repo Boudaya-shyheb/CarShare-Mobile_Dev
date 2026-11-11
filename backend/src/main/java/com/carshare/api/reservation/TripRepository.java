@@ -22,6 +22,9 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     List<Trip> findByDriver_IdOrderByDepartureTimeDesc(UUID driverId);
 
     @EntityGraph(attributePaths = "driver")
+    List<Trip> findAllByOrderByDepartureTimeDesc();
+
+    @EntityGraph(attributePaths = "driver")
     List<Trip> findByDriver_IdAndStatusInOrderByDepartureTimeDesc(UUID driverId,
             Collection<TripStatus> statuses);
 

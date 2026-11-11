@@ -1,6 +1,6 @@
 # CarShare API
 
-Spring Boot REST API for CarShare user management. It stores profiles, account preferences, emergency contacts, sanctions, hashed passwords, revocable sessions, and single-use password reset codes in PostgreSQL (Neon). Firebase is not used.
+Spring Boot REST API for CarShare user management and admin operations. It stores profiles, account preferences, emergency contacts, sanctions, hashed passwords, revocable sessions, and single-use password reset codes in PostgreSQL (Neon).
 
 ## Requirements
 
@@ -61,6 +61,15 @@ For a deployed API, use its HTTPS URL. The debug Android manifest allows clearte
 - `GET /api/users/me/sanctions` reads the signed-in user's sanction history
 - `GET/POST/DELETE /api/users/me/photo` reads, uploads, or removes the signed-in user's photo
 - `GET /api/admin/users` lists accounts for authenticated `ADMIN` users
+- `PUT /api/admin/users/{userId}` updates a user's name, phone, email, and role
+- `PUT /api/admin/users/{userId}/status` applies an admin status and reason
+- `POST /api/auth/social/google` and `/api/auth/social/facebook` verify provider credentials and create CarShare sessions
+- `GET /api/admin/vehicles` and `PUT /api/admin/vehicles/{vehicleId}/review` review vehicle details and photos
+- `GET /api/admin/trips` and `/api/admin/reservations` read trip and reservation information without bypassing their state rules
+- `GET /api/support/tickets` and `POST /api/support/tickets` manage the signed-in user's support requests
+- `GET /api/admin/support-tickets` and `PUT /api/admin/support-tickets/{ticketId}` review and resolve support requests
+- `GET /api/admin/lost-and-found` and `PUT /api/admin/lost-and-found/{reportId}/resolve` review lost-and-found reports
+- `GET /api/admin/sanctions` and `POST /api/admin/users/{userId}/sanctions` manage reasoned user sanctions
 - `GET/POST /api/vehicles` lists or creates the signed-in driver's vehicles
 - `GET/PUT/DELETE /api/vehicles/{vehicleId}` reads, updates, or deletes an owned vehicle
 - `POST /api/vehicles/{vehicleId}/default` selects the default vehicle
@@ -74,10 +83,12 @@ Vehicles may include insurance and technical-inspection expiration dates. The mo
 
 Vehicle registration numbers support `123TU4567` and `RS123456`; spaces are accepted on input and removed for storage. The mobile make/model fields provide searchable suggestions for common vehicles, while still allowing drivers to enter a brand or model that is not suggested.
 
-The Trip and Support modules are not present in this backend yet. `VehicleService.validateForTrip` provides a server-side hook for checking vehicle status and seat capacity when trip publishing is added, and `VehicleService.markReported` is available for Support integration. Confirmed-ticket counting and preventing deletion of vehicles linked to upcoming trips require those modules and their data.
+Trips, reservations, vehicle records and lost-and-found reports are stored by their feature services. Support tickets are stored separately and may reference a trip only when the requester participated in it. Admin trip and reservation endpoints are read-only so they cannot bypass those modules' transition rules.
 
 Sessions are opaque random bearer tokens. Only SHA-256 hashes of session and reset tokens are stored in Neon; passwords use BCrypt. The Flutter app stores its bearer token in Android secure storage.
 
 Five failed sign-in attempts lock that account for 15 minutes. Phone numbers are normalized and unique. Sanction points expire after 90 days; account status is recalculated nightly (3 points: warning; 6: 7-day suspension; 9: 30-day suspension; 12: ban). Suspended or banned users can still sign in to view their account history. The Support module should create sanctions; this module exposes the user's read-only sanction history.
 
-Admin accounts must be promoted manually by the database administrator after the admin role migration has run. The mobile sign-up flow never accepts the `ADMIN` role.
+The first admin account must be promoted manually in the database after the admin role migration has run. Admins can then manage user roles and account statuses in the app. The mobile sign-up flow never accepts the `ADMIN` role. Manual warnings and suspensions need an end date and reason; a ban has no automatic end date. When an admin restores an account to `ACTIVE`, the backend immediately recalculates its status from active sanctions. Expired manual warnings and suspensions return to the sanction-based status during the daily status job.
+
+Google and Facebook login require provider configuration. Set `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID`, and `FACEBOOK_APP_SECRET` on the backend. The Google server client ID must also be passed to Flutter as `--dart-define=GOOGLE_SERVER_CLIENT_ID=...`; Android Facebook App ID and Client Token are passed by `run-android-phone.ps1` through environment variables. Do not place the Facebook App Secret in the mobile app. These flows cannot be tested until valid provider applications and credentials are configured.

@@ -1,14 +1,13 @@
 # CLAUDE.md — CarShare
 
 Flutter (Android) client + Spring Boot REST API + PostgreSQL on Neon (Flyway migrations).
-Firebase is not used by the current code.
 
 ```text
 lib/ (Flutter)  →  /api (Spring Boot, port 8081 local)  →  PostgreSQL (Neon)
 ```
 
 Modules are owned per student. The existing code covers **user management** (auth, profile,
-photo, preferences, emergency contacts, status/sanctions, admin list). Follow its conventions
+photo, preferences, emergency contacts, status/sanctions, admin user management). Follow its conventions
 exactly when adding a new module — do not refactor another module's files.
 
 > **Reservation module:** the agreed functional rules (state machine, match score,

@@ -25,6 +25,12 @@ public final class AuthDtos {
     public record ResetPasswordRequest(@Email @Size(max = 254) String email, @NotBlank String token,
             @NotBlank @Size(min = 8, max = 72) String newPassword) { }
     public record DeleteAccountRequest(@NotBlank String password) { }
+    public record AdminUpdateUserRequest(@NotBlank @Size(max = 100) String fullName,
+            @NotBlank @Size(max = 24) @Pattern(regexp = "^\\+?[0-9][0-9\\s().-]{5,19}$") String phone,
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank @Pattern(regexp = "^(passenger|driver|admin)$") String role) { }
+    public record AdminStatusRequest(@NotBlank @Pattern(regexp = "^(ACTIVE|WARNING|SUSPENDED|BANNED)$") String status,
+            Instant statusUntil, @NotBlank @Size(max = 500) String reason) { }
     public record EmergencyContactRequest(@NotBlank @Size(max = 100) String name,
             @NotBlank @Size(max = 24) @Pattern(regexp = "^\\+?[0-9][0-9\\s().-]{5,19}$") String phone,
             @NotBlank @Size(max = 40) String relationship) { }
@@ -66,10 +72,12 @@ public final class AuthDtos {
         }
     }
     public record AdminUser(UUID id, String fullName, String phone, String email, String role,
-            Instant createdAt, String status, Instant statusUntil) {
+            Instant createdAt, String status, Instant statusUntil, String statusReason,
+            boolean hasProfilePhoto) {
         public static AdminUser from(AppUser user) {
             return new AdminUser(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(),
-                    user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(), user.getStatusUntil());
+                    user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(),
+                    user.getStatusUntil(), user.getStatusReason(), user.getProfilePhoto() != null);
         }
     }
     public record AuthResponse(String accessToken, String tokenType, Instant expiresAt, UserProfile user) { }

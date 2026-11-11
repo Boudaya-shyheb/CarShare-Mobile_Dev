@@ -17,6 +17,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @EntityGraph(attributePaths = {"trip", "trip.driver"})
     List<Reservation> findByPassenger_IdOrderByCreatedAtDesc(UUID passengerId);
 
+    @EntityGraph(attributePaths = {"trip", "trip.driver", "passenger"})
+    List<Reservation> findAllByOrderByCreatedAtDesc();
+
     @EntityGraph(attributePaths = {"trip", "trip.driver"})
     List<Reservation> findByPassenger_IdAndStatusInOrderByCreatedAtDesc(UUID passengerId,
             Collection<ReservationStatus> statuses);

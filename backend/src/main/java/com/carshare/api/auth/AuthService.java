@@ -163,7 +163,7 @@ public class AuthService {
         users.delete(user);
     }
 
-    private AuthDtos.AuthResponse createSession(AppUser user) {
+    public AuthDtos.AuthResponse createSession(AppUser user) {
         String rawToken = TokenUtil.newToken();
         Instant expiresAt = Instant.now().plus(securityProperties.sessionTtl());
         sessions.save(new AuthSession(user, TokenUtil.sha256(rawToken), expiresAt));

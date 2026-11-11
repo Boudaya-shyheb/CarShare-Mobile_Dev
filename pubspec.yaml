@@ -38,6 +38,8 @@ dependencies:
   sqflite: ^2.4.2
   image_picker: ^1.2.4
   http_parser: ^4.1.2
+  google_sign_in: ^7.2.0
+  flutter_facebook_auth: ^7.3.3
 
   # Reservation module: maps, location and date formatting.
   flutter_map: ^8.1.1          # OpenStreetMap tiles, no API key
