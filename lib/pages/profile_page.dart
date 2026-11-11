@@ -12,6 +12,7 @@ import '../widgets/primary_button.dart';
 import 'preferences_page.dart';
 import 'sanctions_page.dart';
 import 'emergency_contacts_page.dart';
+import 'lost_and_found_page.dart';
 import 'my_vehicles_page.dart';
 import 'support/support_page.dart';
 import 'welcome_page.dart';
@@ -300,6 +301,20 @@ class _ProfilePageState extends State<ProfilePage> {
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => const SanctionsPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.search_rounded,
+                          title: 'Lost & Found',
+                          subtitle: 'Report or follow a lost item',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => LostAndFoundPage(
+                                key: ValueKey(user.id),
+                                userId: user.id,
+                              ),
                             ),
                           ),
                         ),

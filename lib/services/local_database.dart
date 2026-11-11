@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
@@ -9,6 +11,7 @@ class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._();
   static const _databaseName = 'carshare.db';
   static const _tableName = 'user_profiles';
+  static const _draftTable = 'lost_and_found_drafts';
 
   /// GPS fixes the driver recorded while the API could not be reached. Flushed in order on
   /// the next successful send, so a dead spot leaves a gap that fills itself in.
@@ -22,7 +25,8 @@ class LocalDatabase {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       path.join(databasePath, _databaseName),
-      version: 3,
+      // 3 added the GPS buffer (reservation), 4 merges in the lost-and-found drafts.
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableName (
@@ -38,6 +42,7 @@ class LocalDatabase {
           )
         ''');
         await _createGpsTable(db);
+        await _createDraftTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -51,13 +56,29 @@ class LocalDatabase {
             'ALTER TABLE $_tableName ADD COLUMN has_profile_photo INTEGER NOT NULL DEFAULT 0',
           );
         }
-        // Version 3 only adds the GPS buffer; user_profiles is left exactly as it was.
-        if (oldVersion < 3) {
+        // Versions 3 and 4 only add tables (the GPS buffer and the lost-and-found drafts);
+        // user_profiles is left exactly as it was. Both creates use IF NOT EXISTS because a
+        // phone already at version 3 has only one of the two, depending on its build.
+        if (oldVersion < 4) {
           await _createGpsTable(db);
+          await _createDraftTable(db);
         }
       },
     );
+
     return _database!;
+  }
+
+  Future<void> _createDraftTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_draftTable (
+        user_id TEXT NOT NULL PRIMARY KEY,
+        report_type TEXT NOT NULL CHECK (report_type IN ('LOST', 'FOUND')),
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        photo BLOB
+      )
+    ''');
   }
 
   Future<UserProfile?> getProfile() async {
@@ -85,7 +106,7 @@ class LocalDatabase {
 
   static Future<void> _createGpsTable(Database db) async {
     await db.execute('''
-      CREATE TABLE $_gpsTableName (
+      CREATE TABLE IF NOT EXISTS $_gpsTableName (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trip_id TEXT NOT NULL,
         lat REAL NOT NULL,
@@ -95,7 +116,7 @@ class LocalDatabase {
       )
     ''');
     await db.execute(
-      'CREATE INDEX ix_pending_gps_trip ON $_gpsTableName (trip_id, id)',
+      'CREATE INDEX IF NOT EXISTS ix_pending_gps_trip ON $_gpsTableName (trip_id, id)',
     );
   }
 
@@ -148,5 +169,43 @@ class LocalDatabase {
       [tripId],
     );
     return (rows.first['n'] as int?) ?? 0;
+  }
+
+  // --- lost and found: the unsent report draft -------------------------------------------
+
+  Future<void> saveLostAndFoundDraft({
+    required String userId,
+    required String reportType,
+    required String title,
+    required String description,
+    Uint8List? photo,
+  }) async {
+    final db = await database;
+    await db.insert(_draftTable, {
+      'user_id': userId,
+      'report_type': reportType,
+      'title': title,
+      'description': description,
+      'photo': photo,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Map<String, Object?>?> getLostAndFoundDraft(String userId) async {
+    final rows = await (await database).query(
+      _draftTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> clearLostAndFoundDraft(String userId) async {
+    await (await database).delete(
+      _draftTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
   }
 }
