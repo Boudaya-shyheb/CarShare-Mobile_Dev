@@ -13,6 +13,7 @@ import 'preferences_page.dart';
 import 'sanctions_page.dart';
 import 'emergency_contacts_page.dart';
 import 'my_vehicles_page.dart';
+import 'support/support_page.dart';
 import 'welcome_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -299,6 +300,17 @@ class _ProfilePageState extends State<ProfilePage> {
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => const SanctionsPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.support_agent_outlined,
+                          title: 'Help & support',
+                          subtitle: 'Report a problem or view tickets',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SupportPage(),
                             ),
                           ),
                         ),

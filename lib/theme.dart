@@ -3,6 +3,12 @@ import 'package:flutter/material.dart';
 const carShareGreen = Color(0xFF059669);
 const carShareGreenDark = Color(0xFF065F46); // second stop of the green header gradients
 
+// Support module palette (used by lib/pages/support and the support_* widgets).
+const supportGreen = Color(0xFF079B70);
+const supportDarkGreen = Color(0xFF047857);
+const supportWarningBackground = Color(0xFFFFF1C2);
+const supportWarningText = Color(0xFFD97706);
+
 // Reservation module palette. Added alongside the existing colours, not in place of them:
 // the user module's screens keep carShareGreen and the 14 px field radius above.
 const carShareTint = Color(0xFFD1FAE5); // chips, badges, the "me" halo
