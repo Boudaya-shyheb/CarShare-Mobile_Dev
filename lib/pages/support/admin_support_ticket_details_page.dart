@@ -29,7 +29,9 @@ class _AdminSupportTicketDetailsPageState
 
   void _refresh() {
     final details = _load();
-    setState(() => _details = details);
+    setState(() {
+      _details = details;
+    });
   }
 
   Future<void> _run(Future<void> Function() action, String message) async {

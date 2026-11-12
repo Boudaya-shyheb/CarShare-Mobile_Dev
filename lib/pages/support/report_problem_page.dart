@@ -9,7 +9,9 @@ import '../../services/support_service.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
 import '../../widgets/primary_button.dart';
+import '../../widgets/route_title.dart';
 import '../../widgets/support_evidence_section.dart';
+import '../../widgets/trip_formats.dart';
 
 class ReportProblemPage extends StatefulWidget {
   const ReportProblemPage({super.key});
@@ -76,11 +78,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
       for (final trip in trips) {
         final id = trip['id'] as String?;
         if (id == null) continue;
-        options[id] = _TripOption(
-          id,
-          null,
-          '${trip['originLabel']} → ${trip['destinationLabel']}',
-        );
+        options[id] = _TripOption(id, null, _tripLabel(trip));
       }
       final reservations = await ApiClient.instance.getList(
         '/reservations/mine',
@@ -91,11 +89,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
         final id = trip['tripId'] as String?;
         final reservationId = reservation['id'] as String?;
         if (id == null) continue;
-        options[id] = _TripOption(
-          id,
-          reservationId,
-          '${trip['originLabel']} → ${trip['destinationLabel']}',
-        );
+        options[id] = _TripOption(id, reservationId, _tripLabel(trip));
       }
       if (mounted) {
         setState(() => _tripOptions = options.values.toList(growable: false));
@@ -103,6 +97,16 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
     } catch (_) {
       // A general support ticket can still be submitted without a trip reference.
     }
+  }
+
+  /// "Ennasr → Sousse · Today · 06:49": the first part of each place name and the departure,
+  /// short enough for one line in the dropdown.
+  String _tripLabel(Map<String, dynamic> trip) {
+    final route =
+        '${RouteTitle.shortName('${trip['originLabel']}')} → '
+        '${RouteTitle.shortName('${trip['destinationLabel']}')}';
+    final when = DateTime.tryParse('${trip['departureTime']}');
+    return when == null ? route : '$route · ${formatWhen(when)}';
   }
 
   @override
@@ -254,16 +258,26 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                 else if (_tripOptions.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
                     initialValue: _selectedTripId,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Related trip (optional)',
                       prefixIcon: Icon(Icons.route_outlined),
                     ),
+                    selectedItemBuilder: (context) => [
+                      for (final trip in _tripOptions)
+                        Text(
+                          trip.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                     items: _tripOptions
                         .map(
                           (trip) => DropdownMenuItem(
                             value: trip.id,
                             child: Text(
                               trip.label,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
