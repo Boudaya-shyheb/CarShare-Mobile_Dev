@@ -5,12 +5,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import com.carshare.api.common.ApiException;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class ResetMailService {
+    private static final Logger logger = LoggerFactory.getLogger(ResetMailService.class);
+    private static final Pattern SMTP_STATUS_PATTERN = Pattern.compile("(?<!\\d)([245]\\d{2})(?:[- ])");
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final String host;
     private final String from;
@@ -52,8 +59,18 @@ public class ResetMailService {
                             + "</body></html>");
             sender.send(message);
         } catch (jakarta.mail.MessagingException exception) {
+            logger.warn("Password reset message could not be prepared ({}).", exception.getClass().getSimpleName());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "password_reset_email_failed",
                     "We could not send the password reset email. Please try again later.");
+        } catch (MailException exception) {
+            Throwable cause = exception;
+            while (cause.getCause() != null) cause = cause.getCause();
+            Matcher statusMatcher = SMTP_STATUS_PATTERN.matcher(String.valueOf(cause.getMessage()));
+            String smtpStatus = statusMatcher.find() ? statusMatcher.group(1) : "unavailable";
+            logger.warn("Password reset SMTP delivery failed ({}; root cause {}; SMTP status {}).",
+                    exception.getClass().getSimpleName(), cause.getClass().getSimpleName(), smtpStatus);
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "password_reset_email_failed",
+                    "We could not send the password reset email. Please verify the email service settings and try again.");
         }
     }
 }

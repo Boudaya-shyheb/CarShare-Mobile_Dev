@@ -25,8 +25,8 @@ class LocalDatabase {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       path.join(databasePath, _databaseName),
-      // 3 added the GPS buffer (reservation), 4 merges in the lost-and-found drafts.
-      version: 4,
+      // 3 added the GPS buffer, 4 added lost-and-found drafts, 5 caches license review status.
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableName (
@@ -38,7 +38,10 @@ class LocalDatabase {
             created_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'ACTIVE',
             status_until TEXT,
-            has_profile_photo INTEGER NOT NULL DEFAULT 0
+            has_profile_photo INTEGER NOT NULL DEFAULT 0,
+            driver_license_expiry TEXT,
+            driver_license_status TEXT NOT NULL DEFAULT 'NOT_SUBMITTED',
+            driver_license_review_reason TEXT
           )
         ''');
         await _createGpsTable(db);
@@ -62,6 +65,17 @@ class LocalDatabase {
         if (oldVersion < 4) {
           await _createGpsTable(db);
           await _createDraftTable(db);
+        }
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE $_tableName ADD COLUMN driver_license_expiry TEXT',
+          );
+          await db.execute(
+            "ALTER TABLE $_tableName ADD COLUMN driver_license_status TEXT NOT NULL DEFAULT 'NOT_SUBMITTED'",
+          );
+          await db.execute(
+            'ALTER TABLE $_tableName ADD COLUMN driver_license_review_reason TEXT',
+          );
         }
       },
     );

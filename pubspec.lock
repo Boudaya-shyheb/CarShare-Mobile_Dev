@@ -137,14 +137,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.15"
-  facebook_auth_desktop:
-    dependency: transitive
-    description:
-      name: facebook_auth_desktop
-      sha256: "6047780782b7199b672ebe4ebd91d7f966c279670b0ca228b6d086a1b6d59567"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.1"
   fake_async:
     dependency: transitive
     description:
@@ -214,30 +206,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_facebook_auth:
-    dependency: "direct main"
-    description:
-      name: flutter_facebook_auth
-      sha256: "5b3085a7c9687f1d454d694a982bb081c3a6e54054942f001767f95e0674f211"
-      url: "https://pub.dev"
-    source: hosted
-    version: "7.3.3"
-  flutter_facebook_auth_platform_interface:
-    dependency: transitive
-    description:
-      name: flutter_facebook_auth_platform_interface
-      sha256: "47e75e27505c17c24447a60106cb656edbac7e7cf247fa1c69ea0be04adc1009"
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.3"
-  flutter_facebook_auth_web:
-    dependency: transitive
-    description:
-      name: flutter_facebook_auth_web
-      sha256: f682400d61cf8d52dd8b6458b5ee106ed57e95309a117dc32875d3da129ce47c
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.2"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -392,6 +360,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.3+1"
+  google_mlkit_commons:
+    dependency: transitive
+    description:
+      name: google_mlkit_commons
+      sha256: "56280cf6e7bc9a3ffb11768fb33ae47c7107a052c63d616cf741241186f76550"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.2"
+  google_mlkit_text_recognition:
+    dependency: "direct main"
+    description:
+      name: google_mlkit_text_recognition
+      sha256: "3c74697ee8cdcd10d82a98bc60ff0107251f1d44aa385e6056a8031fed86ba6d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.2"
   google_sign_in:
     dependency: "direct main"
     description:

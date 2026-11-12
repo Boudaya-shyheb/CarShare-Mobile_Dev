@@ -182,12 +182,12 @@ Le courriel contient un code à six chiffres valable 30 minutes. Après cinq cod
 
 Les migrations Flyway ajoutent les tables et champs nécessaires lors du prochain démarrage du backend. Exécuter ces changements d’abord sur une branche Neon de développement. Pour activer l’écran administrateur, le premier compte doit être promu manuellement par un administrateur de la base (`role = 'ADMIN'`) après application des migrations ; ensuite, les admins peuvent gérer les rôles depuis l’application. L’inscription mobile ne permet jamais de choisir ce rôle.
 
-### Connexion Google et Facebook
+### Connexion Google
 
-Les connexions sociales sont vérifiées par le backend Spring, puis créent une session CarShare normale. Google vérifie l’ID token et son audience côté serveur. Facebook vérifie le jeton auprès de Meta. Aucun identifiant de fournisseur n’est fourni par le dépôt : créez/configurez les applications dans Google Cloud et Meta Developers avant d’activer les boutons.
+La connexion Google est vérifiée par le backend Spring, puis crée une session CarShare normale. Google vérifie l’ID token et son audience côté serveur.
 
-- Backend : configurez `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID` et `FACEBOOK_APP_SECRET` dans votre environnement local. Gardez le secret Meta uniquement côté serveur.
-- Android : définissez les variables d’environnement `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID` et `FACEBOOK_CLIENT_TOKEN` dans PowerShell avant `.un-android-phone.ps1`. Enregistrez aussi l’empreinte SHA-1 Android dans Google Cloud et l’empreinte de clé Android dans Meta Developers.
+- Backend : configurez `GOOGLE_SERVER_CLIENT_ID` dans `.env.local`.
+- Android : configurez un client OAuth Android pour `com.example.carshare` et son empreinte SHA-1, ainsi qu’un client OAuth Web. Le script `run-android-phone.ps1` transmet l’ID Web de `.env.local` à Flutter.
 - Au premier accès social, l’application demande le téléphone et le rôle passager/conducteur. Un compte administrateur ne peut jamais être créé par ce parcours.
 - La migration `V16__admin_operations_and_social_accounts.sql` ajoute les comptes fournisseurs, les demandes support et les informations de validation véhicule. Appliquez-la d’abord sur une branche Neon de développement.
 

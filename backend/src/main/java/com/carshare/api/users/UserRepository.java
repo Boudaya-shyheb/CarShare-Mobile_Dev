@@ -18,6 +18,7 @@ public interface UserRepository extends JpaRepository<AppUser, UUID> {
     @Query(value = "SELECT EXISTS (SELECT 1 FROM app_users WHERE id <> :id AND regexp_replace(phone, '[[:space:]().-]', '', 'g') = :phone)", nativeQuery = true)
     boolean existsByNormalizedPhoneAndIdNot(@Param("phone") String phone, @Param("id") UUID id);
     List<AppUser> findAllByOrderByCreatedAtDesc();
+    List<AppUser> findByRoleAndDriverLicenseStatusOrderByCreatedAtDesc(UserRole role, String driverLicenseStatus);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from AppUser u where u.id = :id")

@@ -50,8 +50,9 @@ public class AuthService {
         if (users.existsByNormalizedPhone(phone)) {
             throw new ApiException(HttpStatus.CONFLICT, "phone_in_use", "An account already exists for this phone number.");
         }
-        AppUser user = users.save(new AppUser(request.fullName().trim(), phone, email,
-                passwordEncoder.encode(request.password()), UserRole.valueOf(request.role().toUpperCase(Locale.ROOT))));
+        AppUser user = new AppUser(request.fullName().trim(), phone, email,
+                passwordEncoder.encode(request.password()), UserRole.valueOf(request.role().toUpperCase(Locale.ROOT)));
+        user = users.save(user);
         return createSession(user);
     }
 
@@ -102,6 +103,7 @@ public class AuthService {
         String phone = normalizePhone(request.phone());
         validatePhone(phone);
         String currentPhone = normalizePhone(user.getPhone());
+        boolean phoneChanged = !phone.equals(currentPhone);
         if (!phone.equals(currentPhone) && users.existsByNormalizedPhoneAndIdNot(phone, userId)) {
             throw new ApiException(HttpStatus.CONFLICT, "phone_in_use", "An account already exists for this phone number.");
         }

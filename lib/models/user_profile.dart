@@ -9,6 +9,9 @@ class UserProfile {
     this.status = 'ACTIVE',
     this.statusUntil,
     this.hasProfilePhoto = false,
+    this.driverLicenseExpiry,
+    this.driverLicenseStatus = 'NOT_SUBMITTED',
+    this.driverLicenseReviewReason,
   });
 
   final String id;
@@ -20,6 +23,9 @@ class UserProfile {
   final String status;
   final DateTime? statusUntil;
   final bool hasProfilePhoto;
+  final DateTime? driverLicenseExpiry;
+  final String driverLicenseStatus;
+  final String? driverLicenseReviewReason;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
     id: json['id'] as String,
@@ -33,6 +39,12 @@ class UserProfile {
         ? null
         : DateTime.parse(json['statusUntil'] as String),
     hasProfilePhoto: json['hasProfilePhoto'] as bool? ?? false,
+    driverLicenseExpiry: json['driverLicenseExpiry'] == null
+        ? null
+        : DateTime.parse(json['driverLicenseExpiry'] as String),
+    driverLicenseStatus:
+        json['driverLicenseStatus'] as String? ?? 'NOT_SUBMITTED',
+    driverLicenseReviewReason: json['driverLicenseReviewReason'] as String?,
   );
 
   factory UserProfile.fromMap(Map<String, Object?> map) => UserProfile(
@@ -47,6 +59,12 @@ class UserProfile {
         ? null
         : DateTime.parse(map['status_until']! as String),
     hasProfilePhoto: (map['has_profile_photo'] as int? ?? 0) == 1,
+    driverLicenseExpiry: map['driver_license_expiry'] == null
+        ? null
+        : DateTime.parse(map['driver_license_expiry']! as String),
+    driverLicenseStatus:
+        map['driver_license_status'] as String? ?? 'NOT_SUBMITTED',
+    driverLicenseReviewReason: map['driver_license_review_reason'] as String?,
   );
 
   Map<String, Object?> toMap() => {
@@ -59,5 +77,8 @@ class UserProfile {
     'status': status,
     'status_until': statusUntil?.toIso8601String(),
     'has_profile_photo': hasProfilePhoto ? 1 : 0,
+    'driver_license_expiry': driverLicenseExpiry?.toIso8601String(),
+    'driver_license_status': driverLicenseStatus,
+    'driver_license_review_reason': driverLicenseReviewReason,
   };
 }

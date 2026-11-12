@@ -5,6 +5,8 @@ import com.carshare.api.common.ApiException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDate;
+import com.carshare.api.users.UserRole;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -84,6 +86,22 @@ public class UserAccountService {
     @Transactional
     public void deletePhoto(UUID userId) {
         requireUser(userId).updateProfilePhoto(null, null);
+    }
+
+    @Transactional
+    public void submitDriverLicense(UUID userId, LocalDate expiry, byte[] image, String mimeType) {
+        AppUser user = requireUser(userId);
+        if (user.getRole() != UserRole.DRIVER) throw new ApiException(HttpStatus.FORBIDDEN,
+                "driver_license_driver_only", "Only driver accounts can submit a driving license.");
+        if (expiry == null || !expiry.isAfter(LocalDate.now())) throw new ApiException(HttpStatus.BAD_REQUEST,
+                "driver_license_expiry_invalid", "Choose a valid future expiry date.");
+        if (image == null || image.length == 0 || image.length > 2 * 1024 * 1024) throw new ApiException(
+                HttpStatus.BAD_REQUEST, "driver_license_image_size", "Choose an image smaller than 2 MB.");
+        if (!List.of(MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, "image/webp").contains(mimeType))
+            throw new ApiException(HttpStatus.BAD_REQUEST, "driver_license_image_type", "Choose a JPG, PNG, or WebP image.");
+        if ("PENDING_REVIEW".equals(user.getDriverLicenseStatus())) throw new ApiException(HttpStatus.CONFLICT,
+                "driver_license_pending", "Your license is already waiting for admin review.");
+        user.submitDriverLicense(expiry, image, mimeType);
     }
 
     @Transactional(readOnly = true)

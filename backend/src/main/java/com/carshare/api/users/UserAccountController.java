@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,6 +69,20 @@ public class UserAccountController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePhoto(@AuthenticationPrincipal SessionPrincipal principal) {
         accountService.deletePhoto(principal.userId());
+    }
+
+    @PostMapping(value = "/driver-license", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void submitDriverLicense(@AuthenticationPrincipal SessionPrincipal principal,
+            @RequestPart("image") MultipartFile image, @RequestParam("expiryDate") String expiryDate)
+            throws java.io.IOException {
+        java.time.LocalDate expiry;
+        try { expiry = java.time.LocalDate.parse(expiryDate); }
+        catch (java.time.DateTimeException exception) {
+            throw new com.carshare.api.common.ApiException(HttpStatus.BAD_REQUEST,
+                    "driver_license_expiry_invalid", "Choose a valid expiry date.");
+        }
+        accountService.submitDriverLicense(principal.userId(), expiry, image.getBytes(), image.getContentType());
     }
 
     @GetMapping("/emergency-contacts")

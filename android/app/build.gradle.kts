@@ -27,8 +27,6 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["facebookAppId"] = providers.gradleProperty("facebookAppId").orElse("").get()
-        manifestPlaceholders["facebookClientToken"] = providers.gradleProperty("facebookClientToken").orElse("").get()
     }
 
     buildTypes {

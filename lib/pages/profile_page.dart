@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/api_client.dart';
+import '../services/driver_license_ocr_service.dart';
 import '../services/user_management_service.dart';
 import '../theme.dart';
 import '../widgets/form_field.dart';
@@ -32,6 +35,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _role;
   bool _loading = false;
   bool _photoLoading = false;
+  bool _licenseLoading = false;
   Future<Uint8List>? _photoFuture;
   final ExpansibleController _editTileController = ExpansibleController();
   final GlobalKey _editTileKey = GlobalKey();
@@ -108,6 +112,79 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _scanDriverLicense() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 68,
+    );
+    if (image == null || !mounted) return;
+    setState(() => _licenseLoading = true);
+    try {
+      final candidates = await DriverLicenseOcrService()
+          .readPossibleExpiryDates(image.path);
+      if (!mounted) return;
+      final today = DateUtils.dateOnly(DateTime.now());
+      DateTime? detected;
+      for (final date in candidates) {
+        if (!date.isBefore(today)) {
+          detected = date;
+          break;
+        }
+      }
+      final expiry = await showDatePicker(
+        context: context,
+        initialDate:
+            detected ?? DateTime(today.year + 1, today.month, today.day),
+        firstDate: today,
+        lastDate: DateTime(today.year + 30),
+        helpText: detected == null
+            ? 'Select the license expiry date'
+            : 'Confirm the expiry date read from the license',
+      );
+      if (expiry == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > 2 * 1024 * 1024) {
+        throw const ApiException(
+          'The license image is larger than 2 MB. Please scan it again closer and in better light.',
+        );
+      }
+      final ext = image.name.split('.').last.toLowerCase();
+      final mime = switch (ext) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        _ => 'image/jpeg',
+      };
+      await UserManagementService.instance.submitDriverLicense(
+        bytes: bytes,
+        fileName: image.name,
+        mimeType: mime,
+        expiryDate: expiry,
+      );
+      await AuthService.instance.refreshProfile();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('License submitted for admin review.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+      }
+    } finally {
+      try {
+        final localImage = File(image.path);
+        if (await localImage.exists()) await localImage.delete();
+      } catch (_) {
+        // The temporary camera file is best-effort cleanup.
+      }
+      if (mounted) setState(() => _licenseLoading = false);
     }
   }
 
@@ -268,225 +345,232 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         _statusCard(user.status, user.statusUntil),
                         const SizedBox(height: 12),
-                        Card(
-                    color: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(carShareCardRadius),
-                      side: const BorderSide(color: carShareBorder),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        // Vehicles belong to drivers only; a passenger never sees this row.
                         if (user.role.toLowerCase() == 'driver') ...[
-                          _menuRow(
-                            icon: Icons.directions_car_outlined,
-                            title: 'My vehicles',
-                            subtitle: 'Add or manage your vehicles',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const MyVehiclesPage(),
-                              ),
-                            ),
-                          ),
-                          _rowDivider,
+                          _driverLicenseCard(user),
+                          const SizedBox(height: 12),
                         ],
-                        _menuRow(
-                          icon: Icons.tune_rounded,
-                          title: 'Preferences',
-                          subtitle:
-                              'Language, saved places, and ride preferences',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const PreferencesPage(),
+                        Card(
+                          color: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              carShareCardRadius,
                             ),
+                            side: const BorderSide(color: carShareBorder),
                           ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.contact_phone_outlined,
-                          title: 'Emergency contacts',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const EmergencyContactsPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.history,
-                          title: 'Sanction history',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SanctionsPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.search_rounded,
-                          title: 'Lost & Found',
-                          subtitle: 'Report or follow a lost item',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => LostAndFoundPage(
-                                key: ValueKey(user.id),
-                                userId: user.id,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.support_agent_outlined,
-                          title: 'Help & support',
-                          subtitle: 'Report a problem or view tickets',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SupportPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        // The existing edit form, unchanged, behind one row. It stays built
-                        // while collapsed so the Form key and the controllers keep working.
-                        ExpansionTile(
-                          key: _editTileKey,
-                          controller: _editTileController,
-                          maintainState: true,
-                          shape: const Border(),
-                          collapsedShape: const Border(),
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            4,
-                            16,
-                            20,
-                          ),
-                          leading: _menuIcon(Icons.edit_outlined),
-                          title: const Text(
-                            'Edit profile',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          children: [
-                            CarShareTextField(
-                              controller: _fullName,
-                              label: 'Full Name',
-                              icon: Icons.person_outline,
-                              validator: _validateName,
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: 14),
-                            CarShareTextField(
-                              controller: _phone,
-                              label: 'Phone',
-                              icon: Icons.phone_outlined,
-                              validator: _validatePhone,
-                              keyboardType: TextInputType.phone,
-                              textInputAction: TextInputAction.next,
-                            ),
-                            const SizedBox(height: 14),
-                            CarShareTextField(
-                              controller: _email,
-                              label: 'Email',
-                              icon: Icons.email_outlined,
-                              validator: _validateEmail,
-                              keyboardType: TextInputType.emailAddress,
-                              textInputAction: TextInputAction.done,
-                            ),
-                            const SizedBox(height: 14),
-                            if (_role == 'admin')
-                              InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Role',
-                                  prefixIcon: Icon(
-                                    Icons.admin_panel_settings_outlined,
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            children: [
+                              // Vehicles belong to drivers only; a passenger never sees this row.
+                              if (user.role.toLowerCase() == 'driver') ...[
+                                _menuRow(
+                                  icon: Icons.directions_car_outlined,
+                                  title: 'My vehicles',
+                                  subtitle: 'Add or manage your vehicles',
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const MyVehiclesPage(),
+                                    ),
                                   ),
                                 ),
-                                child: const Text('Administrator'),
-                              )
-                            else
-                              DropdownButtonFormField<String>(
-                                initialValue: _role,
-                                decoration: const InputDecoration(
-                                  labelText: 'Role',
-                                  prefixIcon: Icon(
-                                    Icons.directions_car_outlined,
+                                _rowDivider,
+                              ],
+                              _menuRow(
+                                icon: Icons.tune_rounded,
+                                title: 'Preferences',
+                                subtitle: 'Language, saved places, and ride preferences',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const PreferencesPage(),
                                   ),
                                 ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'passenger',
-                                    child: Text('Ride as passenger'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'driver',
-                                    child: Text('Drive & share'),
-                                  ),
-                                ],
-                                onChanged: _loading
-                                    ? null
-                                    : (value) => setState(() => _role = value),
-                                validator: (value) => value == null
-                                    ? 'Please select a role.'
-                                    : null,
                               ),
-                            const SizedBox(height: 18),
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF5F8F7),
-                                borderRadius: BorderRadius.circular(14),
+                              _rowDivider,
+                              _menuRow(
+                                icon: Icons.contact_phone_outlined,
+                                title: 'Emergency contacts',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const EmergencyContactsPage(),
+                                  ),
+                                ),
                               ),
-                              child: Row(
+                              _rowDivider,
+                              _menuRow(
+                                icon: Icons.history,
+                                title: 'Sanction history',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const SanctionsPage(),
+                                  ),
+                                ),
+                              ),
+                              _rowDivider,
+                              _menuRow(
+                                icon: Icons.search_rounded,
+                                title: 'Lost & Found',
+                                subtitle: 'Report or follow a lost item',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => LostAndFoundPage(
+                                      key: ValueKey(user.id),
+                                      userId: user.id,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              _rowDivider,
+                              _menuRow(
+                                icon: Icons.support_agent_outlined,
+                                title: 'Help & support',
+                                subtitle: 'Report a problem or view tickets',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const SupportPage(),
+                                  ),
+                                ),
+                              ),
+                              _rowDivider,
+                              // The existing edit form, unchanged, behind one row. It stays built
+                              // while collapsed so the Form key and the controllers keep working.
+                              ExpansionTile(
+                                key: _editTileKey,
+                                controller: _editTileController,
+                                maintainState: true,
+                                shape: const Border(),
+                                collapsedShape: const Border(),
+                                tilePadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                childrenPadding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  4,
+                                  16,
+                                  20,
+                                ),
+                                leading: _menuIcon(Icons.edit_outlined),
+                                title: const Text(
+                                  'Edit profile',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
                                 children: [
-                                  const Icon(
-                                    Icons.calendar_month_outlined,
-                                    color: carShareGreen,
+                                  CarShareTextField(
+                                    controller: _fullName,
+                                    label: 'Full Name',
+                                    icon: Icons.person_outline,
+                                    validator: _validateName,
+                                    textInputAction: TextInputAction.next,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'Member since ${_formatDate(user.createdAt)}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF718096),
+                                  const SizedBox(height: 14),
+                                  CarShareTextField(
+                                    controller: _phone,
+                                    label: 'Phone',
+                                    icon: Icons.phone_outlined,
+                                    validator: _validatePhone,
+                                    keyboardType: TextInputType.phone,
+                                    textInputAction: TextInputAction.next,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  CarShareTextField(
+                                    controller: _email,
+                                    label: 'Email',
+                                    icon: Icons.email_outlined,
+                                    validator: _validateEmail,
+                                    keyboardType: TextInputType.emailAddress,
+                                    textInputAction: TextInputAction.done,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  if (_role == 'admin')
+                                    InputDecorator(
+                                      decoration: const InputDecoration(
+                                        labelText: 'Role',
+                                        prefixIcon: Icon(
+                                          Icons.admin_panel_settings_outlined,
+                                        ),
+                                      ),
+                                      child: const Text('Administrator'),
+                                    )
+                                  else
+                                    DropdownButtonFormField<String>(
+                                      initialValue: _role,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Role',
+                                        prefixIcon: Icon(
+                                          Icons.directions_car_outlined,
+                                        ),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'passenger',
+                                          child: Text('Ride as passenger'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'driver',
+                                          child: Text('Drive & share'),
+                                        ),
+                                      ],
+                                      onChanged: _loading
+                                          ? null
+                                          : (value) =>
+                                                setState(() => _role = value),
+                                      validator: (value) => value == null
+                                          ? 'Please select a role.'
+                                          : null,
+                                    ),
+                                  const SizedBox(height: 18),
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF5F8F7),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_month_outlined,
+                                          color: carShareGreen,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'Member since ${_formatDate(user.createdAt)}',
+                                          style: const TextStyle(
+                                            color: Color(0xFF718096),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  PrimaryButton(
+                                    label: 'Save changes',
+                                    loading: _loading,
+                                    onPressed: _saveProfile,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  OutlinedButton.icon(
+                                    onPressed: _loading ? null : _deleteAccount,
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                    ),
+                                    label: const Text(
+                                      'Delete account',
+                                      style: TextStyle(color: Colors.red),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                            PrimaryButton(
-                              label: 'Save changes',
-                              loading: _loading,
-                              onPressed: _saveProfile,
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              onPressed: _loading ? null : _deleteAccount,
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
+                              _rowDivider,
+                              _menuRow(
+                                icon: Icons.logout_rounded,
+                                title: 'Log out',
+                                danger: true,
+                                onTap: _signOut,
                               ),
-                              label: const Text(
-                                'Delete account',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.logout_rounded,
-                          title: 'Log out',
-                          danger: true,
-                          onTap: _signOut,
-                        ),
-                      ],
-                    ),
-                  ),
                       ],
                     ),
                   ),
@@ -542,9 +626,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildHeader(UserProfile user) => Container(
     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
     decoration: BoxDecoration(
-      borderRadius: const BorderRadius.vertical(
-        bottom: Radius.circular(30),
-      ),
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -701,6 +783,89 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         title: Text('Account status: $label'),
         subtitle: Text(description),
+      ),
+    );
+  }
+
+  Widget _driverLicenseCard(UserProfile user) {
+    final pending = user.driverLicenseStatus == 'PENDING_REVIEW';
+    final approved = user.driverLicenseStatus == 'APPROVED';
+    final label = switch (user.driverLicenseStatus) {
+      'PENDING_REVIEW' => 'Waiting for admin review',
+      'APPROVED' => 'Verified by admin',
+      'REJECTED' => 'Needs a new scan',
+      _ => 'Not submitted',
+    };
+    return Card(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(carShareCardRadius),
+        side: const BorderSide(color: carShareBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.badge_outlined, color: carShareGreen),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Driver license',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: approved ? carShareGreen : Colors.blueGrey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            if (user.driverLicenseExpiry != null) ...[
+              const SizedBox(height: 8),
+              Text('Expiry date: ${_formatDate(user.driverLicenseExpiry!)}'),
+            ],
+            if ((user.driverLicenseReviewReason ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Admin note: ${user.driverLicenseReviewReason}',
+                style: const TextStyle(color: Colors.deepOrange),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'The expiry date is read on your phone. The license image is visible to admins only and is deleted after their decision.',
+              style: TextStyle(color: Color(0xFF718096), fontSize: 12),
+            ),
+            if (!pending) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _licenseLoading ? null : _scanDriverLicense,
+                icon: _licenseLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.document_scanner_outlined),
+                label: Text(
+                  _licenseLoading
+                      ? 'Reading license…'
+                      : user.driverLicenseStatus == 'REJECTED'
+                      ? 'Scan again'
+                      : 'Scan driver license',
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

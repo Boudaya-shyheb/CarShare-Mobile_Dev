@@ -1,10 +1,8 @@
 package com.carshare.api.auth;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.carshare.api.common.ApiException;
 import com.carshare.api.users.AppUser;
@@ -12,40 +10,37 @@ import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.util.List;
 import java.util.Locale;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.web.client.RestClient;
 
 @Service
 public class SocialAuthService {
+    private static final Logger logger = LoggerFactory.getLogger(SocialAuthService.class);
     private final UserRepository users;
     private final UserAuthIdentityRepository identities;
     private final AuthService auth;
     private final org.springframework.security.crypto.password.PasswordEncoder passwords;
-    private final RestClient http = RestClient.create();
     private final String googleClientId;
-    private final String facebookAppId;
-    private final String facebookAppSecret;
+    private volatile GoogleIdTokenVerifier googleVerifier;
 
     public SocialAuthService(UserRepository users, UserAuthIdentityRepository identities, AuthService auth,
             org.springframework.security.crypto.password.PasswordEncoder passwords,
-            @Value("${carshare.auth.google-client-id:}") String googleClientId,
-            @Value("${carshare.auth.facebook-app-id:}") String facebookAppId,
-            @Value("${carshare.auth.facebook-app-secret:}") String facebookAppSecret) {
+            @Value("${carshare.auth.google-client-id:}") String googleClientId) {
         this.users = users;
         this.identities = identities;
         this.auth = auth;
         this.passwords = passwords;
         this.googleClientId = googleClientId;
-        this.facebookAppId = facebookAppId;
-        this.facebookAppSecret = facebookAppSecret;
     }
 
     @Transactional
@@ -53,15 +48,16 @@ public class SocialAuthService {
         if (googleClientId.isBlank()) throw providerNotConfigured("Google");
         GoogleIdToken.Payload payload;
         try {
-            var transport = GoogleNetHttpTransport.newTrustedTransport();
-            var verifier = new GoogleIdTokenVerifier.Builder(transport, GsonFactory.getDefaultInstance())
-                    .setAudience(List.of(googleClientId)).build();
-            GoogleIdToken token = verifier.verify(request.token());
+            GoogleIdToken token = googleVerifier().verify(request.token());
             if (token == null || !Boolean.TRUE.equals(token.getPayload().getEmailVerified())) {
                 throw invalidToken();
             }
             payload = token.getPayload();
         } catch (GeneralSecurityException | IOException exception) {
+            Throwable cause = exception;
+            while (cause.getCause() != null) cause = cause.getCause();
+            logger.warn("Google ID-token verification could not load signing keys ({}: {}).",
+                    cause.getClass().getSimpleName(), cause.getMessage());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "google_verification_unavailable",
                     "Google could not be reached to verify the sign-in. Please try again.");
         }
@@ -69,43 +65,36 @@ public class SocialAuthService {
         return complete("google", payload.getSubject(), payload.getEmail(), name, request);
     }
 
-    @Transactional
-    public AuthDtos.AuthResponse facebook(SocialLoginRequest request) {
-        if (facebookAppId.isBlank() || facebookAppSecret.isBlank()) throw providerNotConfigured("Facebook");
-        JsonObject debug;
-        try {
-            var form = new LinkedMultiValueMap<String, String>();
-            form.add("input_token", request.token());
-            form.add("access_token", facebookAppId + "|" + facebookAppSecret);
-            String response = http.post().uri("https://graph.facebook.com/v22.0/debug_token")
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form)
-                    .retrieve().body(String.class);
-            debug = JsonParser.parseString(response == null ? "{}" : response).getAsJsonObject();
-        } catch (RuntimeException exception) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "facebook_verification_unavailable",
-                    "Facebook could not be reached to verify the sign-in. Please try again.");
+    private GoogleIdTokenVerifier googleVerifier() throws GeneralSecurityException, IOException {
+        GoogleIdTokenVerifier verifier = googleVerifier;
+        if (verifier == null) {
+            synchronized (this) {
+                verifier = googleVerifier;
+                if (verifier == null) {
+                    var transport = googleTransport();
+                    verifier = new GoogleIdTokenVerifier.Builder(transport, GsonFactory.getDefaultInstance())
+                            .setAudience(List.of(googleClientId)).build();
+                    googleVerifier = verifier;
+                }
+            }
         }
-        JsonObject data = debug == null ? null : debug.getAsJsonObject("data");
-        if (data == null || !data.has("is_valid") || !data.get("is_valid").getAsBoolean()
-                || !facebookAppId.equals(data.get("app_id").getAsString())) throw invalidToken();
+        return verifier;
+    }
 
-        JsonObject profile;
-        try {
-            String response = http.get().uri("https://graph.facebook.com/v22.0/me?fields=id,name,email")
-                    .header("Authorization", "Bearer " + request.token()).retrieve().body(String.class);
-            profile = JsonParser.parseString(response == null ? "{}" : response).getAsJsonObject();
-        } catch (RuntimeException exception) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "facebook_profile_unavailable",
-                    "Facebook profile information could not be loaded. Please try again.");
+    private NetHttpTransport googleTransport() throws GeneralSecurityException, IOException {
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
+            KeyStore windowsRoot = KeyStore.getInstance("Windows-ROOT");
+            windowsRoot.load(null, null);
+            TrustManagerFactory trustManagers = TrustManagerFactory.getInstance(
+                    TrustManagerFactory.getDefaultAlgorithm());
+            trustManagers.init(windowsRoot);
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustManagers.getTrustManagers(), null);
+            return new NetHttpTransport.Builder()
+                    .setSslSocketFactory(sslContext.getSocketFactory())
+                    .build();
         }
-        String subject = jsonValue(profile, "id");
-        String email = jsonValue(profile, "email");
-        String name = jsonValue(profile, "name");
-        if (subject.isBlank() || email.isBlank()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "social_email_required",
-                    "Facebook did not provide an email address. Sign up with email and password instead.");
-        }
-        return complete("facebook", subject, email, name, request);
+        return new NetHttpTransport.Builder().build();
     }
 
     private AuthDtos.AuthResponse complete(String provider, String subject, String email, String name,
@@ -153,10 +142,6 @@ public class SocialAuthService {
     private ApiException invalidToken() {
         return new ApiException(HttpStatus.UNAUTHORIZED, "invalid_social_token",
                 "The social sign-in could not be verified. Please try again.");
-    }
-
-    private String jsonValue(JsonObject value, String key) {
-        return value == null || !value.has(key) || value.get(key).isJsonNull() ? "" : value.get(key).getAsString();
     }
 
     public record SocialLoginRequest(String token, String phone, String role) { }

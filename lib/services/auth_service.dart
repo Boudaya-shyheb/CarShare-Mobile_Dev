@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 import '../models/user_profile.dart';
 import 'api_client.dart';
@@ -15,8 +14,8 @@ class AuthService {
   final ApiClient _api = ApiClient.instance;
   final LocalDatabase _localDatabase = LocalDatabase.instance;
   int _sessionRevision = 0;
-  String? _pendingSocialProvider;
-  String? _pendingSocialToken;
+  bool _googleSignInInitialized = false;
+  String? _pendingGoogleToken;
 
   Future<void> restoreSession() async {
     final revision = _sessionRevision;
@@ -73,54 +72,63 @@ class AuthService {
 
   Future<void> signInWithGoogle({String? phone, String? role}) async {
     const serverClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
-    await GoogleSignIn.instance.initialize(
-      serverClientId: serverClientId.isEmpty ? null : serverClientId,
-    );
-    final account = await GoogleSignIn.instance.authenticate();
-    final token = account.authentication.idToken;
-    if (token == null || token.isEmpty) {
-      throw const ApiException('Google did not return a sign-in token. Check the Google app configuration.');
+    try {
+      if (!_googleSignInInitialized) {
+        await GoogleSignIn.instance.initialize(
+          serverClientId: serverClientId.isEmpty ? null : serverClientId,
+        );
+        _googleSignInInitialized = true;
+      }
+      final account = await GoogleSignIn.instance.authenticate();
+      final token = account.authentication.idToken;
+      if (token == null || token.isEmpty) {
+        throw const ApiException(
+          'Google did not return a sign-in token. Check the Web OAuth client ID and Android SHA-1 configuration.',
+        );
+      }
+      await _signInWithGoogleToken(token, phone: phone, role: role);
+    } on GoogleSignInException catch (error) {
+      final message = switch (error.code) {
+        GoogleSignInExceptionCode.canceled => 'Google sign-in was canceled.',
+        GoogleSignInExceptionCode.clientConfigurationError => 'Google sign-in is misconfigured. Check the Web client ID, Android package name, and debug SHA-1.',
+        GoogleSignInExceptionCode.providerConfigurationError => 'Google sign-in is unavailable on this device. Update Google Play services and try again.',
+        GoogleSignInExceptionCode.uiUnavailable => 'Google sign-in could not open. Close other sign-in windows and try again.',
+        _ =>
+          'Google sign-in failed. Check the OAuth configuration and try again.',
+      };
+      throw ApiException(message, code: 'google_sign_in_${error.code.name}');
     }
-    await _signInWithProvider('google', token, phone: phone, role: role);
   }
 
-  Future<void> signInWithFacebook({String? phone, String? role}) async {
-    const appId = String.fromEnvironment('FACEBOOK_APP_ID');
-    if (appId.isEmpty) {
-      throw const ApiException('Facebook sign-in needs the Meta App ID and Android setup before it can be used.');
-    }
-    final result = await FacebookAuth.instance.login(permissions: const ['email', 'public_profile']);
-    final token = result.accessToken?.tokenString;
-    if (result.status != LoginStatus.success || token == null || token.isEmpty) {
-      if (result.status == LoginStatus.cancelled) return;
-      throw ApiException(result.message ?? 'Facebook sign-in could not be completed.');
-    }
-    await _signInWithProvider('facebook', token, phone: phone, role: role);
-  }
-
-  Future<void> completeSocialProfile({required String phone, required String role}) async {
-    final provider = _pendingSocialProvider;
-    final token = _pendingSocialToken;
-    if (provider == null || token == null) {
+  Future<void> completeGoogleProfile({
+    required String phone,
+    required String role,
+  }) async {
+    final token = _pendingGoogleToken;
+    if (token == null) {
       throw const ApiException('Please restart social sign-in.');
     }
-    await _signInWithProvider(provider, token, phone: phone, role: role);
+    await _signInWithGoogleToken(token, phone: phone, role: role);
   }
 
-  Future<void> _signInWithProvider(String provider, String token, {String? phone, String? role}) async {
+  Future<void> _signInWithGoogleToken(
+    String token, {
+    String? phone,
+    String? role,
+  }) async {
     _sessionRevision++;
     try {
-      await _saveAuthResponse(await _api.post('/auth/social/$provider', {
-        'token': token,
-        if (phone != null) 'phone': phone.trim(),
-        'role': ?role,
-      }));
-      _pendingSocialProvider = null;
-      _pendingSocialToken = null;
+      await _saveAuthResponse(
+        await _api.post('/auth/social/google', {
+          'token': token,
+          if (phone != null) 'phone': phone.trim(),
+          'role': ?role,
+        }),
+      );
+      _pendingGoogleToken = null;
     } on ApiException catch (error) {
       if (error.code == 'social_profile_required') {
-        _pendingSocialProvider = provider;
-        _pendingSocialToken = token;
+        _pendingGoogleToken = token;
       }
       rethrow;
     }
@@ -211,13 +219,15 @@ class AuthService {
       await _api.post('/auth/signout');
     } catch (_) {
       // Always end the local session if the API cannot be reached.
-    } finally {
-      try { await GoogleSignIn.instance.signOut(); } catch (_) { }
-      try { await FacebookAuth.instance.logOut(); } catch (_) { }
-      await _api.clearToken();
-      await _clearCachedProfile();
-      currentUser.value = null;
     }
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+    try {
+      await _api.clearToken();
+    } catch (_) {}
+    await _clearCachedProfile();
+    currentUser.value = null;
   }
 
   Future<void> _cacheProfile(UserProfile profile) async {

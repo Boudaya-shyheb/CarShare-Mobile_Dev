@@ -19,11 +19,6 @@ public class SocialAuthController {
         return socialAuth.google(request.toRequest());
     }
 
-    @PostMapping("/facebook")
-    public AuthDtos.AuthResponse facebook(@Valid @RequestBody SocialLoginBody request) {
-        return socialAuth.facebook(request.toRequest());
-    }
-
     public record SocialLoginBody(@NotBlank String token, @Size(max=24) String phone,
             @Size(max=16) String role) {
         SocialAuthService.SocialLoginRequest toRequest() {

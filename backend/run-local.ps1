@@ -53,6 +53,19 @@ if ($variables.ContainsKey('DATABASE_URL_UNPOOLED')) {
     $env:DATABASE_URL_UNPOOLED = Convert-NeonUrlToJdbc $variables['DATABASE_URL_UNPOOLED']
 }
 
+# Load authentication and email settings from the same local file explicitly.
+# This keeps the backend launcher independent from the shell's current directory
+# and avoids stale, empty process environment variables overriding these values.
+foreach ($name in @(
+    'GOOGLE_SERVER_CLIENT_ID',
+    'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_FROM',
+    'MAIL_SMTP_AUTH', 'MAIL_SMTP_STARTTLS'
+)) {
+    if ($variables.ContainsKey($name)) {
+        Set-Item -Path "Env:$name" -Value $variables[$name]
+    }
+}
+
 Push-Location -LiteralPath $PSScriptRoot
 try {
     if ($env:OS -eq 'Windows_NT' -and $env:JAVA_TOOL_OPTIONS -notmatch 'javax\.net\.ssl\.trustStoreType') {
