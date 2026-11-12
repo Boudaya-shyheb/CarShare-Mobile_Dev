@@ -48,4 +48,7 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, UU
     Optional<SupportTicket> findDetailedById(@Param("id") UUID id);
     boolean existsByReservationIdAndCategoryDefinition_Id(UUID reservationId, UUID categoryId);
     long countByCategoryDefinition_Id(UUID categoryId);
+    long countByReportedUser_IdAndStatusNot(UUID userId, SupportTicket.Status status);
+    long countByAssignedAgent_IdAndStatusIn(UUID agentId, Collection<SupportTicket.Status> statuses);
+    List<SupportTicket> findByStatusIn(Collection<SupportTicket.Status> statuses);
 }

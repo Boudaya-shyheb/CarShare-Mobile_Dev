@@ -77,6 +77,20 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     );
   }
 
+  Future<void> _addDocument() async {
+    final document = await pickSupportDocument(context);
+    if (document == null || document.bytes == null) return;
+    await _run(
+      () => SupportService.instance.uploadEvidence(
+        ticketId: ticket.id,
+        bytes: document.bytes!,
+        fileName: document.name,
+        mimeType: 'application/pdf',
+        type: 'DOCUMENT',
+      ),
+    );
+  }
+
   Future<void> _deleteEvidence(String evidenceId) =>
       _run(() => SupportService.instance.deleteEvidence(ticket.id, evidenceId));
 
@@ -321,6 +335,12 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                       onPressed: _working ? null : _addPhoto,
                       icon: const Icon(Icons.add_photo_alternate_outlined),
                       label: const Text('Add photo'),
+                    ),
+                  if (_canContribute)
+                    TextButton.icon(
+                      onPressed: _working ? null : _addDocument,
+                      icon: const Icon(Icons.attach_file_rounded),
+                      label: const Text('Add PDF'),
                     ),
                 ],
               ),

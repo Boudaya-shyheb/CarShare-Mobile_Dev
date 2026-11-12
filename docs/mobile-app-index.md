@@ -143,6 +143,8 @@ changes therefore require a new migration.
 - Ratings: `/trips/{id}/ratings/*`
 - Support: `/support/categories`, `/support/tickets/*` (report targets, ticket evidence,
   statements, decisions/history, and contestations), `/support/notifications/*`
+- Advanced Support admin: `/admin/support/tickets/{id}/advanced`, priority/SLA refresh,
+  OR-Tools assignment proposals, evidence analysis, historical weather, and geo context
 - Lost and found: `/lost-and-found/*`
 - Administration: `/admin/*`
 
@@ -153,7 +155,7 @@ authenticated session rather than accepting an owner ID from the client.
 The support module also has admin ticket/category endpoints. Its mobile client supports
 category/ticket caching and draft recovery using a separate SQLite database. The current
 ticket detail flow reads status history, evidence, statements, and decisions, and exposes
-photo upload, statement submission, and decision contestation when the ticket state allows
+photo/PDF upload, statement submission, and decision contestation when the ticket state allows
 them. Trip-linked tickets are visible to their opener, the reported user, and the eligible
 driver/passenger participants; they all read the same evidence collection for that ticket.
 When a trip has several passengers, the driver chooses the exact passenger/reservation being
@@ -161,24 +163,30 @@ reported. The reported party can add its own statement and evidence before admin
 both parties receive in-app Support notifications as the case progresses.
 
 `lib/widgets/support_evidence_section.dart` provides the reusable evidence picker and the
-validated photo-selection helper used by the report and ticket-detail screens. Android also
-implements the `carshare.support/document_picker` method channel. The current live ticket
-flow accepts photos of at most 5 MB, uploads them as authenticated multipart evidence, and
-shows an authenticated thumbnail with a full-screen preview.
+validated evidence helpers used by the report and ticket-detail screens. Android implements
+the `carshare.support/document_picker` method channel and reads a selected PDF without adding
+a third-party picker package. The current live ticket flow accepts photos or PDFs of at most
+5 MB, uploads them as authenticated multipart evidence, and shows authenticated photo
+thumbnails with a full-screen preview.
 
 The admin Support list opens `AdminSupportTicketDetailsPage`. That case-review screen shows
 the ticket context, opener, trip/reservation links, priority, attributed evidence, statements, status
-history, decisions, and contestations, then exposes the valid status/decision actions. Its
-backend aggregate and evidence-file routes are under `/api/admin/support/tickets/{ticketId}`.
+history, decisions, and contestations, then exposes the valid status/decision actions. It also
+shows the transparent priority formula, SLA state, urgent terms, idempotent escalations,
+OR-Tools assignment proposals, SHA-256/Tika evidence results, Open-Meteo history and
+OpenStreetMap/Overpass context. External context is labelled as investigation help, not proof.
+Its backend routes are under `/api/admin/support/tickets/{ticketId}` and are documented in
+`docs/support-advanced-openapi.yaml`.
 
 Lost & Found remains a separate module and route. Support can reference an eligible trip
 directly, so coupling Lost & Found into ticket processing is not required.
 
 ## Verification and tests
 
-The repository currently contains 4 Flutter test files and 15 backend test files. Client
+The repository currently contains 4 Flutter test files and 17 backend test files. Client
 tests cover vehicle and support ticket models, tracking buffering, and the Support-page
-refresh regression. Backend tests cover support models/evidence storage and reservation
+refresh regression. Backend tests cover support models, evidence storage, priority/SLA,
+OR-Tools assignment, and reservation
 behavior; reservation coverage includes matching, geo calculations, pickup codes, trip
 windows/status, reservations, tracking, and ratings.
 

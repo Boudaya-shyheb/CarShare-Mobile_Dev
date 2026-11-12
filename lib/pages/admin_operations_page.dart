@@ -72,7 +72,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
       AdminSection.trips =>
         'Review trip progress, reservations, and reported deviations.',
       AdminSection.support =>
-        'Follow up support cases and close lost-and-found reports.',
+        'Review active cases by priority score and SLA deadline.',
       AdminSection.sanctions =>
         'Record a reasoned decision using the account rules.',
     };
@@ -304,12 +304,19 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
+              _priorityBadge(item['priorityScore']),
+              const SizedBox(width: 7),
               _status(item['status']),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             '${item['userName']} · ${item['userEmail']} · ${item['category']}',
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'SLA deadline: ${_date(item['deadline'])}',
+            style: const TextStyle(color: carShareMuted, fontSize: 12),
           ),
           const SizedBox(height: 7),
           Text(item['description'] as String? ?? ''),
@@ -534,6 +541,33 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
         {'points': result['points'], 'reason': result['reason']},
       );
     }, 'Sanction recorded for 90 days.');
+  }
+
+  Widget _priorityBadge(Object? value) {
+    final score = value is num
+        ? value.toDouble()
+        : double.tryParse('$value') ?? 0;
+    final (label, color) = switch (score) {
+      >= 60 => ('URGENT', carShareDanger),
+      >= 40 => ('HIGH', Colors.deepOrange),
+      >= 25 => ('MEDIUM', carShareWarning),
+      _ => ('NORMAL', carShareGreen),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        '$label ${score.toStringAsFixed(0)}',
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 
   Widget _status(Object? value) {

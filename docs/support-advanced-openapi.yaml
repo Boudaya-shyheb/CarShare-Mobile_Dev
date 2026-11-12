@@ -1,0 +1,85 @@
+openapi: 3.0.3
+info:
+  title: CarShare Support Advanced API
+  version: 1.0.0
+  description: Admin-only endpoints for Module 5. External context never makes an automatic decision.
+servers:
+  - url: /api
+paths:
+  /admin/support/tickets/{ticketId}/advanced:
+    get:
+      summary: Read priority, SLA, assignment and external investigation results
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Advanced Support details }
+        '401': { description: Authentication required }
+        '403': { description: Administrator role required }
+        '404': { description: Ticket not found }
+  /admin/support/tickets/{ticketId}/analysis/refresh:
+    post:
+      summary: Recalculate priority and urgent terms
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Updated analysis }
+  /admin/support/tickets/{ticketId}/assignments/propose:
+    post:
+      summary: Propose an agent with OR-Tools or deterministic fallback
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '201': { description: Assignment proposal }
+        '409': { description: No available agent with capacity }
+  /admin/support/tickets/{ticketId}/assignments/{proposalId}/confirm:
+    post:
+      summary: Confirm a human-reviewed assignment proposal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TicketId' }
+        - name: proposalId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Confirmed assignment }
+        '409': { description: Proposal already processed }
+  /admin/support/tickets/{ticketId}/evidence/{evidenceId}/analyze:
+    post:
+      summary: Analyze evidence with SHA-256 and the configured local Tika server
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TicketId' }
+        - name: evidenceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Complete or partial evidence analysis }
+  /admin/support/tickets/{ticketId}/weather/refresh:
+    post:
+      summary: Load historical weather from Open-Meteo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Available or unavailable weather context }
+        '409': { description: Ticket is not linked to a trip }
+  /admin/support/tickets/{ticketId}/geo/refresh:
+    post:
+      summary: Load nearby named places from OpenStreetMap Overpass
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Available, partial or unavailable geographic context }
+        '409': { description: Ticket is not linked to a trip }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    TicketId:
+      name: ticketId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }

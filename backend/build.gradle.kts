@@ -25,6 +25,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("com.google.api-client:google-api-client:2.9.2")
+    implementation("com.google.ortools:ortools-java:9.12.4544")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 

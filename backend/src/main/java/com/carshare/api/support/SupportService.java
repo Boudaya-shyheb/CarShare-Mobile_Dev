@@ -11,6 +11,7 @@ import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +25,9 @@ public class SupportService {
     private static final Set<ReservationStatus> SUPPORT_PARTICIPANT_STATUSES =
             Set.of(ReservationStatus.CONFIRMED, ReservationStatus.COMPLETED,
                     ReservationStatus.NO_SHOW, ReservationStatus.CANCELLED);
+    private static final Set<SupportTicket.Status> ACTIVE_TICKET_STATUSES =
+            Set.of(SupportTicket.Status.OPEN, SupportTicket.Status.AWAITING_RESPONSE,
+                    SupportTicket.Status.UNDER_REVIEW, SupportTicket.Status.CONTESTED);
 
     private final SupportTicketRepository tickets;
     private final UserRepository users;
@@ -37,6 +41,7 @@ public class SupportService {
     private final TicketContestationRepository contestations;
     private final SupportNotificationRepository notifications;
     private final SupportEvidenceStorage evidenceStorage;
+    private final TicketPriorityService priority;
 
     public SupportService(SupportTicketRepository tickets, UserRepository users,
             TripRepository trips, ReservationRepository reservations,
@@ -44,7 +49,7 @@ public class SupportService {
             TicketEvidenceRepository evidence, TicketStatementRepository statements,
             TicketDecisionRepository decisions, TicketContestationRepository contestations,
             SupportNotificationRepository notifications,
-            SupportEvidenceStorage evidenceStorage) {
+            SupportEvidenceStorage evidenceStorage, TicketPriorityService priority) {
         this.tickets = tickets;
         this.users = users;
         this.trips = trips;
@@ -57,6 +62,7 @@ public class SupportService {
         this.contestations = contestations;
         this.notifications = notifications;
         this.evidenceStorage = evidenceStorage;
+        this.priority = priority;
     }
 
     @Transactional(readOnly = true)
@@ -165,7 +171,16 @@ public class SupportService {
 
     @Transactional(readOnly = true)
     public List<TicketView> allTickets() {
-        return tickets.findAllByOrderByCreatedAtDesc().stream().map(this::ticketView).toList();
+        Comparator<SupportTicket> adminPriorityOrder = Comparator
+                .comparingInt((SupportTicket ticket) ->
+                        ACTIVE_TICKET_STATUSES.contains(ticket.getStatus()) ? 0 : 1)
+                .thenComparing(SupportTicket::getPriorityScore, Comparator.reverseOrder())
+                .thenComparing(SupportTicket::getDeadline,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(SupportTicket::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder()));
+        return tickets.findAllByOrderByCreatedAtDesc().stream()
+                .sorted(adminPriorityOrder).map(this::ticketView).toList();
     }
 
     @Transactional(readOnly = true)
@@ -257,6 +272,7 @@ public class SupportService {
                     "You are involved in " + ticket.getReference()
                             + ". Add your statement and evidence before review.");
         }
+        priority.refresh(ticket);
         return ticketView(ticket);
     }
 
@@ -270,6 +286,7 @@ public class SupportService {
         } catch (IllegalStateException error) {
             throw new ApiException(HttpStatus.CONFLICT, "ticket_not_editable", error.getMessage());
         }
+        priority.refresh(ticket);
         return ticketView(ticket);
     }
 

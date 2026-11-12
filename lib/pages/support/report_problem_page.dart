@@ -168,6 +168,19 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
     }
   }
 
+  Future<void> _addDocument() async {
+    if (_evidenceFiles.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You can attach up to three files.')),
+      );
+      return;
+    }
+    final document = await pickSupportDocument(context);
+    if (document != null && mounted) {
+      setState(() => _evidenceFiles.add(document));
+    }
+  }
+
   Future<void> _selectTrip(String? tripId, String? reservationId) async {
     setState(() {
       _selectedTripId = tripId;
@@ -217,6 +230,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
       final mimeType = switch (extension) {
         'png' => 'image/png',
         'webp' => 'image/webp',
+        'pdf' => 'application/pdf',
         _ => 'image/jpeg',
       };
       final bytes = photo.bytes;
@@ -226,7 +240,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
         bytes: bytes,
         fileName: photo.name,
         mimeType: mimeType,
-        type: 'PHOTO',
+        type: extension == 'pdf' ? 'DOCUMENT' : 'PHOTO',
       );
     }
   }
@@ -453,6 +467,12 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                         onPressed: _saving ? null : _addEvidence,
                         icon: const Icon(Icons.add_photo_alternate_outlined),
                         label: const Text('Add photo'),
+                      ),
+                    if (_evidenceFiles.length < 3)
+                      OutlinedButton.icon(
+                        onPressed: _saving ? null : _addDocument,
+                        icon: const Icon(Icons.attach_file_rounded),
+                        label: const Text('Add PDF'),
                       ),
                   ],
                 ),

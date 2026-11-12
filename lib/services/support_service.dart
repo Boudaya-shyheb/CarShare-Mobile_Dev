@@ -123,10 +123,52 @@ class SupportService {
   Future<Uint8List> evidenceBytes(String ticketId, String evidenceId) =>
       _api.getBytes('/support/tickets/$ticketId/evidence/$evidenceId/file');
 
-  Future<AdminSupportTicketDetails> adminTicketDetails(String ticketId) async =>
-      AdminSupportTicketDetails.fromJson(
-        await _api.get('/admin/support/tickets/$ticketId'),
-      );
+  Future<AdminSupportTicketDetails> adminTicketDetails(String ticketId) async {
+    final rows = await Future.wait([
+      _api.get('/admin/support/tickets/$ticketId'),
+      _api.get('/admin/support/tickets/$ticketId/advanced'),
+    ]);
+    return AdminSupportTicketDetails.fromJson(rows[0], rows[1]);
+  }
+
+  Future<void> refreshAdminAnalysis(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/analysis/refresh',
+      const {},
+    );
+  }
+
+  Future<void> proposeAssignment(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/assignments/propose',
+      const {},
+    );
+  }
+
+  Future<void> confirmAssignment(String ticketId, String proposalId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/assignments/$proposalId/confirm',
+      const {},
+    );
+  }
+
+  Future<void> analyzeEvidence(String ticketId, String evidenceId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/evidence/$evidenceId/analyze',
+      const {},
+    );
+  }
+
+  Future<void> refreshWeather(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/weather/refresh',
+      const {},
+    );
+  }
+
+  Future<void> refreshGeo(String ticketId) async {
+    await _api.post('/admin/support/tickets/$ticketId/geo/refresh', const {});
+  }
 
   Future<Uint8List> adminEvidenceBytes(String ticketId, String evidenceId) =>
       _api.getBytes(

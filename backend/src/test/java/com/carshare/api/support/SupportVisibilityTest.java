@@ -39,6 +39,7 @@ class SupportVisibilityTest {
     @Mock private TicketContestationRepository contestations;
     @Mock private SupportNotificationRepository notifications;
     @Mock private SupportEvidenceStorage evidenceStorage;
+    @Mock private TicketPriorityService priority;
     @Mock private SupportTicket ticket;
     @Mock private AppUser opener;
     @Mock private AppUser passenger;
@@ -51,7 +52,7 @@ class SupportVisibilityTest {
     void setUp() {
         service = new SupportService(tickets, users, trips, reservations, categories,
                 history, evidence, statements, decisions, contestations, notifications,
-                evidenceStorage);
+                evidenceStorage, priority);
     }
 
     @Test

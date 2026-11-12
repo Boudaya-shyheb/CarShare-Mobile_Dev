@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/support_ticket.dart';
@@ -22,12 +24,17 @@ class _SupportPageState extends State<SupportPage> {
   bool _searchOpen = false;
   final _searchController = TextEditingController();
   late Future<List<SupportTicket>> _tickets = _loadTickets();
+  Timer? _notificationTimer;
   int _unreadNotifications = 0;
 
   @override
   void initState() {
     super.initState();
     _loadUnreadNotifications();
+    _notificationTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _loadUnreadNotifications(),
+    );
   }
 
   Future<void> _loadUnreadNotifications() async {
@@ -62,6 +69,7 @@ class _SupportPageState extends State<SupportPage> {
 
   @override
   void dispose() {
+    _notificationTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
