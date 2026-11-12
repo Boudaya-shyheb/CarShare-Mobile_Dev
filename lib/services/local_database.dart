@@ -17,6 +17,13 @@ class LocalDatabase {
   /// the next successful send, so a dead spot leaves a gap that fills itself in.
   static const _gpsTableName = 'pending_gps_points';
 
+  /// Reservation module, added in version 5. Every row carries the `user_id` it belongs to.
+  /// recent_searches: the last routes searched. favorite_places: places saved under a name.
+  /// cached_trips: the last My trips answer, shown again when the phone is offline.
+  static const recentSearchesTable = 'recent_searches';
+  static const favoritePlacesTable = 'favorite_places';
+  static const cachedTripsTable = 'cached_trips';
+
   Database? _database;
 
   Future<Database> get database async {
@@ -25,8 +32,9 @@ class LocalDatabase {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       path.join(databasePath, _databaseName),
-      // 3 added the GPS buffer (reservation), 4 merges in the lost-and-found drafts.
-      version: 4,
+      // 3 added the GPS buffer (reservation), 4 merged in the lost-and-found drafts,
+      // 5 adds the reservation tables for recent searches, favourite places and the trips cache.
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableName (
@@ -43,6 +51,7 @@ class LocalDatabase {
         ''');
         await _createGpsTable(db);
         await _createDraftTable(db);
+        await createReservationTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -63,6 +72,10 @@ class LocalDatabase {
           await _createGpsTable(db);
           await _createDraftTable(db);
         }
+        // Version 5 only adds the three reservation tables; nothing existing is touched.
+        if (oldVersion < 5) {
+          await createReservationTables(db);
+        }
       },
     );
 
@@ -77,6 +90,56 @@ class LocalDatabase {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         photo BLOB
+      )
+    ''');
+  }
+
+  /// Creates the three Reservation tables. Public and idempotent (IF NOT EXISTS), so a fresh
+  /// install (onCreate), an upgrade from version 4 (onUpgrade) and the tests all use it.
+  static Future<void> createReservationTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $recentSearchesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        origin_label TEXT NOT NULL,
+        origin_lat REAL NOT NULL,
+        origin_lng REAL NOT NULL,
+        dest_label TEXT NOT NULL,
+        dest_lat REAL NOT NULL,
+        dest_lng REAL NOT NULL,
+        searched_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS ix_recent_searches_user '
+      'ON $recentSearchesTable (user_id, searched_at)',
+    );
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $favoritePlacesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        label TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS ix_favorite_places_user '
+      'ON $favoritePlacesTable (user_id)',
+    );
+
+    // One row per user, kind and scope (the three My trips tabs), replaced on every load.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedTripsTable (
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('driver', 'passenger')),
+        scope TEXT NOT NULL,
+        json TEXT NOT NULL,
+        cached_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, kind, scope)
       )
     ''');
   }

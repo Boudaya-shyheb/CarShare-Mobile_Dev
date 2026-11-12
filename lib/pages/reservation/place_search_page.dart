@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../models/favorite_place.dart';
 import '../../models/place.dart';
 import '../../services/auth_service.dart';
 import '../../services/geo_service.dart';
 import '../../services/location_service.dart';
+import '../../services/reservation_local_store.dart';
 import '../../theme.dart';
+import '../../widgets/favorite_place_widgets.dart';
 
 /// Picks one end of a trip: by typing, from the device position, or from the map.
 ///
@@ -33,6 +36,46 @@ class _PlaceSearchPageState extends State<PlaceSearchPage> {
   bool _searching = false;
   bool _locating = false;
   String? _error;
+
+  /// The saved places, from SQLite, so a result that is already saved shows a filled star.
+  final ReservationLocalStore _store = ReservationLocalStore.instance;
+  List<FavoritePlace> _favorites = const [];
+
+  String? get _userId => AuthService.instance.currentUser.value?.id;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    final userId = _userId;
+    if (userId == null) return;
+    final favorites = await _store.getFavorites(userId);
+    if (!mounted) return;
+    setState(() => _favorites = favorites);
+  }
+
+  /// The star on a result: ask for a name in a dialog, then save the place in SQLite.
+  Future<void> _saveFavorite(Place place) async {
+    final userId = _userId;
+    if (userId == null) return;
+    final name = await askFavoriteName(
+      context,
+      takenNames: _favorites.map((favorite) => favorite.name),
+    );
+    if (!mounted || name == null) return;
+    await _store.addFavorite(userId, name, place);
+    await _loadFavorites();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Saved as $name.')));
+  }
+
+  /// True when this exact spot is already one of the saved places.
+  bool _isSaved(Place place) =>
+      _favorites.any((favorite) => favorite.place.isSameSpotAs(place));
 
   @override
   void dispose() {
@@ -227,6 +270,19 @@ class _PlaceSearchPageState extends State<PlaceSearchPage> {
                     ),
                   ),
                 ),
+                if (_userId != null)
+                  IconButton(
+                    tooltip: _isSaved(place)
+                        ? 'Saved in My places'
+                        : 'Save to My places',
+                    icon: Icon(
+                      _isSaved(place) ? Icons.star : Icons.star_border,
+                      color: _isSaved(place) ? carShareWarning : carShareMuted,
+                    ),
+                    onPressed: _isSaved(place)
+                        ? null
+                        : () => _saveFavorite(place),
+                  ),
               ],
             ),
           ),

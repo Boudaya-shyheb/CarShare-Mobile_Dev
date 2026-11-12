@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
 import '../../models/trip.dart';
 import '../../models/user_profile.dart';
+import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../services/reservation_local_store.dart';
 import '../../services/reservation_service.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
@@ -41,6 +45,10 @@ class _MyTripsPageState extends State<MyTripsPage>
   /// One future per tab, so moving between them does not re-fetch what is already loaded.
   final Map<int, Future<List<Object>>> _loaded = {};
 
+  /// The tabs whose list came from the SQLite copy because the server could not be reached,
+  /// with the time that copy was saved. A tab that loaded normally is not in the map.
+  final Map<int, DateTime> _offlineSince = {};
+
   @override
   void initState() {
     super.initState();
@@ -64,13 +72,58 @@ class _MyTripsPageState extends State<MyTripsPage>
     }
   }
 
+  /// Loads one tab from the API and saves the answer in SQLite. If the phone cannot reach the
+  /// server, the last saved answer is used instead and the tab shows an "Offline" banner.
   Future<List<Object>> _fetch(int index) async {
     final scope = _scopes[index];
-    if (_isDriver) {
-      return ReservationService.instance.myTrips(scope: scope);
+    final kind = _isDriver ? 'driver' : 'passenger';
+    final userId = widget.user.id;
+    final store = ReservationLocalStore.instance;
+    try {
+      final rows = _isDriver
+          ? await ReservationService.instance.myTripsJson(scope: scope)
+          : await ReservationService.instance.myReservationsJson(scope: scope);
+      final loaded = _parse(
+        rows,
+      ); // read it first: never save what the app cannot read
+      try {
+        await store.saveTripsCache(
+          userId: userId,
+          kind: kind,
+          scope: scope,
+          json: jsonEncode(rows),
+        );
+      } catch (_) {
+        // Losing the offline copy must not hide the trips that were just loaded.
+      }
+      if (mounted && _offlineSince.containsKey(index)) {
+        setState(() => _offlineSince.remove(index));
+      }
+      return loaded;
+    } on ApiException catch (error) {
+      // A status code means the server answered, so that error is shown as it is. No status
+      // code means the request never got through: use the saved copy if there is one.
+      if (error.statusCode != null) rethrow;
+      final cached = await store.loadTripsCache(
+        userId: userId,
+        kind: kind,
+        scope: scope,
+      );
+      if (cached == null) rethrow;
+      final rows = (jsonDecode(cached.json) as List)
+          .cast<Map<String, dynamic>>();
+      if (mounted) {
+        setState(() => _offlineSince[index] = cached.cachedAt);
+      }
+      return _parse(rows);
     }
-    return ReservationService.instance.myReservations(scope: scope);
   }
+
+  /// Turns the API's JSON rows into trips (driver) or reservations (passenger).
+  List<Object> _parse(List<Map<String, dynamic>> rows) => [
+    for (final row in rows)
+      _isDriver ? Trip.fromJson(row) : Reservation.fromJson(row),
+  ];
 
   Future<void> _refresh(int index) async {
     final future = _fetch(index);
@@ -166,7 +219,8 @@ class _MyTripsPageState extends State<MyTripsPage>
     if (future == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return RefreshIndicator(
+    final since = _offlineSince[index];
+    final tab = RefreshIndicator(
       onRefresh: () => _refresh(index),
       color: carShareGreen,
       child: FutureBuilder<List<Object>>(
@@ -229,6 +283,13 @@ class _MyTripsPageState extends State<MyTripsPage>
           );
         },
       ),
+    );
+    if (since == null) return tab;
+    return Column(
+      children: [
+        _OfflineBanner(since: since),
+        Expanded(child: tab),
+      ],
     );
   }
 
@@ -645,6 +706,40 @@ class _Message extends StatelessWidget {
           if (action != null) ...[const SizedBox(height: 18), action!],
         ],
       ),
+    ),
+  );
+}
+
+/// Shown above a tab whose list came from the saved SQLite copy instead of the API.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.since});
+
+  final DateTime since;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: carShareWarning.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.cloud_off, size: 18, color: carShareText),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Offline: showing data from ${formatWhen(since.toLocal())}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: carShareText,
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }
