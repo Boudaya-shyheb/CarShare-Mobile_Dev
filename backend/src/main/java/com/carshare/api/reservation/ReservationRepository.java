@@ -11,6 +11,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
+    /** Seats a user rode (COMPLETED) or missed (NO_SHOW): the profile's trips and no-shows. */
+    long countByPassenger_IdAndStatus(UUID passengerId, ReservationStatus status);
+
     @EntityGraph(attributePaths = {"trip", "trip.driver"})
     Optional<Reservation> findByIdAndPassenger_Id(UUID id, UUID passengerId);
 

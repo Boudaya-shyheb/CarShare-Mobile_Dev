@@ -567,6 +567,39 @@ departure. A driver with neither figure scores **10** — a newcomer is not buri
 established drivers, nor placed above them. When only one of the two is known, that half stands
 for the whole component.
 
+### `GET /api/users/me/stats` — the figures on the Profile card
+
+The signed-in user's own numbers, for the Trips / Rating / No-shows card on the Profile screen.
+Any signed-in user may call it; it answers about the caller only (the id comes from the token,
+never from the request) and changes nothing. The path sits beside the user module's
+`/api/users/me/preferences`, `/photo`, `/sanctions` and `/emergency-contacts`; it is a separate
+controller, `UserTripStatsController`, so neither module's routes move.
+
+```json
+{
+  "tripsAsDriver": 5,
+  "tripsAsPassenger": 18,
+  "totalTrips": 23,
+  "rating": 4.6,
+  "ratingCount": 12,
+  "noShows": 2,
+  "reliability": 14
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `tripsAsDriver` | Trips the user drove to `COMPLETED` |
+| `tripsAsPassenger` | Their reservations that ended `COMPLETED` |
+| `totalTrips` | The two added together |
+| `rating` | Mean of the last 50 ratings received, one decimal; `null` when nobody has rated them |
+| `ratingCount` | Every rating received, not only the fifty the mean used |
+| `noShows` | Reservations of theirs a driver marked `NO_SHOW` |
+| `reliability` | The driver-reliability points the match score gives them, 0 to 15 (see above); 10 for a user with neither a rating nor a completed trip |
+
+A user with no history gets zeros, `rating` `null` and `reliability` 10. Without a valid token the
+answer is 403, as for every authenticated route.
+
 ### `GET /api/trips/{tripId}/track`
 
 The whole driven trail, oldest first, for the replay on the completion screen. Open to the

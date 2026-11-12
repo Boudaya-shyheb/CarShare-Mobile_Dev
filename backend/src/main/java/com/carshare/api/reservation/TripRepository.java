@@ -22,6 +22,9 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     long countByStatus(TripStatus status);
 
+    /** Trips a user drove to the end: the "Trips" figure on their profile. */
+    long countByDriver_IdAndStatus(UUID driverId, TripStatus status);
+
     long countByStatusIn(Collection<TripStatus> statuses);
 
     /**
