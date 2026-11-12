@@ -35,6 +35,13 @@ public class SupportController {
         return support.myTickets(principal.userId());
     }
 
+    @GetMapping("/report-targets")
+    public List<SupportService.ReportTargetView> reportTargets(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @RequestParam UUID tripId) {
+        return support.reportTargets(principal.userId(), tripId);
+    }
+
     @GetMapping("/{ticketId}")
     public SupportService.TicketView ticket(@AuthenticationPrincipal SessionPrincipal principal,
             @PathVariable UUID ticketId) {

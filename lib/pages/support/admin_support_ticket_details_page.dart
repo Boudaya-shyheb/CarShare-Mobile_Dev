@@ -29,7 +29,9 @@ class _AdminSupportTicketDetailsPageState
 
   void _refresh() {
     final details = _load();
-    setState(() => _details = details);
+    setState(() {
+      _details = details;
+    });
   }
 
   Future<void> _run(Future<void> Function() action, String message) async {
@@ -173,12 +175,23 @@ class _AdminSupportTicketDetailsPageState
                     ),
                     if (details.tripId != null)
                       Text(
-                        'Trip: ${details.tripId}${details.reservationId == null ? '' : '\nReservation: ${details.reservationId}'}',
+                        'Trip: ${ticket.trip}${details.reservationId == null ? '' : '\nReservation reference: ${details.reservationId}'}',
                         style: const TextStyle(
                           color: carShareMuted,
                           fontSize: 12,
                         ),
                       ),
+                    if (ticket.reportedUserName != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Person concerned: ${ticket.reportedUserName} · ${ticket.reportedUserRoleLabel}',
+                        style: const TextStyle(
+                          color: supportDarkGreen,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                     if (details.reportedUserId != null)
                       Text(
                         'Reported user: ${details.reportedUserId}',
@@ -207,8 +220,10 @@ class _AdminSupportTicketDetailsPageState
                         : const Icon(Icons.description_outlined),
                     title: Text(item.fileName),
                     subtitle: Text(
-                      '${item.type} · ${_fileSize(item.fileSize)}',
+                      '${item.type} · ${_fileSize(item.fileSize)}\n'
+                      'Added by ${item.uploadedByName ?? 'Unknown user'}',
                     ),
+                    isThreeLine: true,
                   ),
                 ),
               ),

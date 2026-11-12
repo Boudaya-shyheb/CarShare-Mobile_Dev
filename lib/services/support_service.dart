@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 import '../models/support_category.dart';
+import '../models/support_notification.dart';
+import '../models/support_report_target.dart';
 import '../models/support_ticket.dart';
 import '../models/support_ticket_detail.dart';
 import 'api_client.dart';
@@ -41,6 +43,25 @@ class SupportService {
       if (cached.isEmpty) rethrow;
       return cached.map(SupportCategory.fromJson).toList(growable: false);
     }
+  }
+
+  Future<List<SupportReportTarget>> reportTargets(String tripId) async =>
+      (await _api.getList('/support/tickets/report-targets?tripId=$tripId'))
+          .map(SupportReportTarget.fromJson)
+          .toList(growable: false);
+
+  Future<List<SupportNotificationItem>> notifications() async =>
+      (await _api.getList('/support/notifications'))
+          .map(SupportNotificationItem.fromJson)
+          .toList(growable: false);
+
+  Future<int> unreadNotificationCount() async {
+    final row = await _api.get('/support/notifications/unread-count');
+    return (row['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    await _api.put('/support/notifications/$notificationId/read', const {});
   }
 
   Future<SupportTicket> createTicket({

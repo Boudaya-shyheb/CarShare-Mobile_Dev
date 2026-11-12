@@ -8,6 +8,7 @@ class TicketEvidenceItem {
     required this.contentType,
     required this.fileSize,
     this.uploadedByUserId,
+    this.uploadedByName,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class TicketEvidenceItem {
   final String contentType;
   final int fileSize;
   final String? uploadedByUserId;
+  final String? uploadedByName;
 
   factory TicketEvidenceItem.fromJson(Map<String, dynamic> json) =>
       TicketEvidenceItem(
@@ -26,6 +28,7 @@ class TicketEvidenceItem {
             json['contentType'] as String? ?? 'application/octet-stream',
         fileSize: json['fileSize'] as int? ?? 0,
         uploadedByUserId: json['uploadedByUserId'] as String?,
+        uploadedByName: json['uploadedByName'] as String?,
       );
 }
 

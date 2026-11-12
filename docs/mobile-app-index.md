@@ -71,7 +71,7 @@ files, 14 shared widget files, and 5 data/bootstrap/theme files.
 | Trip search and publishing | `reservation/home_search`, `place_search`, `search_results`, `publish_trip`, `trip_details` | `ReservationService`, `GeoService`, `LocationService`, `Trip`, `Place`, `TripSearchResult` | `reservation` |
 | Booking and trip management | `reservation/my_trips`, `driver_trip`, `check_in_dialog` | `ReservationService`, `Trip`, `Reservation`, `TripEvent` | `reservation` |
 | Live tracking | `reservation/live`, `live_driver`, `live_passenger`, `trip_completed` | `TrackingService`, `ReservationService`, `LocalDatabase`, `LiveView`, `Rating` | `reservation` |
-| Support | `support/support`, `report_problem`, `ticket_details` | `SupportService`, `SupportLocalDatabase`, `SupportTicket`, `SupportCategory`, `SupportTicketDetails`, `SupportEvidenceSection` | `support` |
+| Support | `support/support`, `report_problem`, `ticket_details`, `support_notifications`, `admin_support_ticket_details` | `SupportService`, `SupportLocalDatabase`, `SupportTicket`, `SupportCategory`, `SupportTicketDetails`, `SupportNotification`, `SupportReportTarget`, `SupportEvidenceSection` | `support` |
 | Lost and found | `lost_and_found` | `ApiClient`, `LocalDatabase` | `lostandfound` |
 | Administration | `admin_dashboard`, `admin_users`, `admin_operations` | `ApiClient`, `AuthService` | `admin`, `users` |
 
@@ -88,7 +88,7 @@ HTTP clients.
 | `TrackingService` | Captures driver positions, buffers them locally, and uploads batches of at most 50 points every four seconds. |
 | `VehicleService` | Vehicle CRUD, default selection, and photo upload/delete/primary selection. |
 | `UserManagementService` | Preferences, sanctions, and emergency contacts. |
-| `SupportService` | Support categories and tickets, details, evidence, statements, contestations, and offline ticket/category caching and drafts. |
+| `SupportService` | Support categories and tickets, report targets, details, evidence, statements, contestations, in-app notifications, and offline ticket/category caching and drafts. |
 | `GeoService` | Public geocoding and routing requests. |
 | `LocationService` | Device permission handling and current location, with Tunis as the fallback map location. |
 | `DeepLinkService` | Receives app links and opens pending password-reset navigation after startup. |
@@ -126,7 +126,7 @@ The backend is under `backend/src/main/java/com/carshare/api`:
 | `admin` | Cross-module operational views and admin actions. |
 | `common` | Structured API errors and global exception handling. |
 
-The database schema is built by 18 ordered migrations in
+The database schema is built by 20 ordered migrations in
 `backend/src/main/resources/db/migration`. Hibernate runs with `ddl-auto: validate`; schema
 changes therefore require a new migration.
 
@@ -141,8 +141,8 @@ changes therefore require a new migration.
   `/reservations/{id}/*`
 - Live tracking: `/trips/{id}/positions`, `/trips/{id}/live`, `/trips/{id}/track`
 - Ratings: `/trips/{id}/ratings/*`
-- Support: `/support/categories`, `/support/tickets/*` (ticket evidence, statements,
-  decisions/history, and contestations)
+- Support: `/support/categories`, `/support/tickets/*` (report targets, ticket evidence,
+  statements, decisions/history, and contestations), `/support/notifications/*`
 - Lost and found: `/lost-and-found/*`
 - Administration: `/admin/*`
 
@@ -156,6 +156,9 @@ ticket detail flow reads status history, evidence, statements, and decisions, an
 photo upload, statement submission, and decision contestation when the ticket state allows
 them. Trip-linked tickets are visible to their opener, the reported user, and the eligible
 driver/passenger participants; they all read the same evidence collection for that ticket.
+When a trip has several passengers, the driver chooses the exact passenger/reservation being
+reported. The reported party can add its own statement and evidence before admin review, and
+both parties receive in-app Support notifications as the case progresses.
 
 `lib/widgets/support_evidence_section.dart` provides the reusable evidence picker and the
 validated photo-selection helper used by the report and ticket-detail screens. Android also
@@ -164,7 +167,7 @@ flow accepts photos of at most 5 MB, uploads them as authenticated multipart evi
 shows an authenticated thumbnail with a full-screen preview.
 
 The admin Support list opens `AdminSupportTicketDetailsPage`. That case-review screen shows
-the ticket context, opener, trip/reservation links, priority, evidence, statements, status
+the ticket context, opener, trip/reservation links, priority, attributed evidence, statements, status
 history, decisions, and contestations, then exposes the valid status/decision actions. Its
 backend aggregate and evidence-file routes are under `/api/admin/support/tickets/{ticketId}`.
 

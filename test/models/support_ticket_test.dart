@@ -1,3 +1,5 @@
+import 'package:carshare/models/support_notification.dart';
+import 'package:carshare/models/support_report_target.dart';
 import 'package:carshare/models/support_ticket.dart';
 import 'package:carshare/models/support_ticket_detail.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +13,11 @@ void main() {
       'title': 'Driver was late',
       'description': 'The driver arrived late.',
       'status': 'CLOSED',
+      'reportedUserId': 'driver-1',
+      'reportedUserName': 'Driver One',
+      'reportedUserRole': 'DRIVER',
+      'tripId': 'trip-1',
+      'tripLabel': 'Tunis → Sousse',
       'deadline': '2026-11-13T10:00:00Z',
       'createdAt': '2026-11-12T10:00:00Z',
     });
@@ -19,6 +26,9 @@ void main() {
     expect(ticket.status, TicketStatus.closed);
     expect(ticket.isResolved, isTrue);
     expect(ticket.deadline, isNotNull);
+    expect(ticket.reportedUserName, 'Driver One');
+    expect(ticket.reportedUserRole, 'DRIVER');
+    expect(ticket.trip, 'Tunis → Sousse');
   });
 
   test('parses evidence, statements, decisions and history', () {
@@ -28,6 +38,7 @@ void main() {
       'originalFileName': 'proof.jpg',
       'contentType': 'image/jpeg',
       'fileSize': 1200,
+      'uploadedByName': 'Driver One',
     });
     final statement = TicketStatementItem.fromJson({
       'id': 'statement-1',
@@ -48,9 +59,34 @@ void main() {
     });
 
     expect(evidence.fileName, 'proof.jpg');
+    expect(evidence.uploadedByName, 'Driver One');
     expect(statement.authorName, 'Passenger');
     expect(decision.penaltyPoints, 2);
     expect(history.toStatus, 'RESOLVED');
+  });
+
+  test('parses report target and unread support notification', () {
+    final target = SupportReportTarget.fromJson({
+      'userId': 'passenger-1',
+      'fullName': 'Passenger One',
+      'reservationId': 'reservation-1',
+      'role': 'PASSENGER',
+    });
+    final notification = SupportNotificationItem.fromJson({
+      'id': 'notification-1',
+      'ticketId': 'ticket-1',
+      'ticketReference': 'DSP-2026-ABC12345',
+      'type': 'RESPONSE_REQUESTED',
+      'title': 'Your response is requested',
+      'message': 'Add your statement and evidence.',
+      'createdAt': '2026-11-12T10:00:00Z',
+      'read': false,
+    });
+
+    expect(target.reservationId, 'reservation-1');
+    expect(target.role, 'PASSENGER');
+    expect(notification.ticketReference, 'DSP-2026-ABC12345');
+    expect(notification.read, isFalse);
   });
 
   test('parses the complete admin ticket case', () {

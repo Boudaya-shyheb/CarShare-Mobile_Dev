@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/support_category.dart';
+import '../../models/support_report_target.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/support_service.dart';
@@ -30,6 +31,9 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
   final List<SupportEvidence> _evidenceFiles = [];
   String? _selectedTripId;
   String? _selectedReservationId;
+  String? _selectedTargetUserId;
+  List<SupportReportTarget> _reportTargets = const [];
+  bool _loadingTargets = false;
 
   @override
   void initState() {
@@ -99,6 +103,9 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
       }
       if (mounted) {
         setState(() => _tripOptions = options.values.toList(growable: false));
+        if (_selectedTripId != null) {
+          await _loadReportTargets(_selectedTripId!);
+        }
       }
     } catch (_) {
       // A general support ticket can still be submitted without a trip reference.
@@ -161,6 +168,49 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
     }
   }
 
+  Future<void> _selectTrip(String? tripId, String? reservationId) async {
+    setState(() {
+      _selectedTripId = tripId;
+      _selectedReservationId = reservationId;
+      _selectedTargetUserId = null;
+      _reportTargets = const [];
+    });
+    _saveDraft();
+    if (tripId != null) await _loadReportTargets(tripId);
+  }
+
+  Future<void> _loadReportTargets(String tripId) async {
+    setState(() => _loadingTargets = true);
+    try {
+      final targets = await SupportService.instance.reportTargets(tripId);
+      if (!mounted || _selectedTripId != tripId) return;
+      SupportReportTarget? selected;
+      for (final target in targets) {
+        if (target.reservationId == _selectedReservationId) {
+          selected = target;
+          break;
+        }
+      }
+      selected ??= targets.length == 1 ? targets.first : null;
+      setState(() {
+        _reportTargets = targets;
+        _selectedTargetUserId = selected?.userId;
+        if (selected != null) {
+          _selectedReservationId = selected.reservationId;
+        }
+      });
+      _saveDraft();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load trip participants: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingTargets = false);
+    }
+  }
+
   Future<void> _uploadEvidence(String ticketId) async {
     for (final photo in _evidenceFiles) {
       final extension = photo.name.split('.').last.toLowerCase();
@@ -183,6 +233,14 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedTripId != null &&
+        _reportTargets.isNotEmpty &&
+        _selectedReservationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose the person concerned.')),
+      );
+      return;
+    }
     if (_categoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Choose a support category.')),
@@ -243,15 +301,51 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (_selectedTripId != null)
+                if (_selectedTripId != null) ...[
                   _AttachedTripCard(
                     label: _selectedTripLabel,
-                    onChange: () => setState(() {
-                      _selectedTripId = null;
-                      _selectedReservationId = null;
-                    }),
-                  )
-                else if (_tripOptions.isNotEmpty) ...[
+                    onChange: () => _selectTrip(null, null),
+                  ),
+                  if (_loadingTargets)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 18),
+                      child: LinearProgressIndicator(),
+                    )
+                  else if (_reportTargets.isNotEmpty) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedTargetUserId,
+                      decoration: const InputDecoration(
+                        labelText: 'Person concerned',
+                        prefixIcon: Icon(Icons.person_search_outlined),
+                      ),
+                      items: _reportTargets
+                          .map(
+                            (target) => DropdownMenuItem(
+                              value: target.userId,
+                              child: Text(
+                                '${target.fullName} · ${target.role.toLowerCase()}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
+                      validator: (value) =>
+                          value == null ? 'Choose the person concerned.' : null,
+                      onChanged: (value) {
+                        SupportReportTarget? selected;
+                        for (final target in _reportTargets) {
+                          if (target.userId == value) selected = target;
+                        }
+                        setState(() {
+                          _selectedTargetUserId = value;
+                          _selectedReservationId = selected?.reservationId;
+                        });
+                        _saveDraft();
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                ] else if (_tripOptions.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
                     initialValue: _selectedTripId,
                     decoration: const InputDecoration(
@@ -277,11 +371,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                           break;
                         }
                       }
-                      setState(() {
-                        _selectedTripId = value;
-                        _selectedReservationId = reservationId;
-                      });
-                      _saveDraft();
+                      _selectTrip(value, reservationId);
                     },
                   ),
                   const SizedBox(height: 18),
