@@ -359,65 +359,20 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     Map<String, dynamic> item,
     String status,
   ) async {
-    final reason = TextEditingController();
-    var reasonMissing = false;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-            status == 'APPROVED'
-                ? 'Approve driver license'
-                : 'Reject driver license',
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: reason,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: status == 'REJECTED'
-                      ? 'Reason (required)'
-                      : 'Review note (optional)',
-                ),
-              ),
-              if (reasonMissing)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text(
-                    'A reason is required to reject this license.',
-                    style: TextStyle(color: carShareDanger),
-                  ),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (status == 'REJECTED' && reason.text.trim().isEmpty) {
-                  setDialogState(() => reasonMissing = true);
-                  return;
-                }
-                Navigator.pop(context, true);
-              },
-              child: Text(status == 'APPROVED' ? 'Approve' : 'Reject'),
-            ),
-          ],
-        ),
-      ),
+    // The shared dialog owns its text controller (disposed with the dialog, not while it is
+    // still animating away) and shows the "reason required" message itself.
+    final note = await _askText(
+      title: status == 'APPROVED'
+          ? 'Approve driver license'
+          : 'Reject driver license',
+      label: status == 'REJECTED'
+          ? 'Reason (required)'
+          : 'Review note (optional)',
+      confirmLabel: status == 'APPROVED' ? 'Approve' : 'Reject',
+      requiredInput: status == 'REJECTED',
+      missingMessage: 'A reason is required to reject this license.',
     );
-    if (accepted != true) {
-      reason.dispose();
-      return;
-    }
-    final note = reason.text.trim();
-    reason.dispose();
+    if (note == null) return;
     await _act(
       () async {
         await ApiClient.instance.put(
@@ -430,7 +385,6 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
           : 'Driver license rejected. The uploaded image was deleted.',
     );
   }
-
 
   Widget _tripCard(Map<String, dynamic> item) => Card(
     child: ListTile(
@@ -618,6 +572,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     required String label,
     required String confirmLabel,
     required bool requiredInput,
+    String? missingMessage,
   }) => showDialog<String>(
     context: context,
     builder: (_) => _AdminTextDialog(
@@ -625,6 +580,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
       label: label,
       confirmLabel: confirmLabel,
       requiredInput: requiredInput,
+      missingMessage: missingMessage,
     ),
   );
 
@@ -906,6 +862,7 @@ class _AdminTextDialog extends StatefulWidget {
     required this.label,
     required this.confirmLabel,
     required this.requiredInput,
+    this.missingMessage,
   });
 
   final String title;
@@ -913,12 +870,16 @@ class _AdminTextDialog extends StatefulWidget {
   final String confirmLabel;
   final bool requiredInput;
 
+  /// Shown under the field when a required reason is left empty.
+  final String? missingMessage;
+
   @override
   State<_AdminTextDialog> createState() => _AdminTextDialogState();
 }
 
 class _AdminTextDialogState extends State<_AdminTextDialog> {
   final _controller = TextEditingController();
+  bool _missing = false;
 
   @override
   void dispose() {
@@ -929,10 +890,24 @@ class _AdminTextDialogState extends State<_AdminTextDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.title),
-    content: TextField(
-      controller: _controller,
-      maxLines: 3,
-      decoration: InputDecoration(labelText: widget.label),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          maxLines: 3,
+          decoration: InputDecoration(labelText: widget.label),
+        ),
+        if (_missing && widget.missingMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              widget.missingMessage!,
+              style: const TextStyle(color: carShareDanger),
+            ),
+          ),
+      ],
     ),
     actions: [
       TextButton(
@@ -942,7 +917,10 @@ class _AdminTextDialogState extends State<_AdminTextDialog> {
       FilledButton(
         onPressed: () {
           final value = _controller.text.trim();
-          if (widget.requiredInput && value.isEmpty) return;
+          if (widget.requiredInput && value.isEmpty) {
+            setState(() => _missing = true);
+            return;
+          }
           Navigator.pop(context, value);
         },
         child: Text(widget.confirmLabel),

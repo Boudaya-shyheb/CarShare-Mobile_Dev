@@ -43,9 +43,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
   UserProfile? get _user => AuthService.instance.currentUser.value;
 
+  /// The session restore (and a license review) can replace the signed-in user after this page
+  /// was built, so rebuild when it changes. Typed text in the edit form is left alone.
+  void _userChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    AuthService.instance.currentUser.addListener(_userChanged);
     final user = _user;
     if (user != null) {
       _fullName.text = user.fullName;
@@ -60,6 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    AuthService.instance.currentUser.removeListener(_userChanged);
     _fullName.dispose();
     _phone.dispose();
     _email.dispose();
