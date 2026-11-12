@@ -21,6 +21,11 @@ class SupportTicket {
     required this.summary,
     this.deadline,
     this.resolution,
+    this.userId,
+    this.userName,
+    this.reportedUserId,
+    this.reportedUserName,
+    this.reportedUserRole,
   });
 
   final String id;
@@ -34,9 +39,20 @@ class SupportTicket {
   final String summary;
   final DateTime? deadline;
   final String? resolution;
+  final String? userId;
+  final String? userName;
+  final String? reportedUserId;
+  final String? reportedUserName;
+  final String? reportedUserRole;
 
   bool get isResolved =>
       status == TicketStatus.resolved || status == TicketStatus.closed;
+
+  String get reportedUserRoleLabel => switch (reportedUserRole) {
+    'DRIVER' => 'Driver',
+    'PASSENGER' => 'Passenger',
+    _ => 'Trip participant',
+  };
 
   factory SupportTicket.fromJson(Map<String, dynamic> json) {
     final state = json['status'] as String? ?? 'OPEN';
@@ -60,7 +76,7 @@ class SupportTicket {
       description: json['description'] as String? ?? '',
       trip: json['tripId'] == null
           ? 'General request'
-          : 'Trip ${json['tripId']}',
+          : json['tripLabel'] as String? ?? 'Trip ${json['tripId']}',
       createdLabel: _formatDate(json['createdAt']),
       status: status,
       summary: status == TicketStatus.resolved
@@ -72,6 +88,11 @@ class SupportTicket {
           : 'Your request is waiting for review.',
       deadline: DateTime.tryParse('${json['deadline']}')?.toLocal(),
       resolution: resolution,
+      userId: json['userId'] as String?,
+      userName: json['userName'] as String?,
+      reportedUserId: json['reportedUserId'] as String?,
+      reportedUserName: json['reportedUserName'] as String?,
+      reportedUserRole: json['reportedUserRole'] as String?,
     );
   }
 

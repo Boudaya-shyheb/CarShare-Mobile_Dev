@@ -77,6 +77,20 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     );
   }
 
+  Future<void> _addDocument() async {
+    final document = await pickSupportDocument(context);
+    if (document == null || document.bytes == null) return;
+    await _run(
+      () => SupportService.instance.uploadEvidence(
+        ticketId: ticket.id,
+        bytes: document.bytes!,
+        fileName: document.name,
+        mimeType: 'application/pdf',
+        type: 'DOCUMENT',
+      ),
+    );
+  }
+
   Future<void> _deleteEvidence(String evidenceId) =>
       _run(() => SupportService.instance.deleteEvidence(ticket.id, evidenceId));
 
@@ -211,6 +225,70 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                 ),
                 const SizedBox(height: 14),
               ],
+              if (ticket.reportedUserName != null) ...[
+                _Panel(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person_search_outlined,
+                        color: supportDarkGreen,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Person concerned',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${ticket.reportedUserName} · ${ticket.reportedUserRoleLabel}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Text(
+                              'This ticket was filed against this person.',
+                              style: TextStyle(
+                                color: carShareMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              _Panel(
+                child: Row(
+                  children: [
+                    Icon(
+                      ticket.userId == currentUserId
+                          ? Icons.outgoing_mail
+                          : Icons.record_voice_over_outlined,
+                      color: supportDarkGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        ticket.userId == currentUserId
+                            ? 'You opened this ticket. The other participant can respond with a statement and evidence.'
+                            : 'You are involved in this ticket. Add your statement and evidence before review starts.',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               _Panel(
                 child: _StatusTimeline(
                   status: ticket.status,
@@ -258,6 +336,12 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                       icon: const Icon(Icons.add_photo_alternate_outlined),
                       label: const Text('Add photo'),
                     ),
+                  if (_canContribute)
+                    TextButton.icon(
+                      onPressed: _working ? null : _addDocument,
+                      icon: const Icon(Icons.attach_file_rounded),
+                      label: const Text('Add PDF'),
+                    ),
                 ],
               ),
               if (details.evidence.isEmpty)
@@ -275,7 +359,11 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                           color: supportGreen,
                         ),
                   title: Text(item.fileName),
-                  subtitle: Text('${item.type} · ${_fileSize(item.fileSize)}'),
+                  subtitle: Text(
+                    '${item.type} · ${_fileSize(item.fileSize)}\n'
+                    'Added by ${item.uploadedByName ?? 'Unknown user'}',
+                  ),
+                  isThreeLine: true,
                   trailing:
                       _canContribute && item.uploadedByUserId == currentUserId
                       ? IconButton(

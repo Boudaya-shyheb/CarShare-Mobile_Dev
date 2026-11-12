@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 import '../models/support_category.dart';
+import '../models/support_notification.dart';
+import '../models/support_report_target.dart';
 import '../models/support_ticket.dart';
 import '../models/support_ticket_detail.dart';
 import 'api_client.dart';
@@ -41,6 +43,25 @@ class SupportService {
       if (cached.isEmpty) rethrow;
       return cached.map(SupportCategory.fromJson).toList(growable: false);
     }
+  }
+
+  Future<List<SupportReportTarget>> reportTargets(String tripId) async =>
+      (await _api.getList('/support/tickets/report-targets?tripId=$tripId'))
+          .map(SupportReportTarget.fromJson)
+          .toList(growable: false);
+
+  Future<List<SupportNotificationItem>> notifications() async =>
+      (await _api.getList('/support/notifications'))
+          .map(SupportNotificationItem.fromJson)
+          .toList(growable: false);
+
+  Future<int> unreadNotificationCount() async {
+    final row = await _api.get('/support/notifications/unread-count');
+    return (row['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    await _api.put('/support/notifications/$notificationId/read', const {});
   }
 
   Future<SupportTicket> createTicket({
@@ -102,10 +123,52 @@ class SupportService {
   Future<Uint8List> evidenceBytes(String ticketId, String evidenceId) =>
       _api.getBytes('/support/tickets/$ticketId/evidence/$evidenceId/file');
 
-  Future<AdminSupportTicketDetails> adminTicketDetails(String ticketId) async =>
-      AdminSupportTicketDetails.fromJson(
-        await _api.get('/admin/support/tickets/$ticketId'),
-      );
+  Future<AdminSupportTicketDetails> adminTicketDetails(String ticketId) async {
+    final rows = await Future.wait([
+      _api.get('/admin/support/tickets/$ticketId'),
+      _api.get('/admin/support/tickets/$ticketId/advanced'),
+    ]);
+    return AdminSupportTicketDetails.fromJson(rows[0], rows[1]);
+  }
+
+  Future<void> refreshAdminAnalysis(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/analysis/refresh',
+      const {},
+    );
+  }
+
+  Future<void> proposeAssignment(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/assignments/propose',
+      const {},
+    );
+  }
+
+  Future<void> confirmAssignment(String ticketId, String proposalId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/assignments/$proposalId/confirm',
+      const {},
+    );
+  }
+
+  Future<void> analyzeEvidence(String ticketId, String evidenceId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/evidence/$evidenceId/analyze',
+      const {},
+    );
+  }
+
+  Future<void> refreshWeather(String ticketId) async {
+    await _api.post(
+      '/admin/support/tickets/$ticketId/weather/refresh',
+      const {},
+    );
+  }
+
+  Future<void> refreshGeo(String ticketId) async {
+    await _api.post('/admin/support/tickets/$ticketId/geo/refresh', const {});
+  }
 
   Future<Uint8List> adminEvidenceBytes(String ticketId, String evidenceId) =>
       _api.getBytes(

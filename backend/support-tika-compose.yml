@@ -1,0 +1,6 @@
+services:
+  support-tika:
+    image: apache/tika:latest-full
+    ports:
+      - "9998:9998"
+    restart: unless-stopped

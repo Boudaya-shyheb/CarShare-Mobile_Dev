@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/support_ticket.dart';
@@ -6,6 +8,7 @@ import '../../services/support_service.dart';
 import '../../theme.dart';
 import '../../widgets/support_ticket_card.dart';
 import 'report_problem_page.dart';
+import 'support_notifications_page.dart';
 import 'ticket_details_page.dart';
 
 class SupportPage extends StatefulWidget {
@@ -21,6 +24,27 @@ class _SupportPageState extends State<SupportPage> {
   bool _searchOpen = false;
   final _searchController = TextEditingController();
   late Future<List<SupportTicket>> _tickets = _loadTickets();
+  Timer? _notificationTimer;
+  int _unreadNotifications = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadNotifications();
+    _notificationTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _loadUnreadNotifications(),
+    );
+  }
+
+  Future<void> _loadUnreadNotifications() async {
+    try {
+      final count = await SupportService.instance.unreadNotificationCount();
+      if (mounted) setState(() => _unreadNotifications = count);
+    } catch (_) {
+      // Tickets remain usable if the notification count is temporarily unavailable.
+    }
+  }
 
   Future<List<SupportTicket>> _loadTickets() async {
     final user = AuthService.instance.currentUser.value;
@@ -33,10 +57,19 @@ class _SupportPageState extends State<SupportPage> {
     setState(() {
       _tickets = tickets;
     });
+    _loadUnreadNotifications();
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SupportNotificationsPage()),
+    );
+    if (mounted) _loadUnreadNotifications();
   }
 
   @override
   void dispose() {
+    _notificationTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -80,6 +113,15 @@ class _SupportPageState extends State<SupportPage> {
         style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
       ),
       actions: [
+        IconButton(
+          tooltip: 'Support notifications',
+          onPressed: _openNotifications,
+          icon: Badge(
+            isLabelVisible: _unreadNotifications > 0,
+            label: Text('$_unreadNotifications'),
+            child: const Icon(Icons.notifications_none_rounded),
+          ),
+        ),
         IconButton(
           tooltip: _searchOpen ? 'Close search' : 'Search tickets',
           onPressed: () => setState(() {

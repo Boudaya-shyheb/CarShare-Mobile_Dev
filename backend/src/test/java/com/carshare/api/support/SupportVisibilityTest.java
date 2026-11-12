@@ -1,6 +1,7 @@
 package com.carshare.api.support;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -9,12 +10,14 @@ import static org.mockito.Mockito.lenient;
 
 import com.carshare.api.reservation.Reservation;
 import com.carshare.api.reservation.ReservationRepository;
+import com.carshare.api.reservation.ReservationStatus;
 import com.carshare.api.reservation.Trip;
 import com.carshare.api.reservation.TripRepository;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +37,9 @@ class SupportVisibilityTest {
     @Mock private TicketStatementRepository statements;
     @Mock private TicketDecisionRepository decisions;
     @Mock private TicketContestationRepository contestations;
+    @Mock private SupportNotificationRepository notifications;
     @Mock private SupportEvidenceStorage evidenceStorage;
+    @Mock private TicketPriorityService priority;
     @Mock private SupportTicket ticket;
     @Mock private AppUser opener;
     @Mock private AppUser passenger;
@@ -46,7 +51,8 @@ class SupportVisibilityTest {
     @BeforeEach
     void setUp() {
         service = new SupportService(tickets, users, trips, reservations, categories,
-                history, evidence, statements, decisions, contestations, evidenceStorage);
+                history, evidence, statements, decisions, contestations, notifications,
+                evidenceStorage, priority);
     }
 
     @Test
@@ -102,6 +108,41 @@ class SupportVisibilityTest {
         when(evidence.findByTicket_IdOrderByCreatedAtAsc(ticketId)).thenReturn(List.of());
 
         assertTrue(service.evidence(passengerId, ticketId).isEmpty());
+    }
+
+    @Test
+    void driverCanChooseTheExactPassengerAndReservationToReport() {
+        UUID driverId = UUID.randomUUID();
+        UUID tripId = UUID.randomUUID();
+        UUID passengerId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        when(trips.findById(tripId)).thenReturn(Optional.of(trip));
+        when(trip.isDrivenBy(driverId)).thenReturn(true);
+        when(reservations.findByTrip_IdAndStatusIn(eq(tripId), eq(Set.of(
+                        ReservationStatus.CONFIRMED, ReservationStatus.COMPLETED,
+                        ReservationStatus.NO_SHOW, ReservationStatus.CANCELLED))))
+                .thenReturn(List.of(reservation));
+        when(reservation.getPassenger()).thenReturn(passenger);
+        when(reservation.getId()).thenReturn(reservationId);
+        when(passenger.getId()).thenReturn(passengerId);
+        when(passenger.getFullName()).thenReturn("Test Passenger");
+
+        List<SupportService.ReportTargetView> targets = service.reportTargets(driverId, tripId);
+
+        assertEquals(1, targets.size());
+        assertEquals(passengerId, targets.get(0).userId());
+        assertEquals(reservationId, targets.get(0).reservationId());
+        assertEquals("PASSENGER", targets.get(0).role());
+    }
+
+    @Test
+    void unreadNotificationCountIsScopedToTheCurrentUser() {
+        UUID userId = UUID.randomUUID();
+        when(notifications.countByUser_IdAndReadAtIsNull(userId)).thenReturn(3L);
+
+        assertEquals(3L, service.unreadCount(userId).count());
+
+        verify(notifications).countByUser_IdAndReadAtIsNull(userId);
     }
 
     private void prepareLegacyTicket(UUID ticketId, UUID tripId) {

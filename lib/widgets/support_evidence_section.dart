@@ -54,6 +54,53 @@ Future<SupportEvidence?> pickSupportPhoto(BuildContext context) async {
   return null;
 }
 
+Future<SupportEvidence?> pickSupportDocument(BuildContext context) async {
+  const channel = MethodChannel('carshare.support/document_picker');
+  try {
+    final file = await channel.invokeMapMethod<String, String>('pickDocument');
+    if (file == null || !context.mounted) return null;
+    final name = file['name'];
+    final uri = file['uri'];
+    if (name == null || uri == null || !name.toLowerCase().endsWith('.pdf')) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Choose a PDF document.')));
+      }
+      return null;
+    }
+    final bytes = await channel.invokeMethod<Uint8List>('readDocument', {
+      'uri': uri,
+    });
+    if (bytes == null || !isSupportEvidenceSizeAllowed(bytes.length)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Choose a PDF no larger than 5 MB.')),
+        );
+      }
+      return null;
+    }
+    return SupportEvidence(name: name, isImage: false, bytes: bytes, uri: uri);
+  } on PlatformException catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message ?? 'Could not select the PDF document.'),
+        ),
+      );
+    }
+  } on MissingPluginException {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The PDF picker is unavailable in this app build.'),
+        ),
+      );
+    }
+  }
+  return null;
+}
+
 class SupportEvidence {
   const SupportEvidence({
     required this.name,
@@ -69,19 +116,6 @@ class SupportEvidence {
 }
 
 class SupportEvidenceController {
-  static const _documentPicker = MethodChannel(
-    'carshare.support/document_picker',
-  );
-
-  static const _allowedDocumentExtensions = {
-    'pdf',
-    'doc',
-    'docx',
-    'txt',
-    'rtf',
-    'odt',
-  };
-
   SupportEvidenceController({List<SupportEvidence> initialEvidence = const []})
     : evidence = ValueNotifier(List.unmodifiable(initialEvidence));
 
@@ -126,64 +160,15 @@ class SupportEvidenceController {
   }
 
   Future<void> _pick(_EvidenceType type, BuildContext context) async {
-    try {
-      if (type == _EvidenceType.photo) {
-        final photo = await pickSupportPhoto(context);
-        if (photo == null) return;
-        evidence.value = [...evidence.value, photo];
-        return;
-      }
-
-      final file = await _documentPicker.invokeMapMethod<String, String>(
-        'pickDocument',
-      );
-      if (file == null || !context.mounted) return;
-      final name = file['name'];
-      final uri = file['uri'];
-      if (name == null || uri == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('The selected document could not be read.'),
-          ),
-        );
-        return;
-      }
-      final extension = name.split('.').last.toLowerCase();
-      if (!_allowedDocumentExtensions.contains(extension)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Choose a PDF, DOC, DOCX, TXT, RTF, or ODT file.'),
-          ),
-        );
-        return;
-      }
-      evidence.value = [
-        ...evidence.value,
-        SupportEvidence(name: name, isImage: false, uri: uri),
-      ];
-    } on PlatformException catch (error) {
-      _showPickerError(context, error.message);
-    } on MissingPluginException {
-      _showPickerError(
-        context,
-        'The document picker is unavailable in this app build.',
-      );
-    } on FileSystemException {
-      _showPickerError(context, 'The selected photo could not be read.');
+    if (type == _EvidenceType.photo) {
+      final photo = await pickSupportPhoto(context);
+      if (photo == null) return;
+      evidence.value = [...evidence.value, photo];
+      return;
     }
-  }
 
-  void _showPickerError(BuildContext context, String? message) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message == null || message.isEmpty
-              ? 'Could not open the file picker. Please try again.'
-              : 'Could not select evidence: $message',
-        ),
-      ),
-    );
+    final document = await pickSupportDocument(context);
+    if (document != null) evidence.value = [...evidence.value, document];
   }
 
   void dispose() => evidence.dispose();

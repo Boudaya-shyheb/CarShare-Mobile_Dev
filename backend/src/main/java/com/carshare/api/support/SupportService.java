@@ -11,6 +11,8 @@ import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -22,7 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class SupportService {
     private static final Set<ReservationStatus> SUPPORT_PARTICIPANT_STATUSES =
             Set.of(ReservationStatus.CONFIRMED, ReservationStatus.COMPLETED,
-                    ReservationStatus.NO_SHOW);
+                    ReservationStatus.NO_SHOW, ReservationStatus.CANCELLED);
+    private static final Set<SupportTicket.Status> ACTIVE_TICKET_STATUSES =
+            Set.of(SupportTicket.Status.OPEN, SupportTicket.Status.AWAITING_RESPONSE,
+                    SupportTicket.Status.UNDER_REVIEW, SupportTicket.Status.CONTESTED);
 
     private final SupportTicketRepository tickets;
     private final UserRepository users;
@@ -34,14 +39,17 @@ public class SupportService {
     private final TicketStatementRepository statements;
     private final TicketDecisionRepository decisions;
     private final TicketContestationRepository contestations;
+    private final SupportNotificationRepository notifications;
     private final SupportEvidenceStorage evidenceStorage;
+    private final TicketPriorityService priority;
 
     public SupportService(SupportTicketRepository tickets, UserRepository users,
             TripRepository trips, ReservationRepository reservations,
             TicketCategoryRepository categories, TicketStatusHistoryRepository history,
             TicketEvidenceRepository evidence, TicketStatementRepository statements,
             TicketDecisionRepository decisions, TicketContestationRepository contestations,
-            SupportEvidenceStorage evidenceStorage) {
+            SupportNotificationRepository notifications,
+            SupportEvidenceStorage evidenceStorage, TicketPriorityService priority) {
         this.tickets = tickets;
         this.users = users;
         this.trips = trips;
@@ -52,7 +60,9 @@ public class SupportService {
         this.statements = statements;
         this.decisions = decisions;
         this.contestations = contestations;
+        this.notifications = notifications;
         this.evidenceStorage = evidenceStorage;
+        this.priority = priority;
     }
 
     @Transactional(readOnly = true)
@@ -107,17 +117,70 @@ public class SupportService {
     @Transactional(readOnly = true)
     public List<TicketView> myTickets(UUID userId) {
         return tickets.findVisibleToUser(userId, SUPPORT_PARTICIPANT_STATUSES).stream()
-                .map(TicketView::from).toList();
+                .map(this::ticketView).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportTargetView> reportTargets(UUID userId, UUID tripId) {
+        Trip trip = trips.findById(tripId)
+                .orElseThrow(() -> notFound("trip_not_found", "The selected trip was not found."));
+        if (trip.isDrivenBy(userId)) {
+            return reservations.findByTrip_IdAndStatusIn(
+                            tripId, SUPPORT_PARTICIPANT_STATUSES).stream()
+                    .map(reservation -> new ReportTargetView(
+                            reservation.getPassenger().getId(),
+                            reservation.getPassenger().getFullName(),
+                            reservation.getId(), "PASSENGER"))
+                    .toList();
+        }
+        return reservations.findByTrip_IdAndPassenger_IdAndStatusIn(
+                        tripId, userId, SUPPORT_PARTICIPANT_STATUSES)
+                .map(reservation -> List.of(new ReportTargetView(
+                        trip.getDriver().getId(), trip.getDriver().getFullName(),
+                        reservation.getId(), "DRIVER")))
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN,
+                        "not_trip_participant",
+                        "Only participants can report an issue about this trip."));
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationView> notifications(UUID userId) {
+        return notifications.findByUser_IdOrderByCreatedAtDesc(userId).stream()
+                .map(NotificationView::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadCount unreadCount(UUID userId) {
+        return new UnreadCount(notifications.countByUser_IdAndReadAtIsNull(userId));
+    }
+
+    @Transactional
+    public NotificationView markNotificationRead(UUID userId, UUID notificationId) {
+        SupportNotification notification = notifications.findByIdAndUser_Id(
+                        notificationId, userId)
+                .orElseThrow(() -> notFound(
+                        "notification_not_found", "Support notification not found."));
+        notification.markRead();
+        return NotificationView.from(notification);
     }
 
     @Transactional(readOnly = true)
     public TicketView myTicket(UUID userId, UUID ticketId) {
-        return TicketView.from(participantTicket(userId, ticketId));
+        return ticketView(participantTicket(userId, ticketId));
     }
 
     @Transactional(readOnly = true)
     public List<TicketView> allTickets() {
-        return tickets.findAllByOrderByCreatedAtDesc().stream().map(TicketView::from).toList();
+        Comparator<SupportTicket> adminPriorityOrder = Comparator
+                .comparingInt((SupportTicket ticket) ->
+                        ACTIVE_TICKET_STATUSES.contains(ticket.getStatus()) ? 0 : 1)
+                .thenComparing(SupportTicket::getPriorityScore, Comparator.reverseOrder())
+                .thenComparing(SupportTicket::getDeadline,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(SupportTicket::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder()));
+        return tickets.findAllByOrderByCreatedAtDesc().stream()
+                .sorted(adminPriorityOrder).map(this::ticketView).toList();
     }
 
     @Transactional(readOnly = true)
@@ -125,7 +188,7 @@ public class SupportService {
         SupportTicket ticket = tickets.findDetailedById(ticketId)
                 .orElseThrow(() -> notFound("ticket_not_found", "Support ticket not found."));
         return new AdminTicketDetailsView(
-                TicketView.from(ticket),
+                ticketView(ticket),
                 evidence.findByTicket_IdOrderByCreatedAtAsc(ticketId).stream()
                         .map(EvidenceView::from).toList(),
                 statements.findByTicket_IdOrderByCreatedAtAsc(ticketId).stream()
@@ -197,7 +260,20 @@ public class SupportService {
                 request.reservationId(), reportedUser, category, title, description));
         history.save(new TicketStatusHistory(ticket, null, SupportTicket.Status.OPEN,
                 user, false, "Ticket created"));
-        return TicketView.from(ticket);
+        notifyUser(user, ticket, "TICKET_CREATED", "Support ticket created",
+                ticket.getReference() + " was submitted successfully.");
+        if (reportedUser != null) {
+            ticket.awaitResponse();
+            history.save(new TicketStatusHistory(ticket, SupportTicket.Status.OPEN,
+                    SupportTicket.Status.AWAITING_RESPONSE, user, true,
+                    "Response requested from the reported user"));
+            notifyUser(reportedUser, ticket, "RESPONSE_REQUESTED",
+                    "Your response is requested",
+                    "You are involved in " + ticket.getReference()
+                            + ". Add your statement and evidence before review.");
+        }
+        priority.refresh(ticket);
+        return ticketView(ticket);
     }
 
     @Transactional
@@ -210,7 +286,8 @@ public class SupportService {
         } catch (IllegalStateException error) {
             throw new ApiException(HttpStatus.CONFLICT, "ticket_not_editable", error.getMessage());
         }
-        return TicketView.from(ticket);
+        priority.refresh(ticket);
+        return ticketView(ticket);
     }
 
     @Transactional
@@ -224,7 +301,7 @@ public class SupportService {
         AppUser actor = ticket.getUser();
         history.save(new TicketStatusHistory(ticket, SupportTicket.Status.OPEN,
                 SupportTicket.Status.WITHDRAWN, actor, false, "Withdrawn by its author"));
-        return TicketView.from(ticket);
+        return ticketView(ticket);
     }
 
     @Transactional(readOnly = true)
@@ -257,6 +334,8 @@ public class SupportService {
             TicketEvidence item = evidence.save(new TicketEvidence(ticket, type,
                     stored.fileName(), safeFileName(originalFileName), stored.mimeType(),
                     bytes.length, uploader));
+            notifyOtherParty(ticket, userId, "EVIDENCE_ADDED", "New ticket evidence",
+                    uploader.getFullName() + " added evidence to " + ticket.getReference() + ".");
             return EvidenceView.from(item);
         } catch (RuntimeException exception) {
             evidenceStorage.delete(stored.fileName());
@@ -304,8 +383,11 @@ public class SupportService {
         }
         AppUser author = users.findById(userId).orElseThrow(() -> new ApiException(
                 HttpStatus.UNAUTHORIZED, "account_not_found", "Your account could not be found."));
-        return StatementView.from(statements.save(
-                new TicketStatement(ticket, author, clean(text, 2000, "Statement"))));
+        TicketStatement statement = statements.save(
+                new TicketStatement(ticket, author, clean(text, 2000, "Statement")));
+        notifyOtherParty(ticket, userId, "STATEMENT_ADDED", "New ticket statement",
+                author.getFullName() + " responded to " + ticket.getReference() + ".");
+        return StatementView.from(statement);
     }
 
     @Transactional
@@ -315,6 +397,8 @@ public class SupportService {
         TicketStatement statement = statements.findByTicket_IdAndAuthor_Id(ticketId, userId)
                 .orElseThrow(() -> notFound("statement_not_found", "Statement not found."));
         statement.edit(clean(text, 2000, "Statement"));
+        notifyOtherParty(ticket, userId, "STATEMENT_UPDATED", "Ticket statement updated",
+                "A statement was updated in " + ticket.getReference() + ".");
         return StatementView.from(statement);
     }
 
@@ -380,6 +464,8 @@ public class SupportService {
         ticket.contest();
         history.save(new TicketStatusHistory(ticket, previous, SupportTicket.Status.CONTESTED,
                 user, false, "Decision contested"));
+        notifyOtherParty(ticket, userId, "TICKET_CONTESTED", "Decision contested",
+                ticket.getReference() + " has been contested.");
         return ContestationView.from(contestation);
     }
 
@@ -405,7 +491,9 @@ public class SupportService {
         }
         history.save(new TicketStatusHistory(ticket, previous, next, agent, false,
                 clean(reason, 500, "Status reason")));
-        return TicketView.from(ticket);
+        notifyTicketParties(ticket, "STATUS_CHANGED", "Ticket status updated",
+                ticket.getReference() + " is now " + next.name().replace('_', ' ') + ".");
+        return ticketView(ticket);
     }
 
     @Transactional
@@ -446,12 +534,75 @@ public class SupportService {
         ticket.resolve(request.reason().strip());
         history.save(new TicketStatusHistory(ticket, previous, SupportTicket.Status.RESOLVED,
                 agent, false, "Support decision recorded"));
+        notifyTicketParties(ticket, "DECISION_RECORDED", "Support decision available",
+                "A decision was recorded for " + ticket.getReference() + ".");
         return DecisionView.from(decision);
+    }
+
+    private void notifyOtherParty(SupportTicket ticket, UUID actorId, String type,
+            String title, String message) {
+        AppUser opener = ticket.getUser();
+        if (opener != null && !opener.getId().equals(actorId)) {
+            notifyUser(opener, ticket, type, title, message);
+            return;
+        }
+        AppUser reported = ticket.getReportedUser();
+        if (reported != null && !reported.getId().equals(actorId)) {
+            notifyUser(reported, ticket, type, title, message);
+            return;
+        }
+        if (ticket.getReservationId() != null) {
+            reservations.findById(ticket.getReservationId()).ifPresent(reservation -> {
+                AppUser other = reservation.isHeldBy(actorId)
+                        ? reservation.getTrip().getDriver() : reservation.getPassenger();
+                if (!other.getId().equals(actorId)) {
+                    notifyUser(other, ticket, type, title, message);
+                }
+            });
+        }
+    }
+
+    private void notifyTicketParties(SupportTicket ticket, String type,
+            String title, String message) {
+        Set<UUID> notified = new HashSet<>();
+        notifyOnce(ticket.getUser(), ticket, type, title, message, notified);
+        notifyOnce(ticket.getReportedUser(), ticket, type, title, message, notified);
+        if (ticket.getReservationId() != null && ticket.getReportedUser() == null) {
+            reservations.findById(ticket.getReservationId()).ifPresent(reservation -> {
+                notifyOnce(reservation.getPassenger(), ticket, type, title, message, notified);
+                notifyOnce(reservation.getTrip().getDriver(), ticket,
+                        type, title, message, notified);
+            });
+        }
+    }
+
+    private void notifyOnce(AppUser user, SupportTicket ticket, String type,
+            String title, String message, Set<UUID> notified) {
+        if (user != null && notified.add(user.getId())) {
+            notifyUser(user, ticket, type, title, message);
+        }
+    }
+
+    private void notifyUser(AppUser user, SupportTicket ticket, String type,
+            String title, String message) {
+        if (user != null) {
+            notifications.save(new SupportNotification(user, ticket, type, title, message));
+        }
     }
 
     private List<ContestationView> contestationViews(UUID ticketId) {
         return contestations.findByTicket_IdOrderByCreatedAtAsc(ticketId).stream()
                 .map(ContestationView::from).toList();
+    }
+
+    private TicketView ticketView(SupportTicket ticket) {
+        String tripLabel = null;
+        if (ticket.getTripId() != null) {
+            tripLabel = trips.findById(ticket.getTripId())
+                    .map(trip -> trip.getOriginLabel() + " → " + trip.getDestinationLabel())
+                    .orElse("Trip unavailable");
+        }
+        return TicketView.from(ticket, tripLabel);
     }
 
     private SupportTicket participantTicket(UUID userId, UUID ticketId) {
@@ -574,6 +725,9 @@ public class SupportService {
         }
     }
 
+    public record ReportTargetView(UUID userId, String fullName, UUID reservationId,
+            String role) { }
+
     public record TicketRequest(UUID tripId, UUID reservationId, UUID categoryId,
             String category, String title, String description) { }
 
@@ -586,19 +740,29 @@ public class SupportService {
     public record StatusRequest(SupportTicket.Status status, String reason) { }
 
     public record TicketView(UUID id, String reference, UUID userId, String userName,
-            String userEmail, UUID tripId, UUID reservationId, UUID reportedUserId,
-            UUID categoryId, String category, String title, String description,
+            String userEmail, UUID tripId, String tripLabel, UUID reservationId,
+            UUID reportedUserId,
+            String reportedUserName, String reportedUserRole, UUID categoryId,
+            String category, String title, String description,
             java.math.BigDecimal priorityScore, SupportTicket.Status status,
             String resolution, Instant deadline, Instant createdAt, Instant updatedAt) {
-        public static TicketView from(SupportTicket ticket) {
+        public static TicketView from(SupportTicket ticket, String tripLabel) {
             AppUserView user = AppUserView.from(ticket.getUser());
             return new TicketView(ticket.getId(), ticket.getReference(), user.id(), user.name(),
-                    user.email(), ticket.getTripId(), ticket.getReservationId(),
+                    user.email(), ticket.getTripId(), tripLabel, ticket.getReservationId(),
                     ticket.getReportedUser() == null ? null : ticket.getReportedUser().getId(),
+                    ticket.getReportedUser() == null ? null
+                            : ticket.getReportedUser().getFullName(),
+                    ticket.getReportedUser() == null ? null
+                            : ticket.getReportedUser().getRole().name(),
                     ticket.getCategoryDefinition().getId(), ticket.getCategory(), ticket.getTitle(),
                     ticket.getDescription(), ticket.getPriorityScore(), ticket.getStatus(),
                     ticket.getResolution(), ticket.getDeadline(), ticket.getCreatedAt(),
                     ticket.getUpdatedAt());
+        }
+
+        public static TicketView from(SupportTicket ticket) {
+            return from(ticket, null);
         }
     }
 
@@ -608,11 +772,12 @@ public class SupportService {
 
     public record EvidenceView(UUID id, UUID ticketId, TicketEvidence.Type type,
             String originalFileName, String contentType, long fileSize, UUID uploadedByUserId,
-            Instant createdAt) {
+            String uploadedByName, Instant createdAt) {
         public static EvidenceView from(TicketEvidence item) {
             return new EvidenceView(item.getId(), item.getTicket().getId(), item.getType(),
                     item.getOriginalFileName(), item.getContentType(), item.getFileSize(),
                     item.getUploadedBy() == null ? null : item.getUploadedBy().getId(),
+                    item.getUploadedBy() == null ? "System" : item.getUploadedBy().getFullName(),
                     item.getCreatedAt());
         }
     }
@@ -663,6 +828,19 @@ public class SupportService {
                     item.getReason(), item.getCreatedAt());
         }
     }
+
+    public record NotificationView(UUID id, UUID ticketId, String ticketReference,
+            String type, String title, String message, boolean read, Instant createdAt) {
+        public static NotificationView from(SupportNotification notification) {
+            return new NotificationView(notification.getId(),
+                    notification.getTicket().getId(),
+                    notification.getTicket().getReference(), notification.getType(),
+                    notification.getTitle(), notification.getMessage(),
+                    notification.getReadAt() != null, notification.getCreatedAt());
+        }
+    }
+
+    public record UnreadCount(long count) { }
 
     private record AppUserView(UUID id, String name, String email) {
         static AppUserView from(AppUser user) {

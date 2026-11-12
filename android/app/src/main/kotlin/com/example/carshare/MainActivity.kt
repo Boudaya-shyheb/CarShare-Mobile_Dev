@@ -24,6 +24,25 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             SUPPORT_DOCUMENT_PICKER_CHANNEL,
         ).setMethodCallHandler { call, result ->
+            if (call.method == "readDocument") {
+                val value = call.argument<String>("uri")
+                if (value == null) {
+                    result.error("invalid_document", "The document URI is missing.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val bytes = contentResolver.openInputStream(android.net.Uri.parse(value))
+                        ?.use { input -> input.readBytes() }
+                    if (bytes == null || bytes.isEmpty() || bytes.size > 5 * 1024 * 1024) {
+                        result.error("invalid_document_size", "Choose a document no larger than 5 MB.", null)
+                    } else {
+                        result.success(bytes)
+                    }
+                } catch (error: Exception) {
+                    result.error("document_read_failed", "The document could not be read.", null)
+                }
+                return@setMethodCallHandler
+            }
             if (call.method != "pickDocument") {
                 result.notImplemented()
                 return@setMethodCallHandler

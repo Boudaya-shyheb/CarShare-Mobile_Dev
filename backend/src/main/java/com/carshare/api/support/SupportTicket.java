@@ -62,6 +62,7 @@ public class SupportTicket {
     @Column(name = "withdrawn_at") private Instant withdrawnAt;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
+    @Column(name = "priority_calculated_at") private Instant priorityCalculatedAt;
 
     protected SupportTicket() { }
 
@@ -76,7 +77,7 @@ public class SupportTicket {
         this.category = category.getName();
         this.title = title;
         this.description = description;
-        this.deadline = Instant.now().plusSeconds(category.getResponseDelayHours() * 3600L);
+        this.deadline = Instant.now().plusSeconds(slaHours(category) * 3600L);
     }
 
     public SupportTicket(AppUser user, UUID tripId, TicketCategory category, String title,
@@ -122,7 +123,7 @@ public class SupportTicket {
         this.category = category.getName();
         this.title = title;
         this.description = description;
-        this.deadline = createdAt.plusSeconds(category.getResponseDelayHours() * 3600L);
+        this.deadline = createdAt.plusSeconds(slaHours(category) * 3600L);
     }
 
     public void withdraw() {
@@ -147,6 +148,17 @@ public class SupportTicket {
         status = next;
     }
 
+    public void updatePriority(BigDecimal score) {
+        priorityScore = score;
+        priorityCalculatedAt = Instant.now();
+    }
+
+    public void assignTo(AppUser agent) { assignedAgent = agent; }
+
+    private static int slaHours(TicketCategory category) {
+        return category.getPriority() == TicketCategory.Priority.HIGH ? 24 : 72;
+    }
+
     public UUID getId() { return id; }
     public String getReference() { return reference; }
     public AppUser getUser() { return user; }
@@ -166,4 +178,5 @@ public class SupportTicket {
     public Instant getWithdrawnAt() { return withdrawnAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public Instant getPriorityCalculatedAt() { return priorityCalculatedAt; }
 }
