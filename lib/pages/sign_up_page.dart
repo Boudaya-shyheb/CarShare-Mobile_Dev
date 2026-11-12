@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme.dart';
-import '../widgets/form_field.dart';
+import '../widgets/labeled_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/round_back_button.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -95,96 +96,93 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => Navigator.maybePop(context),
+    appBar: roundBackAppBar(
+      context,
+      onBack: () => Navigator.maybePop(context),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: carShareTint,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: const Text(
+          'Join CarShare',
+          style: TextStyle(
+            color: carShareGreen,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
       ),
     ),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
+          // The whole form scrolls, so Create account can always be reached, with or
+          // without the keyboard open; dragging the form closes the keyboard.
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 30),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD1FAE5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 7,
-                        ),
-                        child: Text(
-                          'Join CarShare',
-                          style: TextStyle(
-                            color: carShareGreen,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
+                  const Text(
+                    'Create your account',
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.5,
+                      color: carShareText,
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Create your account',
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   const Text(
-                    'Tell us a little about yourself.',
-                    style: TextStyle(color: Color(0xFF718096)),
+                    'Tell us who you are and how you’ll use CarShare.',
+                    style: TextStyle(color: carShareMuted, fontSize: 15),
                   ),
-                  const SizedBox(height: 22),
-                  CarShareTextField(
+                  const SizedBox(height: 28),
+                  LabeledTextField(
                     controller: _fullName,
-                    label: 'Full Name',
-                    icon: Icons.person_outline,
+                    label: 'Full name',
+                    hintText: 'Your full name',
                     validator: (v) => _required(v, 'Name'),
                     textInputAction: TextInputAction.next,
                   ),
-                  const SizedBox(height: 14),
-                  CarShareTextField(
+                  const SizedBox(height: 18),
+                  LabeledTextField(
                     controller: _phone,
                     label: 'Phone',
-                    icon: Icons.phone_outlined,
+                    hintText: '+216 55 123 456',
                     validator: _validatePhone,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
                   ),
-                  const SizedBox(height: 14),
-                  CarShareTextField(
+                  const SizedBox(height: 18),
+                  LabeledTextField(
                     controller: _email,
                     label: 'Email',
-                    icon: Icons.email_outlined,
+                    hintText: 'you@example.com',
                     validator: _validateEmail,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                   ),
-                  const SizedBox(height: 14),
-                  CarShareTextField(
+                  const SizedBox(height: 18),
+                  LabeledTextField(
                     controller: _password,
                     label: 'Password',
-                    icon: Icons.lock_outline,
+                    hintText: 'At least 8 characters',
                     validator: _validatePassword,
                     obscureText: true,
                     textInputAction: TextInputAction.next,
                   ),
-                  const SizedBox(height: 14),
-                  CarShareTextField(
+                  const SizedBox(height: 18),
+                  LabeledTextField(
                     controller: _confirmPassword,
-                    label: 'Confirm Password',
-                    icon: Icons.lock_reset_outlined,
+                    label: 'Confirm password',
+                    hintText: 'Type it again',
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please confirm your password.';
@@ -197,62 +195,68 @@ class _SignUpPageState extends State<SignUpPage> {
                     obscureText: true,
                     textInputAction: TextInputAction.done,
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'I want to...',
-                    style: Theme.of(context).textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'I want to…',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: carShareText,
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _RoleCard(
-                          title: 'Ride as passenger',
-                          subtitle: 'Find & book seats',
-                          icon: Icons.groups_rounded,
-                          selected: _role == 'passenger',
-                          onTap: () => setState(() {
-                            _role = 'passenger';
-                            _showRoleError = false;
-                          }),
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _RoleCard(
+                            title: 'Ride as passenger',
+                            subtitle: 'Find & book seats',
+                            icon: Icons.groups_rounded,
+                            selected: _role == 'passenger',
+                            onTap: () => setState(() {
+                              _role = 'passenger';
+                              _showRoleError = false;
+                            }),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _RoleCard(
-                          title: 'Drive & share',
-                          subtitle: 'Offer seats on my route',
-                          icon: Icons.directions_car_filled_rounded,
-                          selected: _role == 'driver',
-                          onTap: () => setState(() {
-                            _role = 'driver';
-                            _showRoleError = false;
-                          }),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _RoleCard(
+                            title: 'Drive & share',
+                            subtitle: 'Offer seats on my route',
+                            icon: Icons.directions_car_outlined,
+                            selected: _role == 'driver',
+                            onTap: () => setState(() {
+                              _role = 'driver';
+                              _showRoleError = false;
+                            }),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   if (_showRoleError && _role == null)
                     const Padding(
                       padding: EdgeInsets.only(top: 7, left: 4),
                       child: Text(
                         'Please select a role.',
-                        style: TextStyle(color: Colors.red, fontSize: 12),
+                        style: TextStyle(color: carShareDanger, fontSize: 12),
                       ),
                     ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 24),
                   PrimaryButton(
                     label: 'Create account',
                     loading: _loading,
                     onPressed: _createAccount,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   const Center(
                     child: Text(
                       'By continuing, you agree to our Terms & Privacy Policy.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF87939B), fontSize: 11),
+                      style: TextStyle(color: carShareMuted, fontSize: 12),
                     ),
                   ),
                 ],
@@ -265,6 +269,8 @@ class _SignUpPageState extends State<SignUpPage> {
   );
 }
 
+/// One of the two role choices: an icon tile, a check badge, the title and a short line. The
+/// chosen card turns mint with a green border, like the mockup.
 class _RoleCard extends StatelessWidget {
   const _RoleCard({
     required this.title,
@@ -285,17 +291,16 @@ class _RoleCard extends StatelessWidget {
     selected: selected,
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(12),
-        height: 116,
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFD1FAE5) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: selected ? carShareTint : Colors.white,
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? carShareGreen : const Color(0xFFDCE4E9),
-            width: selected ? 1.5 : 1,
+            color: selected ? carShareGreen : carShareBorder,
+            width: selected ? 2 : 1,
           ),
         ),
         child: Column(
@@ -303,29 +308,40 @@ class _RoleCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  icon,
-                  color: selected ? carShareGreen : const Color(0xFF718096),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: selected ? carShareGreen : carShareBackground,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: selected ? Colors.white : carShareMuted,
+                  ),
                 ),
                 const Spacer(),
                 Icon(
                   selected ? Icons.check_circle : Icons.circle_outlined,
-                  size: 19,
-                  color: selected ? carShareGreen : const Color(0xFFCBD5E0),
+                  size: 24,
+                  color: selected ? carShareGreen : carShareBorder,
                 ),
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 14),
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                color: carShareText,
+              ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Text(
               subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10, color: Color(0xFF718096)),
+              style: const TextStyle(fontSize: 13, color: carShareMuted),
             ),
           ],
         ),

@@ -4,6 +4,7 @@ import '../models/reservation.dart';
 import '../models/trip.dart';
 import '../models/trip_event.dart';
 import '../models/trip_search_result.dart';
+import '../models/user_trip_stats.dart';
 import 'api_client.dart';
 
 /// One method per endpoint of the reservation module.
@@ -16,6 +17,12 @@ class ReservationService {
   static final ReservationService instance = ReservationService._();
 
   final ApiClient _api = ApiClient.instance;
+
+  // --- profile ------------------------------------------------------------------------------
+
+  /// The signed-in user's trip figures for the Profile card: completed trips, rating, no-shows.
+  Future<UserTripStats> myStats() async =>
+      UserTripStats.fromJson(await _api.get('/users/me/stats'));
 
   // --- trips --------------------------------------------------------------------------------
 

@@ -4,6 +4,8 @@ import '../models/vehicle.dart';
 import '../models/vehicle_registration.dart';
 import '../services/vehicle_service.dart';
 import '../theme.dart';
+import '../widgets/round_back_button.dart';
+import '../widgets/status_chip.dart';
 import '../widgets/vehicle_photo_image.dart';
 import 'vehicle_form_page.dart';
 
@@ -88,7 +90,10 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: carShareDanger),
+            ),
           ),
         ],
       ),
@@ -113,8 +118,10 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Vehicle Details'),
+    backgroundColor: carShareBackground,
+    appBar: roundBackAppBar(
+      context,
+      title: 'Vehicle details',
       actions: [
         IconButton(
           tooltip: 'Edit vehicle',
@@ -126,6 +133,7 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
           onPressed: _loading ? null : _deleteVehicle,
           icon: const Icon(Icons.delete_outline),
         ),
+        const SizedBox(width: 12),
       ],
     ),
     body: _loading
@@ -135,56 +143,80 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 680),
                 child: ListView(
-                  padding: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   children: [
-                    SizedBox(
-                      height: 260,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (_vehicle.photos.isEmpty)
-                            const ColoredBox(
-                              color: Color(0xFFF1F5F4),
-                              child: Icon(
-                                Icons.directions_car_outlined,
-                                size: 72,
-                                color: Color(0xFF718096),
-                              ),
-                            )
-                          else
-                            PageView.builder(
-                              controller: _photoController,
-                              itemCount: _vehicle.photos.length,
-                              onPageChanged: (index) =>
-                                  setState(() => _currentPhoto = index),
-                              itemBuilder: (context, index) =>
-                                  VehiclePhotoImage(
-                                    url: _vehicle.photos[index].url,
-                                    width: double.infinity,
-                                    height: 260,
-                                  ),
-                            ),
-                          if (_vehicle.photos.isNotEmpty &&
-                              _vehicle.photos[_currentPhoto].id ==
-                                  _vehicle.primaryPhoto?.id)
-                            const Positioned(
-                              top: 8,
-                              left: 12,
-                              child: Chip(
-                                avatar: Icon(
-                                  Icons.star,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(carShareCardRadius),
+                      child: SizedBox(
+                        height: 230,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (_vehicle.photos.isEmpty)
+                              const ColoredBox(
+                                color: carShareTint,
+                                child: Icon(
+                                  Icons.directions_car_outlined,
+                                  size: 72,
                                   color: carShareGreen,
-                                  size: 18,
                                 ),
-                                label: Text('Primary photo'),
+                              )
+                            else
+                              PageView.builder(
+                                controller: _photoController,
+                                itemCount: _vehicle.photos.length,
+                                onPageChanged: (index) =>
+                                    setState(() => _currentPhoto = index),
+                                itemBuilder: (context, index) =>
+                                    VehiclePhotoImage(
+                                      url: _vehicle.photos[index].url,
+                                      width: double.infinity,
+                                      height: 230,
+                                    ),
                               ),
-                            ),
-                        ],
+                            if (_vehicle.photos.isNotEmpty &&
+                                _vehicle.photos[_currentPhoto].id ==
+                                    _vehicle.primaryPhoto?.id)
+                              Positioned(
+                                top: 12,
+                                left: 12,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.star_rounded,
+                                        color: carShareGreen,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Primary photo',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: carShareText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     if (_vehicle.photos.length > 1)
                       Padding(
-                        padding: const EdgeInsets.only(top: 10),
+                        padding: const EdgeInsets.only(top: 12),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
@@ -197,70 +229,84 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                                 shape: BoxShape.circle,
                                 color: index == _currentPhoto
                                     ? carShareGreen
-                                    : const Color(0xFFDCE4E9),
+                                    : carShareBorder,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${_vehicle.brand} ${_vehicle.model}',
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.w800),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${_vehicle.brand} ${_vehicle.model}',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: carShareText,
                             ),
                           ),
-                          if (_vehicle.isDefault)
-                            const Chip(
-                              avatar: Icon(
-                                Icons.star_rounded,
-                                color: carShareGreen,
-                                size: 18,
-                              ),
-                              label: Text('Default'),
-                            ),
-                        ],
-                      ),
+                        ),
+                        if (_vehicle.isDefault)
+                          const StatusChip(
+                            label: 'Default',
+                            colour: carShareGreen,
+                          ),
+                      ],
                     ),
                     if (_vehicle.status == 'REPORTED')
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.only(top: 8),
                         child: Text(
                           'This vehicle has been reported and cannot be used for a new trip.',
-                          style: TextStyle(color: Colors.redAccent),
+                          style: TextStyle(color: carShareDanger),
                         ),
                       ),
-                    _detail('Year', '${_vehicle.year}', Icons.calendar_today),
-                    _detail('Color', _vehicle.color, Icons.palette_outlined),
-                    _detail(
-                      'Registration number',
-                      displayVehicleRegistration(_vehicle.registrationNumber),
-                      Icons.pin_outlined,
+                    const SizedBox(height: 14),
+                    _surface(
+                      child: Column(
+                        children: [
+                          _detail('Year', '${_vehicle.year}', Icons.event),
+                          _detail(
+                            'Color',
+                            _vehicle.color,
+                            Icons.palette_outlined,
+                          ),
+                          _detail(
+                            'Registration number',
+                            displayVehicleRegistration(
+                              _vehicle.registrationNumber,
+                            ),
+                            Icons.pin_outlined,
+                          ),
+                          _detail(
+                            'Seats',
+                            '${_vehicle.seatsNumber}',
+                            Icons.event_seat_outlined,
+                          ),
+                          _detail(
+                            'Trunk size',
+                            _titleCase(_vehicle.trunkSize),
+                            Icons.luggage_outlined,
+                          ),
+                          _detail(
+                            'Air conditioning',
+                            _vehicle.airConditioning
+                                ? 'Available'
+                                : 'Not available',
+                            Icons.ac_unit,
+                          ),
+                          _detail(
+                            'Status',
+                            _titleCase(_vehicle.status),
+                            Icons.info_outline,
+                            last: true,
+                          ),
+                        ],
+                      ),
                     ),
-                    _detail(
-                      'Seats',
-                      '${_vehicle.seatsNumber}',
-                      Icons.event_seat_outlined,
-                    ),
-                    _detail(
-                      'Trunk size',
-                      _titleCase(_vehicle.trunkSize),
-                      Icons.luggage_outlined,
-                    ),
-                    _detail(
-                      'Air conditioning',
-                      _vehicle.airConditioning ? 'Available' : 'Not available',
-                      Icons.ac_unit,
-                    ),
-                    _detail(
-                      'Status',
-                      _titleCase(_vehicle.status),
-                      Icons.info_outline,
-                    ),
+                    const SizedBox(height: 16),
                     _documentSection(),
                   ],
                 ),
@@ -269,37 +315,75 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
           ),
   );
 
-  Widget _detail(String label, String value, IconData icon) => ListTile(
-    leading: Icon(icon, color: carShareGreen),
-    title: Text(label),
-    trailing: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 180),
-      child: Text(
-        value,
-        textAlign: TextAlign.end,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
+  /// White rounded card with the app's soft shadow: the container of every block on the page.
+  Widget _surface({required Widget child}) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(carShareCardRadius),
+      boxShadow: const [carShareCardShadow],
     ),
+    child: child,
   );
 
-  Widget _documentSection() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// One row of the details card. Label and value share one size; the value is the bold one.
+  Widget _detail(
+    String label,
+    String value,
+    IconData icon, {
+    bool last = false,
+  }) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
           children: [
-            Text(
-              'Vehicle documents',
-              style: Theme.of(context).textTheme.titleMedium,
+            Icon(icon, color: carShareGreen, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 15, color: carShareMuted),
+              ),
             ),
-            const SizedBox(height: 8),
-            _documentRow('Insurance', _vehicle.insuranceExpiryDate),
-            const Divider(height: 18),
-            _documentRow('Technical inspection', _vehicle.inspectionExpiryDate),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: carShareText,
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+      if (!last) const Divider(indent: 48),
+    ],
+  );
+
+  Widget _documentSection() => _surface(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Vehicle documents',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: carShareText,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _documentRow('Insurance', _vehicle.insuranceExpiryDate),
+          const Divider(height: 24),
+          _documentRow('Technical inspection', _vehicle.inspectionExpiryDate),
+        ],
       ),
     ),
   );
@@ -308,25 +392,42 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
     if (expiry == null) {
       return Row(
         children: [
-          Expanded(child: Text(label)),
-          const Text('Not set', style: TextStyle(color: Color(0xFF718096))),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 15, color: carShareMuted),
+            ),
+          ),
+          const Text(
+            'Not set',
+            style: TextStyle(fontSize: 15, color: carShareMuted),
+          ),
         ],
       );
     }
 
     final reminder = vehicleDocumentReminder(expiry);
     final reminderColor = reminder == 'Expired'
-        ? Theme.of(context).colorScheme.error
-        : const Color(0xFFB45309);
+        ? carShareDanger
+        : carShareWarning;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Expanded(child: Text(label)),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 15, color: carShareMuted),
+              ),
+            ),
             Text(
               MaterialLocalizations.of(context).formatMediumDate(expiry),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: carShareText,
+              ),
             ),
           ],
         ),
@@ -336,8 +437,8 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
             reminder,
             style: TextStyle(
               color: reminderColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

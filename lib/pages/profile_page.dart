@@ -9,6 +9,7 @@ import '../services/user_management_service.dart';
 import '../theme.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/profile_stats_card.dart';
 import 'preferences_page.dart';
 import 'sanctions_page.dart';
 import 'emergency_contacts_page.dart';
@@ -259,96 +260,30 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.only(bottom: 32),
+                padding: EdgeInsets.zero,
                 children: [
                   _buildHeader(user),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  // Pulled up over the header's bottom edge (the header has that much extra
+                  // padding): that is how the stats card overlaps it in the mockup.
+                  Transform.translate(
+                    offset: const Offset(0, -_headerOverlap),
+                    child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                     child: Column(
                       children: [
+                        const ProfileStatsCard(),
                         _statusCard(user.status, user.statusUntil),
                         const SizedBox(height: 12),
                         Card(
                     color: Colors.white,
-                    elevation: 0,
+                    elevation: 4,
+                    shadowColor: const Color(0x22000000),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(carShareCardRadius),
-                      side: const BorderSide(color: carShareBorder),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
-                        // Vehicles belong to drivers only; a passenger never sees this row.
-                        if (user.role.toLowerCase() == 'driver') ...[
-                          _menuRow(
-                            icon: Icons.directions_car_outlined,
-                            title: 'My vehicles',
-                            subtitle: 'Add or manage your vehicles',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const MyVehiclesPage(),
-                              ),
-                            ),
-                          ),
-                          _rowDivider,
-                        ],
-                        _menuRow(
-                          icon: Icons.tune_rounded,
-                          title: 'Preferences',
-                          subtitle:
-                              'Language, saved places, and ride preferences',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const PreferencesPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.contact_phone_outlined,
-                          title: 'Emergency contacts',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const EmergencyContactsPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.history,
-                          title: 'Sanction history',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SanctionsPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.search_rounded,
-                          title: 'Lost & Found',
-                          subtitle: 'Report or follow a lost item',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => LostAndFoundPage(
-                                key: ValueKey(user.id),
-                                userId: user.id,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
-                        _menuRow(
-                          icon: Icons.support_agent_outlined,
-                          title: 'Help & support',
-                          subtitle: 'Report a problem or view tickets',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SupportPage(),
-                            ),
-                          ),
-                        ),
-                        _rowDivider,
                         // The existing edit form, unchanged, behind one row. It stays built
                         // while collapsed so the Form key and the controllers keep working.
                         ExpansionTile(
@@ -357,6 +292,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           maintainState: true,
                           shape: const Border(),
                           collapsedShape: const Border(),
+                          visualDensity: const VisualDensity(vertical: -1),
                           tilePadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                           ),
@@ -366,10 +302,14 @@ class _ProfilePageState extends State<ProfilePage> {
                             16,
                             20,
                           ),
-                          leading: _menuIcon(Icons.edit_outlined),
+                          leading: _menuIcon(Icons.person_outline),
                           title: const Text(
-                            'Edit profile',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                            'Personal information',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              color: carShareText,
+                            ),
                           ),
                           children: [
                             CarShareTextField(
@@ -478,6 +418,72 @@ class _ProfilePageState extends State<ProfilePage> {
                           ],
                         ),
                         _rowDivider,
+                        // Vehicles belong to drivers only; a passenger never sees this row.
+                        if (user.role.toLowerCase() == 'driver') ...[
+                          _menuRow(
+                            icon: Icons.directions_car_outlined,
+                            title: 'My vehicles',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const MyVehiclesPage(),
+                              ),
+                            ),
+                          ),
+                          _rowDivider,
+                        ],
+                        _menuRow(
+                          icon: Icons.tune_rounded,
+                          title: 'Preferences',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const PreferencesPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.contact_phone_outlined,
+                          title: 'Emergency contacts',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const EmergencyContactsPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.history,
+                          title: 'Sanction history',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SanctionsPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.search_rounded,
+                          title: 'Lost & Found',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => LostAndFoundPage(
+                                key: ValueKey(user.id),
+                                userId: user.id,
+                              ),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
+                        _menuRow(
+                          icon: Icons.support_agent_outlined,
+                          title: 'Help & support',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SupportPage(),
+                            ),
+                          ),
+                        ),
+                        _rowDivider,
                         _menuRow(
                           icon: Icons.logout_rounded,
                           title: 'Log out',
@@ -490,6 +496,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
+                  ),
+                  // The pull-up leaves this much empty space at the end of the list.
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -499,36 +508,39 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  static const _rowDivider = Divider(
-    height: 1,
-    indent: 72,
-    color: carShareBorder,
-  );
+  /// How far the content under the header is pulled up over it.
+  static const _headerOverlap = 50.0;
+
+  /// The mockup draws the rows with no lines between them, only a little air.
+  static const _rowDivider = SizedBox(height: 2);
 
   Widget _menuIcon(IconData icon, {bool danger = false}) => CircleAvatar(
-    radius: 20,
-    backgroundColor: danger ? const Color(0xFFFEE2E2) : carShareTint,
-    child: Icon(icon, size: 20, color: danger ? carShareDanger : carShareGreen),
+    radius: 18,
+    backgroundColor: danger ? carShareDangerTint : carShareTint,
+    child: Icon(icon, size: 18, color: danger ? carShareDanger : carShareGreen),
   );
 
   Widget _menuRow({
     required IconData icon,
     required String title,
-    String? subtitle,
     required VoidCallback onTap,
     bool danger = false,
   }) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+    // 52 dp rows with one line of text, as in the mockup.
+    visualDensity: const VisualDensity(vertical: -1),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
     leading: _menuIcon(icon, danger: danger),
     title: Text(
       title,
       style: TextStyle(
         fontWeight: FontWeight.w600,
+        fontSize: 16,
         color: danger ? carShareDanger : carShareText,
       ),
     ),
-    subtitle: subtitle == null ? null : Text(subtitle),
-    trailing: danger ? null : const Icon(Icons.chevron_right),
+    trailing: danger
+        ? null
+        : const Icon(Icons.chevron_right, color: carShareMuted),
     onTap: onTap,
   );
 
@@ -540,15 +552,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// Profile summary styled to match the reference screen.
   Widget _buildHeader(UserProfile user) => Container(
-    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+    padding: const EdgeInsets.fromLTRB(20, 12, 20, 30 + _headerOverlap),
     decoration: BoxDecoration(
       borderRadius: const BorderRadius.vertical(
-        bottom: Radius.circular(30),
+        bottom: Radius.circular(32),
       ),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [carShareGreen, carShareGreenDark],
+        colors: [carShareSuccess, carShareGreen, carShareGreenDark],
       ),
     ),
     child: Column(
@@ -560,7 +572,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 'Profile',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 17,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -577,30 +589,30 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
         Container(
-          padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.all(4),
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
           ),
           child: _buildAvatar(user.hasProfilePhoto),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Text(
           user.fullName,
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(color: Colors.transparent),
           child: Text(
             '${_roleLabel(user.role)} · Member since ${user.createdAt.year}',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ),
       ],
@@ -623,36 +635,50 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _formatDate(DateTime date) => date.toIso8601String().substring(0, 10);
 
+  /// The small round buttons on the avatar's lower corners: 32 dp with a white ring, like the
+  /// mockup's verified badge.
+  static final _badgeStyle = IconButton.styleFrom(
+    minimumSize: const Size(32, 32),
+    padding: EdgeInsets.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    side: const BorderSide(color: Colors.white, width: 3),
+  );
+
   Widget _buildAvatar(bool hasPhoto) => Stack(
     clipBehavior: Clip.none,
     children: [
       CircleAvatar(
-        radius: 42,
-        backgroundColor: const Color(0xFFD1FAE5),
+        radius: 46,
+        backgroundColor: carShareWarningTint,
         child: _photoFuture == null
-            ? const Icon(Icons.person_rounded, color: carShareGreen, size: 46)
+            ? const Icon(
+                Icons.person_rounded,
+                color: Color(0xFFD97706),
+                size: 54,
+              )
             : FutureBuilder<Uint8List>(
                 future: _photoFuture,
                 builder: (context, snapshot) => snapshot.hasData
                     ? ClipOval(
                         child: Image.memory(
                           snapshot.data!,
-                          width: 84,
-                          height: 84,
+                          width: 92,
+                          height: 92,
                           fit: BoxFit.cover,
                         ),
                       )
                     : const Icon(
                         Icons.person_rounded,
-                        color: carShareGreen,
-                        size: 46,
+                        color: Color(0xFFD97706),
+                        size: 54,
                       ),
               ),
       ),
       Positioned(
-        right: -4,
-        bottom: -4,
+        right: -2,
+        bottom: -2,
         child: IconButton.filled(
+          style: _badgeStyle,
           tooltip: _photoLoading ? 'Uploading photo' : 'Change profile photo',
           onPressed: _photoLoading ? null : _pickPhoto,
           icon: _photoLoading
@@ -661,17 +687,18 @@ class _ProfilePageState extends State<ProfilePage> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.camera_alt_outlined, size: 18),
+              : const Icon(Icons.camera_alt_outlined, size: 15),
         ),
       ),
       if (hasPhoto)
         Positioned(
-          left: -4,
-          bottom: -4,
+          left: -2,
+          bottom: -2,
           child: IconButton.filledTonal(
+            style: _badgeStyle,
             tooltip: 'Remove profile photo',
             onPressed: _photoLoading ? null : _removePhoto,
-            icon: const Icon(Icons.delete_outline, size: 18),
+            icon: const Icon(Icons.delete_outline, size: 15),
           ),
         ),
     ],
@@ -692,6 +719,11 @@ class _ProfilePageState extends State<ProfilePage> {
         ? 'Contact CarShare support for assistance.'
         : 'Your account is in good standing.';
     return Card(
+      elevation: 4,
+      shadowColor: const Color(0x22000000),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(carShareCardRadius),
+      ),
       child: ListTile(
         leading: Icon(
           status == 'ACTIVE'

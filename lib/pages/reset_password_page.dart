@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../widgets/form_field.dart';
+import '../theme.dart';
+import '../widgets/labeled_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/round_back_button.dart';
 import 'sign_in_page.dart';
 
 class ResetPasswordPage extends StatefulWidget {
@@ -61,7 +63,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Reset password')),
+    appBar: roundBackAppBar(context),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -80,23 +82,28 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Choose a new password',
-          style: Theme.of(context).textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.w800),
+          style: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -.5,
+            color: carShareText,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
           widget.token.isEmpty
               ? 'Enter the 6-digit code from your email and choose a new password.'
               : 'Your password must contain at least 8 characters.',
+          style: const TextStyle(color: carShareMuted, fontSize: 15),
         ),
         const SizedBox(height: 28),
         if (widget.token.isEmpty) ...[
-          CarShareTextField(
+          LabeledTextField(
             controller: _token,
             label: 'Email reset code',
-            icon: Icons.pin_outlined,
+            hintText: '6-digit code',
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.next,
             validator: (value) {
@@ -109,12 +116,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
         ],
-        CarShareTextField(
+        LabeledTextField(
           controller: _password,
           label: 'New password',
-          icon: Icons.lock_outline,
+          hintText: 'At least 8 characters',
           obscureText: true,
           textInputAction: TextInputAction.next,
           validator: (value) {
@@ -123,11 +130,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             return null;
           },
         ),
-        const SizedBox(height: 16),
-        CarShareTextField(
+        const SizedBox(height: 18),
+        LabeledTextField(
           controller: _confirmPassword,
           label: 'Confirm new password',
-          icon: Icons.lock_reset,
+          hintText: 'Type it again',
           obscureText: true,
           textInputAction: TextInputAction.done,
           validator: (value) {
@@ -158,15 +165,22 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   Widget _successContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Icon(Icons.check_circle, color: Color(0xFF059669), size: 52),
+      const Icon(Icons.check_circle, color: carShareGreen, size: 52),
       const SizedBox(height: 20),
-      Text(
+      const Text(
         'Password updated',
-        style: Theme.of(context).textTheme.headlineMedium
-            ?.copyWith(fontWeight: FontWeight.w800),
+        style: TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -.5,
+          color: carShareText,
+        ),
       ),
       const SizedBox(height: 8),
-      const Text('Your password has been reset. You can now sign in.'),
+      const Text(
+        'Your password has been reset. You can now sign in.',
+        style: TextStyle(color: carShareMuted, fontSize: 15),
+      ),
       const SizedBox(height: 24),
       PrimaryButton(label: 'Go to Sign In', onPressed: _goToSignIn),
     ],

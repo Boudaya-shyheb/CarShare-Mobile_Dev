@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
-import '../widgets/form_field.dart';
+import '../theme.dart';
+import '../widgets/labeled_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/round_back_button.dart';
 import 'reset_password_page.dart';
 import 'sign_up_page.dart';
 import 'welcome_page.dart';
@@ -153,132 +155,220 @@ class _SignInPageState extends State<SignInPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
+  /// Which social buttons exist is decided at build time: a button whose dart-define is empty
+  /// could only ever fail, so it is not drawn (and neither is the "or continue with" line
+  /// when there is nothing under it).
+  static const _googleEnabled =
+      String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID') != '';
+  static const _facebookEnabled =
+      String.fromEnvironment('FACEBOOK_APP_ID') != '';
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => Navigator.of(context).pushAndRemoveUntil<void>(
-          MaterialPageRoute<void>(builder: (_) => const WelcomePage()),
-          (_) => false,
-        ),
+    appBar: roundBackAppBar(
+      context,
+      onBack: () => Navigator.of(context).pushAndRemoveUntil<void>(
+        MaterialPageRoute<void>(builder: (_) => const WelcomePage()),
+        (_) => false,
       ),
     ),
     body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD1FAE5),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Icon(
-                      Icons.directions_car_filled_rounded,
-                      color: Color(0xFF059669),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    'Welcome back',
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Sign in to find or offer a ride.',
-                    style: TextStyle(color: Color(0xFF718096)),
-                  ),
-                  const SizedBox(height: 28),
-                  CarShareTextField(
-                    controller: _email,
-                    label: 'Email',
-                    icon: Icons.email_outlined,
-                    validator: _validateEmail,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 16),
-                  CarShareTextField(
-                    controller: _password,
-                    label: 'Password',
-                    icon: Icons.lock_outline,
-                    validator: (value) => value == null || value.isEmpty
-                        ? 'Password is required.'
-                        : null,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _sendingReset ? null : _resetPassword,
-                      child: _sendingReset
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Forgot password?'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  PrimaryButton(
-                    label: 'Sign In',
-                    loading: _loading,
-                    onPressed: _signIn,
-                  ),
-                  const SizedBox(height: 18),
-                  const Row(children: [Expanded(child: Divider()), Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12), child: Text('or continue with'),
-                  ), Expanded(child: Divider())]),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: OutlinedButton.icon(
-                      onPressed: _loading ? null : () => _signInSocial('google'),
-                      icon: const Icon(Icons.g_mobiledata, size: 26),
-                      label: const Text('Google'),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(child: OutlinedButton.icon(
-                      onPressed: _loading ? null : () => _signInSocial('facebook'),
-                      icon: const Icon(Icons.facebook),
-                      label: const Text('Facebook'),
-                    )),
-                  ]),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      const Text('Don’t have an account? '),
-                      TextButton(
-                        onPressed: () =>
-                            Navigator.pushNamed(context, SignUpPage.routeName),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 480,
+                minHeight: constraints.maxHeight,
+              ),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: carShareTint,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: const Icon(
+                            Icons.directions_car_outlined,
+                            color: carShareGreen,
+                          ),
                         ),
-                        child: const Text('Sign Up'),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Welcome back',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -.5,
+                            color: carShareText,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Sign in to find or offer a ride.',
+                          style: TextStyle(color: carShareMuted, fontSize: 15),
+                        ),
+                        const SizedBox(height: 32),
+                        LabeledTextField(
+                          controller: _email,
+                          label: 'Email',
+                          hintText: 'you@example.com',
+                          validator: _validateEmail,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 18),
+                        LabeledTextField(
+                          controller: _password,
+                          label: 'Password',
+                          hintText: 'Your password',
+                          validator: (value) => value == null || value.isEmpty
+                              ? 'Password is required.'
+                              : null,
+                          obscureText: true,
+                          textInputAction: TextInputAction.done,
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _sendingReset ? null : _resetPassword,
+                            child: _sendingReset
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Forgot password?',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        PrimaryButton(
+                          label: 'Sign in',
+                          loading: _loading,
+                          onPressed: _signIn,
+                        ),
+                        if (_googleEnabled || _facebookEnabled) ...[
+                          const SizedBox(height: 24),
+                          const Row(
+                            children: [
+                              Expanded(child: Divider()),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 14),
+                                child: Text(
+                                  'or continue with',
+                                  style: TextStyle(color: carShareMuted),
+                                ),
+                              ),
+                              Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              if (_googleEnabled)
+                                Expanded(
+                                  child: _SocialButton(
+                                    label: 'Google',
+                                    icon: Icons.g_mobiledata,
+                                    onPressed: _loading
+                                        ? null
+                                        : () => _signInSocial('google'),
+                                  ),
+                                ),
+                              if (_googleEnabled && _facebookEnabled)
+                                const SizedBox(width: 12),
+                              if (_facebookEnabled)
+                                Expanded(
+                                  child: _SocialButton(
+                                    label: 'Facebook',
+                                    icon: Icons.facebook,
+                                    onPressed: _loading
+                                        ? null
+                                        : () => _signInSocial('facebook'),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                        const Spacer(),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            const Text(
+                              'Don’t have an account? ',
+                              style: TextStyle(color: carShareMuted),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pushNamed(
+                                context,
+                                SignUpPage.routeName,
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Sign up',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
     ),
+  );
+}
+
+/// A social sign-in button in the mockup's style: outlined, 16 px corners, the logo first.
+class _SocialButton extends StatelessWidget {
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size.fromHeight(56),
+      foregroundColor: carShareText,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(carShareButtonRadius),
+      ),
+    ),
+    icon: Icon(icon, size: 26),
+    label: Text(label),
   );
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../services/vehicle_service.dart';
+import '../theme.dart';
 
 class VehiclePhotoImage extends StatefulWidget {
   const VehiclePhotoImage({
@@ -69,7 +70,7 @@ class _VehiclePhotoImageState extends State<VehiclePhotoImage> {
     width: widget.width,
     height: widget.height,
     child: ColoredBox(
-      color: const Color(0xFFF1F5F4),
+      color: carShareBackground,
       child: Center(
         child: loading
             ? const SizedBox(
@@ -77,7 +78,7 @@ class _VehiclePhotoImageState extends State<VehiclePhotoImage> {
                 height: 22,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : Icon(icon, color: const Color(0xFF718096), size: 32),
+            : Icon(icon, color: carShareMuted, size: 32),
       ),
     ),
   );

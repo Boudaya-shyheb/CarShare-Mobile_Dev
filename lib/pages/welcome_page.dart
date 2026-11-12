@@ -1,170 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme.dart';
 import '../widgets/primary_button.dart';
 import 'sign_in_page.dart';
 import 'sign_up_page.dart';
 
+/// The mockup's welcome screen: a full-width green "map" with the route and the logo on top,
+/// and a white sheet with rounded top corners holding the title and the two buttons. The map is
+/// a static gradient and a painted route, not a live map.
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
 
+  /// Height the white sheet needs for its text and buttons; the green part takes the rest.
+  static const _sheetHeight = 392.0;
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: LayoutBuilder(
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    // White status-bar icons over the green part.
+    value: SystemUiOverlayStyle.light,
+    child: Scaffold(
+      backgroundColor: Colors.white,
+      body: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxHeight < 700;
+          final heroHeight = (constraints.maxHeight - _sheetHeight).clamp(
+            240.0,
+            560.0,
+          );
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Column(
-                children: [
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.directions_car_filled_rounded,
-                        color: carShareGreen,
-                        size: 28,
-                      ),
-                      const SizedBox(width: 9),
-                      Text(
-                        'CarShare',
-                        style: Theme.of(context).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: compact ? 16 : 28),
-                  Container(
-                    height: compact ? 250 : 330,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF34D399),
-                          carShareGreen,
-                          Color(0xFF065F46),
-                        ],
-                      ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Positioned.fill(
-                          child: CustomPaint(painter: _RoadPainter()),
-                        ),
-                        Container(
-                          width: 84,
-                          height: 84,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: .14),
-                                blurRadius: 24,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.directions_car_filled_rounded,
-                            color: carShareGreen,
-                            size: 42,
-                          ),
-                        ),
-                        const Positioned(
-                          left: 24,
-                          top: 24,
-                          child: Icon(
-                            Icons.location_on,
-                            color: Colors.white70,
-                            size: 25,
-                          ),
-                        ),
-                        const Positioned(
-                          right: 30,
-                          bottom: 30,
-                          child: Icon(
-                            Icons.location_on,
-                            color: Colors.white70,
-                            size: 25,
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 22,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              child: Text(
-                                'Your next ride starts here',
-                                style: TextStyle(
-                                  color: carShareGreen,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: compact ? 20 : 28),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Share the ride,\nsplit the road.',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            height: 1.12,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -.6,
-                          ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Find people going your way and make every journey a little easier.',
-                      style: TextStyle(
-                        color: Color(0xFF687780),
-                        height: 1.5,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  PrimaryButton(
-                    label: 'Get Started',
-                    onPressed: () =>
-                        Navigator.pushNamed(context, SignUpPage.routeName),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, SignInPage.routeName),
-                      child: const Text('I already have an account'),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+            child: Column(
+              children: [
+                _Hero(height: heroHeight),
+                const _Sheet(),
+              ],
             ),
           );
         },
@@ -173,34 +41,180 @@ class WelcomePage extends StatelessWidget {
   );
 }
 
-class _RoadPainter extends CustomPainter {
+class _Hero extends StatelessWidget {
+  const _Hero({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: height + MediaQuery.paddingOf(context).top,
+    width: double.infinity,
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF34D399), carShareGreen, carShareGreenDark],
+      ),
+    ),
+    child: Stack(
+      children: [
+        Positioned.fill(child: CustomPaint(painter: _RoutePainter())),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.directions_car_outlined,
+                    color: carShareGreen,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'CarShare',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          right: 36,
+          bottom: 72,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.circle, size: 10, color: carShareSuccess),
+                  SizedBox(width: 8),
+                  Text(
+                    'Your next ride starts here',
+                    style: TextStyle(
+                      color: carShareText,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Sheet extends StatelessWidget {
+  const _Sheet();
+
+  @override
+  Widget build(BuildContext context) => Transform.translate(
+    // The sheet overlaps the bottom of the green part, which is what gives it rounded corners.
+    offset: const Offset(0, -32),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Share the ride,\nsplit the road.',
+            style: TextStyle(
+              fontSize: 32,
+              height: 1.15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.6,
+              color: carShareText,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Find drivers going your way in real time, book a seat in '
+            'seconds and follow your trip live.',
+            style: TextStyle(color: carShareMuted, height: 1.5, fontSize: 15),
+          ),
+          const SizedBox(height: 28),
+          PrimaryButton(
+            label: 'Get started',
+            onPressed: () => Navigator.pushNamed(context, SignUpPage.routeName),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: OutlinedButton(
+              onPressed: () =>
+                  Navigator.pushNamed(context, SignInPage.routeName),
+              child: const Text(
+                'I already have an account',
+                style: TextStyle(color: carShareText),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The dotted route with its two end points and the car badge half-way, drawn over the gradient.
+class _RoutePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width * .12, size.height * .77)
-      ..cubicTo(
-        size.width * .3,
-        size.height * .68,
-        size.width * .54,
-        size.height * .3,
-        size.width * .82,
-        size.height * .2,
-      );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white.withValues(alpha: .65)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round,
-    );
-    for (final point in [
-      Offset(size.width * .12, size.height * .77),
-      Offset(size.width * .82, size.height * .2),
-    ]) {
-      canvas.drawCircle(point, 6, Paint()..color = Colors.white);
-      canvas.drawCircle(point, 3, Paint()..color = carShareGreen);
+    final start = Offset(size.width * .17, size.height * .76);
+    final end = Offset(size.width * .83, size.height * .33);
+    final middle = Offset(size.width * .48, size.height * .56);
+
+    final dot = Paint()..color = Colors.white;
+    const steps = 18;
+    for (var i = 1; i < steps; i++) {
+      final t = i / steps;
+      final point = Offset.lerp(start, end, t)!;
+      if ((point - middle).distance < 44) continue; // leave room for the car badge
+      canvas.drawCircle(point, 3, dot);
     }
+    for (final point in [start, end]) {
+      canvas.drawCircle(point, 12, dot);
+      canvas.drawCircle(point, 7, Paint()..color = carShareSuccess);
+    }
+    canvas.drawCircle(middle, 24, dot);
+    final icon = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(Icons.directions_car_outlined.codePoint),
+        style: TextStyle(
+          fontFamily: Icons.directions_car_outlined.fontFamily,
+          package: Icons.directions_car_outlined.fontPackage,
+          fontSize: 26,
+          color: carShareGreen,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    icon.paint(canvas, middle - Offset(icon.width / 2, icon.height / 2));
   }
 
   @override

@@ -15,7 +15,9 @@ const supportWarningText = Color(0xFFD97706);
 const carShareTint = Color(0xFFD1FAE5); // chips, badges, the "me" halo
 const carShareSuccess = Color(0xFF10B981);
 const carShareWarning = Color(0xFFF59E0B);
+const carShareWarningTint = Color(0xFFFEF3C7); // the default avatar's background
 const carShareDanger = Color(0xFFEF4444);
+const carShareDangerTint = Color(0xFFFEE2E2); // Log out and delete icons
 const carShareText = Color(0xFF0F172A);
 const carShareMuted = Color(0xFF64748B);
 const carShareBackground = Color(0xFFF5F7FB); // page and search-card background
@@ -72,7 +74,10 @@ final carShareTheme = ThemeData(
     style: FilledButton.styleFrom(
       minimumSize: const Size(64, 50),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      textStyle: const TextStyle(
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w700,
+      ),
     ),
   ),
   outlinedButtonTheme: OutlinedButtonThemeData(
@@ -80,7 +85,10 @@ final carShareTheme = ThemeData(
       foregroundColor: carShareGreen,
       side: const BorderSide(color: carShareBorder),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      textStyle: const TextStyle(
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w700,
+      ),
     ),
   ),
   navigationBarTheme: NavigationBarThemeData(
@@ -101,6 +109,12 @@ final carShareTheme = ThemeData(
     backgroundColor: Colors.white,
     surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    titleTextStyle: const TextStyle(
+      fontFamily: 'PlusJakartaSans',
+      fontSize: 20,
+      fontWeight: FontWeight.w800,
+      color: carShareText,
+    ),
   ),
   snackBarTheme: SnackBarThemeData(
     behavior: SnackBarBehavior.floating,
@@ -109,6 +123,36 @@ final carShareTheme = ThemeData(
   floatingActionButtonTheme: const FloatingActionButtonThemeData(
     backgroundColor: carShareGreen,
     foregroundColor: Colors.white,
+  ),
+  // The trunk-size / plate-type selectors: a tinted track with the chosen option in brand green.
+  segmentedButtonTheme: SegmentedButtonThemeData(
+    style: ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? carShareGreen
+            : carShareBackground,
+      ),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? Colors.white
+            : carShareMuted,
+      ),
+      side: const WidgetStatePropertyAll(BorderSide.none),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(fontFamily: 'PlusJakartaSans', fontWeight: FontWeight.w700),
+      ),
+    ),
+  ),
+  switchTheme: SwitchThemeData(
+    thumbColor: const WidgetStatePropertyAll(Colors.white),
+    trackColor: WidgetStateProperty.resolveWith(
+      (states) =>
+          states.contains(WidgetState.selected) ? carShareGreen : carShareBorder,
+    ),
+    trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
   ),
   dividerTheme: const DividerThemeData(color: carShareBorder, space: 1),
   inputDecorationTheme: InputDecorationTheme(

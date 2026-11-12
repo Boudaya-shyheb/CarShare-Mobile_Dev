@@ -7,7 +7,10 @@ import '../models/vehicle.dart';
 import '../models/vehicle_registration.dart';
 import '../services/api_client.dart';
 import '../services/vehicle_service.dart';
+import '../theme.dart';
+import '../widgets/dashed_border.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/round_back_button.dart';
 import '../widgets/vehicle_photo_image.dart';
 
 class VehicleFormPage extends StatefulWidget {
@@ -405,7 +408,10 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(_isEditing ? 'Edit vehicle' : 'Add a vehicle')),
+    appBar: roundBackAppBar(
+      context,
+      title: _isEditing ? 'Edit vehicle' : 'Add a vehicle',
+    ),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -413,30 +419,27 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
               children: [
                 _photoSection(),
-                const SizedBox(height: 20),
-                _documentsSection(),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(child: _catalogField(brand: true)),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(child: _catalogField(brand: false)),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 18),
+                _sectionTitle('Year'),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _year,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Year',
-                    hintText: '2021',
-                  ),
+                  decoration: const InputDecoration(hintText: '2021'),
                   validator: _validateYear,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _sectionTitle('Plate number'),
                 const SizedBox(height: 8),
                 SegmentedButton<VehiclePlateType>(
@@ -471,7 +474,6 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                     ),
                   ],
                   decoration: InputDecoration(
-                    labelText: 'Numbers only',
                     hintText: _plateType == VehiclePlateType.rs
                         ? '123456'
                         : '1234567',
@@ -484,10 +486,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                   padding: const EdgeInsets.only(top: 5, left: 4),
                   child: Text(
                     'Preview: ${_platePreview()}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF718096),
-                    ),
+                    style: const TextStyle(fontSize: 12, color: carShareMuted),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -518,8 +517,8 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                           const Text(
                             'Not counting the driver',
                             style: TextStyle(
-                              color: Color(0xFF718096),
-                              fontSize: 12,
+                              color: carShareMuted,
+                              fontSize: 13,
                             ),
                           ),
                         ],
@@ -546,20 +545,23 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                 const SizedBox(height: 10),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(
-                    Icons.ac_unit,
-                    color: Color(0xFF00A884),
-                  ),
+                  secondary: const Icon(Icons.ac_unit, color: carShareGreen),
                   title: const Text(
                     'Air conditioning',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: carShareText,
+                    ),
                   ),
                   value: _airConditioning,
                   onChanged: _saving
                       ? null
                       : (value) => setState(() => _airConditioning = value),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                _documentsSection(),
+                const SizedBox(height: 22),
                 PrimaryButton(
                   label: 'Save vehicle',
                   loading: _saving,
@@ -575,7 +577,11 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
 
   Widget _sectionTitle(String title) => Text(
     title,
-    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+    style: const TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      color: carShareText,
+    ),
   );
 
   Widget _documentsSection() => Column(
@@ -585,9 +591,9 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       const SizedBox(height: 4),
       const Text(
         'Dates only. Add reminders for upcoming expirations.',
-        style: TextStyle(fontSize: 12, color: Color(0xFF718096)),
+        style: TextStyle(fontSize: 13, color: carShareMuted),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 10),
       _documentDateTile(
         label: 'Insurance expires',
         date: _insuranceExpiryDate,
@@ -658,16 +664,22 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         }
       },
       fieldViewBuilder: (context, textController, fieldFocus, onSubmitted) =>
-          TextFormField(
-            controller: textController,
-            focusNode: fieldFocus,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: brand ? 'Peugeot' : '208',
-            ),
-            validator: (value) => _required(value, label),
-            onFieldSubmitted: (_) => onSubmitted(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle(label),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: textController,
+                focusNode: fieldFocus,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: brand ? 'Peugeot' : '208',
+                ),
+                validator: (value) => _required(value, label),
+                onFieldSubmitted: (_) => onSubmitted(),
+              ),
+            ],
           ),
       optionsViewBuilder: (context, onSelected, options) => Align(
         alignment: Alignment.topLeft,
@@ -723,9 +735,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
               color: Color(option.value),
               shape: BoxShape.circle,
               border: Border.all(
-                color: selected
-                    ? const Color(0xFF00A884)
-                    : const Color(0xFFE2E8F0),
+                color: selected ? carShareGreen : carShareBorder,
                 width: selected ? 3 : 1,
               ),
             ),
@@ -734,7 +744,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                     Icons.check,
                     size: 18,
                     color: option.name == 'White'
-                        ? const Color(0xFF00A884)
+                        ? carShareGreen
                         : Colors.white,
                   )
                 : null,
@@ -753,41 +763,50 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Container(
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F5F9),
-              borderRadius: BorderRadius.circular(24),
+              color: carShareBackground,
+              borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.white,
+                    foregroundColor: carShareText,
+                    minimumSize: const Size(40, 40),
+                  ),
                   onPressed: _saving || count <= 1
                       ? null
                       : () => setState(() {
                           _seats.text = '${count - 1}';
                           field.didChange(count - 1);
                         }),
-                  icon: const Icon(Icons.remove_circle_outline),
+                  icon: const Icon(Icons.remove),
                 ),
                 SizedBox(
-                  width: 28,
+                  width: 40,
                   child: Text(
                     '$count',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: carShareText,
+                    ),
                   ),
                 ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  color: const Color(0xFF00A884),
+                IconButton.filled(
+                  style: IconButton.styleFrom(minimumSize: const Size(40, 40)),
                   onPressed: _saving || count >= 9
                       ? null
                       : () => setState(() {
                           _seats.text = '${count + 1}';
                           field.didChange(count + 1);
                         }),
-                  icon: const Icon(Icons.add_circle),
+                  icon: const Icon(Icons.add),
                 ),
               ],
             ),
@@ -795,85 +814,99 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
           if (field.hasError)
             Text(
               field.errorText!,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: carShareDanger, fontSize: 12),
             ),
         ],
       ),
     );
   }
 
-  Widget _photoSection() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _sectionTitle('Photos'),
-      const SizedBox(height: 8),
-      SizedBox(
-        height: 94,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            if (_existingPhotos.length -
-                    _removedPhotoIds.length +
-                    _newPhotos.length <
-                4)
-              _addPhotosTile(),
-            for (final photo in _existingPhotos)
-              if (!_removedPhotoIds.contains(photo.id))
-                _existingPhotoTile(photo),
-            for (final image in _newPhotos) _newPhotoTile(image),
-          ],
-        ),
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'Add up to four photos',
-        style: TextStyle(fontSize: 12, color: Color(0xFF718096)),
-      ),
-    ],
+  /// Up to four photos, laid out as in the mockup: a wide dashed "Add photos" tile and square
+  /// slots, with placeholders where no photo has been picked yet.
+  Widget _photoSection() {
+    final slots = <Widget>[
+      for (final photo in _existingPhotos)
+        if (!_removedPhotoIds.contains(photo.id)) _existingPhotoTile(photo),
+      for (final image in _newPhotos) _newPhotoTile(image),
+    ];
+    final canAdd = slots.length < 4;
+    while (canAdd && slots.length < 2) {
+      slots.add(_emptySlot());
+    }
+    final children = <Widget>[
+      if (canAdd) Expanded(flex: 2, child: _addPhotosTile()),
+    ];
+    for (final slot in slots) {
+      if (children.isNotEmpty) children.add(const SizedBox(width: 12));
+      children.add(Expanded(child: slot));
+    }
+    return SizedBox(height: 104, child: Row(children: children));
+  }
+
+  Widget _emptySlot() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: carShareBackground,
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: const Center(
+      child: Icon(Icons.directions_car_outlined, color: carShareMuted),
+    ),
   );
 
-  Widget _addPhotosTile() => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: OutlinedButton(
-      onPressed: _saving ? null : _pickPhotos,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF00A884),
-        backgroundColor: const Color(0xFFE4FFF4),
-        side: const BorderSide(color: Color(0xFF00A884)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-      ),
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add_a_photo_outlined, size: 21),
-          SizedBox(height: 4),
-          Text('Add photos', style: TextStyle(fontSize: 12)),
-          Text('up to 4', style: TextStyle(fontSize: 10)),
-        ],
+  Widget _addPhotosTile() => InkWell(
+    onTap: _saving ? null : _pickPhotos,
+    borderRadius: BorderRadius.circular(18),
+    child: const DashedBorder(
+      radius: 18,
+      fill: carShareTint,
+      child: SizedBox.expand(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_camera_outlined, size: 26, color: carShareGreen),
+            SizedBox(height: 6),
+            Text(
+              'Add photos',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: carShareGreen,
+              ),
+            ),
+            Text(
+              'up to 4',
+              style: TextStyle(fontSize: 12, color: carShareMuted),
+            ),
+          ],
+        ),
       ),
     ),
   );
 
+  /// The two small round buttons on a photo slot (make primary, remove).
+  static final _slotButtonStyle = IconButton.styleFrom(
+    minimumSize: const Size(26, 26),
+    padding: EdgeInsets.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
   Widget _existingPhotoTile(VehiclePhoto photo) => Stack(
+    fit: StackFit.expand,
     children: [
       ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         child: VehiclePhotoImage(
           url: photo.url,
-          width: 88,
-          height: 88,
-          borderRadius: BorderRadius.circular(12),
+          width: double.infinity,
+          height: 104,
+          borderRadius: BorderRadius.circular(18),
         ),
       ),
       Positioned(
-        left: 2,
-        bottom: 2,
+        left: 4,
+        bottom: 4,
         child: IconButton.filledTonal(
-          visualDensity: VisualDensity.compact,
+          style: _slotButtonStyle,
           tooltip: _selectedPrimaryPhotoId == photo.id
               ? 'Primary photo'
               : 'Set as primary photo',
@@ -884,46 +917,41 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             _selectedPrimaryPhotoId == photo.id
                 ? Icons.star
                 : Icons.star_outline,
-            size: 18,
-            color: _selectedPrimaryPhotoId == photo.id
-                ? const Color(0xFF00A884)
-                : null,
+            size: 15,
+            color: _selectedPrimaryPhotoId == photo.id ? carShareGreen : null,
           ),
         ),
       ),
       Positioned(
-        top: 2,
-        right: 2,
+        top: 4,
+        right: 4,
         child: IconButton.filledTonal(
-          visualDensity: VisualDensity.compact,
+          style: _slotButtonStyle,
           tooltip: 'Remove photo',
           onPressed: _saving ? null : () => _removeExistingPhoto(photo),
-          icon: const Icon(Icons.close, size: 18),
+          icon: const Icon(Icons.close, size: 15),
         ),
       ),
     ],
   );
 
   Widget _newPhotoTile(XFile image) => Stack(
+    fit: StackFit.expand,
     children: [
       ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 88,
-          height: 88,
-          child: FutureBuilder<Uint8List>(
-            future: image.readAsBytes(),
-            builder: (context, snapshot) => snapshot.hasData
-                ? Image.memory(snapshot.data!, fit: BoxFit.cover)
-                : const Center(child: CircularProgressIndicator()),
-          ),
+        borderRadius: BorderRadius.circular(18),
+        child: FutureBuilder<Uint8List>(
+          future: image.readAsBytes(),
+          builder: (context, snapshot) => snapshot.hasData
+              ? Image.memory(snapshot.data!, fit: BoxFit.cover)
+              : const Center(child: CircularProgressIndicator()),
         ),
       ),
       Positioned(
-        left: 2,
-        bottom: 2,
+        left: 4,
+        bottom: 4,
         child: IconButton.filledTonal(
-          visualDensity: VisualDensity.compact,
+          style: _slotButtonStyle,
           tooltip: identical(_selectedNewPrimaryPhoto, image)
               ? 'Primary photo'
               : 'Set as primary photo',
@@ -932,18 +960,18 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             identical(_selectedNewPrimaryPhoto, image)
                 ? Icons.star
                 : Icons.star_outline,
-            size: 18,
+            size: 15,
             color: identical(_selectedNewPrimaryPhoto, image)
-                ? const Color(0xFF00A884)
+                ? carShareGreen
                 : null,
           ),
         ),
       ),
       Positioned(
-        top: 2,
-        right: 2,
+        top: 4,
+        right: 4,
         child: IconButton.filledTonal(
-          visualDensity: VisualDensity.compact,
+          style: _slotButtonStyle,
           tooltip: 'Remove photo',
           onPressed: _saving
               ? null
@@ -955,7 +983,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
                         : _newPhotos.first;
                   }
                 }),
-          icon: const Icon(Icons.close, size: 18),
+          icon: const Icon(Icons.close, size: 15),
         ),
       ),
     ],
