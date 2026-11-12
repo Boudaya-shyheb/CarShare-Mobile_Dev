@@ -11,6 +11,11 @@ class SupportStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, background, foreground) = switch (status) {
+      TicketStatus.open => (
+        'Open',
+        supportWarningBackground,
+        supportWarningText,
+      ),
       TicketStatus.awaitingResponse => (
         'Awaiting response',
         supportWarningBackground,
@@ -23,6 +28,11 @@ class SupportStatusBadge extends StatelessWidget {
       ),
       TicketStatus.resolved => ('Resolved', carShareTint, supportDarkGreen),
       TicketStatus.closed => ('Closed', carShareBackground, carShareMuted),
+      TicketStatus.withdrawn => (
+        'Withdrawn',
+        carShareBackground,
+        carShareMuted,
+      ),
       TicketStatus.contested => (
         'Contested',
         supportWarningBackground,

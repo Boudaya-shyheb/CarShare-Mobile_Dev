@@ -57,3 +57,6 @@ app.*.map.json
 backend/.gradle/
 
 Claude outputs/
+
+# Evidence images uploaded to support tickets while testing (the backend writes them here)
+backend/public/uploads/support/
