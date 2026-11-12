@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:image_picker/image_picker.dart';
 
 import '../services/api_client.dart';
@@ -15,7 +14,10 @@ import '../theme.dart';
 const _module = '/lost-and-found';
 const _colorMarker = '\n\nColor: ';
 const _draftMarker = 'carshare-lost-found-v1:';
-const _workflowStorage = FlutterSecureStorage();
+
+/// The sample match and handover behind "Preview match" exist only in a build made with
+/// `--dart-define=LF_DEMO_PREVIEW=true`; the screens people use never show them.
+const _demoPreview = bool.fromEnvironment('LF_DEMO_PREVIEW');
 
 enum _ReportType {
   lost('LOST', 'lost'),
@@ -60,17 +62,17 @@ String? _text(Map<String, dynamic> json, List<String> keys) {
 
 class _Trip {
   _Trip(Map<String, dynamic> json)
-      : id = _text(json, ['id', 'tripId']) ?? (throw const FormatException()),
-        origin = _text(json, ['originLabel', 'origin', 'departureLabel']),
-        destination = _text(json, [
-          'destinationLabel',
-          'destination',
-          'arrivalLabel',
-        ]),
-        driver = _text(json, ['driverName']),
-        departure = DateTime.tryParse(
-          _text(json, ['departureTime', 'departureAt', 'departure']) ?? '',
-        );
+    : id = _text(json, ['id', 'tripId']) ?? (throw const FormatException()),
+      origin = _text(json, ['originLabel', 'origin', 'departureLabel']),
+      destination = _text(json, [
+        'destinationLabel',
+        'destination',
+        'arrivalLabel',
+      ]),
+      driver = _text(json, ['driverName']),
+      departure = DateTime.tryParse(
+        _text(json, ['departureTime', 'departureAt', 'departure']) ?? '',
+      );
 
   final String id;
   final String? origin;
@@ -97,22 +99,22 @@ String _dateTimeLabel(BuildContext context, DateTime date) {
 
 class _Report {
   _Report(this.trip, Map<String, dynamic> json)
-      : id = _text(json, ['id', 'reportId']) ?? (throw const FormatException()),
-        reporterId =
-            _text(json, [
-              'reporterId',
-              'reporterUserId',
-              'reportedById',
-              'authorId',
-              'userId',
-            ]) ??
-                (throw const FormatException()),
-        reporterName = _text(json, ['reporterName', 'reporterFullName']),
-        type = _ReportType.parse(json['type'] ?? json['reportType']),
-        title = _text(json, ['title']) ?? 'Item',
-        details = _text(json, ['description']) ?? '',
-        resolved = json['status'] == 'RESOLVED',
-        created = DateTime.tryParse(_text(json, ['createdAt']) ?? '');
+    : id = _text(json, ['id', 'reportId']) ?? (throw const FormatException()),
+      reporterId =
+          _text(json, [
+            'reporterId',
+            'reporterUserId',
+            'reportedById',
+            'authorId',
+            'userId',
+          ]) ??
+          (throw const FormatException()),
+      reporterName = _text(json, ['reporterName', 'reporterFullName']),
+      type = _ReportType.parse(json['type'] ?? json['reportType']),
+      title = _text(json, ['title']) ?? 'Item',
+      details = _text(json, ['description']) ?? '',
+      resolved = json['status'] == 'RESOLVED',
+      created = DateTime.tryParse(_text(json, ['createdAt']) ?? '');
 
   final _Trip trip;
   final String id;
@@ -140,59 +142,71 @@ class _Report {
       : title;
 }
 
-class _HandoverProgress {
-  const _HandoverProgress(this.matchId, {this.note, this.when, this.code});
+/// The handover the server keeps for one matched pair (`/lost-and-found/handovers`). Both people
+/// read the same one; only the owner of the lost item is sent the code.
+class _Handover {
+  _Handover(Map<String, dynamic> json)
+    : id = _text(json, ['id']) ?? (throw const FormatException()),
+      lostReportId =
+          _text(json, ['lostReportId']) ?? (throw const FormatException()),
+      foundReportId =
+          _text(json, ['foundReportId']) ?? (throw const FormatException()),
+      status = _text(json, ['status']) ?? 'PROPOSED',
+      meetingPoint = _text(json, ['meetingPoint']),
+      meetingTime = _text(json, ['meetingTime']),
+      isOwner = json['role'] == 'OWNER',
+      otherName = _text(json, ['otherReporterName']),
+      code = _text(json, ['code']);
 
-  final String matchId;
-  final String? note;
-  final String? when;
+  final String id;
+  final String lostReportId;
+  final String foundReportId;
+  final String status;
+  final String? meetingPoint;
+  final String? meetingTime;
+
+  /// True for the person who lost the item, false for the one who found it.
+  final bool isOwner;
+  final String? otherName;
   final String? code;
 
-  static String _key(String reportId) =>
-      'carshare.lost_found.progress.$reportId';
+  bool get isArranged => status == 'ARRANGED';
+  bool get isCompleted => status == 'COMPLETED';
+  bool get isCancelled => status == 'CANCELLED';
 
-  static Future<_HandoverProgress?> read(String reportId) async {
-    try {
-      final stored = await _workflowStorage.read(key: _key(reportId));
-      if (stored == null) return null;
-      final data = jsonDecode(stored);
-      if (data is! Map<String, dynamic>) return null;
-      final matchId = _text(data, ['matchId']);
-      if (matchId == null) return null;
-      final storedCode = _text(data, ['code']);
-      return _HandoverProgress(
-        matchId,
-        note: _text(data, ['note']),
-        when: _text(data, ['when']),
-        code: storedCode != null && RegExp(r'^\d{4}$').hasMatch(storedCode)
-            ? storedCode
-            : null,
-      );
-    } catch (_) {
-      // The API can still display reports if local storage is unavailable.
-      return null;
-    }
-  }
-
-  Future<void> save(String reportId) => _workflowStorage.write(
-    key: _key(reportId),
-    value: jsonEncode({
-      'matchId': matchId,
-      'note': note,
-      'when': when,
-      'code': code,
-    }),
-  );
-
-  static Future<void> clear(String reportId) =>
-      _workflowStorage.delete(key: _key(reportId));
+  /// The id of the report on the other side of this handover.
+  String otherReportId(String mine) =>
+      mine == lostReportId ? foundReportId : lostReportId;
 }
 
 class _Snapshot {
-  const _Snapshot(this.trips, this.reports, this.progress);
+  const _Snapshot(this.trips, this.reports, this.handovers);
   final List<_Trip> trips;
   final List<_Report> reports;
-  final Map<String, _HandoverProgress?> progress;
+
+  /// Every handover the signed-in user is part of, newest change first.
+  final List<_Handover> handovers;
+
+  /// The live or finished handover a report is in. A cancelled one does not count: the report
+  /// is back to searching.
+  _Handover? handoverFor(String reportId) {
+    for (final handover in handovers) {
+      if (handover.isCancelled) continue;
+      if (handover.lostReportId == reportId ||
+          handover.foundReportId == reportId) {
+        return handover;
+      }
+    }
+    return null;
+  }
+
+  /// Whether this pair was called off ("Not my item") by either side.
+  bool wasRejected(String lostReportId, String foundReportId) => handovers.any(
+    (handover) =>
+        handover.isCancelled &&
+        handover.lostReportId == lostReportId &&
+        handover.foundReportId == foundReportId,
+  );
 }
 
 class LostAndFoundPage extends StatefulWidget {
@@ -207,7 +221,6 @@ class LostAndFoundPage extends StatefulWidget {
 class _LostAndFoundPageState extends State<LostAndFoundPage> {
   final _api = ApiClient.instance;
   final _photos = <String, Uint8List>{};
-  final _dismissedMatches = <(String, String)>{};
   final _search = TextEditingController();
   late Future<_Snapshot> _snapshot;
   _ReportType _tab = _ReportType.lost;
@@ -224,7 +237,6 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.userId != widget.userId) {
       _photos.clear();
-      _dismissedMatches.clear();
       _search.clear();
       _snapshot = _load();
     }
@@ -237,7 +249,6 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
   }
 
   Future<_Snapshot> _load() async {
-    final userId = widget.userId;
     final rows = await _api.getList('$_module/trips');
     final trips = rows.map(_Trip.new).toList();
     final reportsByTrip = await Future.wait(
@@ -248,24 +259,22 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     );
     final reports = reportsByTrip.expand((items) => items).toList();
     reports.sort(
-          (a, b) => (b.created?.millisecondsSinceEpoch ?? 0).compareTo(
+      (a, b) => (b.created?.millisecondsSinceEpoch ?? 0).compareTo(
         a.created?.millisecondsSinceEpoch ?? 0,
       ),
     );
-    final progress = await Future.wait(
-      reports
-          .where((report) => report.reporterId == userId)
-          .map(
-            (report) async =>
-            MapEntry(report.id, await _HandoverProgress.read(report.id)),
-      ),
-    );
-    return _Snapshot(trips, reports, Map.fromEntries(progress));
+    final handovers = (await _api.getList('$_module/handovers/mine'))
+        .map(_Handover.new)
+        .toList();
+    return _Snapshot(trips, reports, handovers);
   }
 
   Future<void> _refresh() async {
     final next = _load();
-    setState(() => _snapshot = next);
+    // A block body: an arrow body would return the Future, which setState refuses.
+    setState(() {
+      _snapshot = next;
+    });
     try {
       await next;
     } catch (_) {
@@ -273,16 +282,15 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     }
   }
 
+  /// The phone decides who matches whom: same trip, opposite type, a different person, same
+  /// category and, when both gave one, the same colour. Once a pair has a handover on the
+  /// server, that pair is the match; a pair someone called off is never offered again.
   _Report? _findMatch(_Report report, _Snapshot snapshot) {
-    final saved = snapshot.progress[report.id];
-    if (saved != null) {
+    final handover = snapshot.handoverFor(report.id);
+    if (handover != null) {
+      final otherId = handover.otherReportId(report.id);
       for (final candidate in snapshot.reports) {
-        if (candidate.id == saved.matchId &&
-            candidate.trip.id == report.trip.id &&
-            candidate.type != report.type &&
-            candidate.reporterId != report.reporterId) {
-          return candidate;
-        }
+        if (candidate.id == otherId) return candidate;
       }
       return null;
     }
@@ -291,6 +299,7 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     if (report.resolved || category == null || category == _Category.other) {
       return null;
     }
+    final isLost = report.type == _ReportType.lost;
     _Report? sameCategory;
     for (final candidate in snapshot.reports) {
       if (candidate.resolved ||
@@ -298,7 +307,11 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
           candidate.trip.id != report.trip.id ||
           candidate.reporterId == widget.userId ||
           candidate.category != category ||
-          _dismissedMatches.contains((report.id, candidate.id))) {
+          snapshot.wasRejected(
+            isLost ? report.id : candidate.id,
+            isLost ? candidate.id : report.id,
+          ) ||
+          snapshot.handoverFor(candidate.id) != null) {
         continue;
       }
       if (report.color.isNotEmpty && candidate.color.isNotEmpty) {
@@ -322,44 +335,45 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     if (!mounted || created == null) return;
     final photo = created.photo;
     if (photo != null && created.id != null) _photos[created.id!] = photo;
-    _tab = created.type;
+    setState(() => _tab = created.type);
     _message(context, 'Report submitted.');
     await _refresh();
   }
 
   Future<void> _details(
-      _Report report,
-      _Report? match,
-      _Snapshot snapshot,
-      ) async {
+    _Report report,
+    _Report? match,
+    _Snapshot snapshot,
+  ) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _ReportDetails(
           report: report,
           match: match,
-          progress: snapshot.progress[report.id],
-          onProgressChanged: (progress) {
-            if (mounted) {
-              setState(() {
-                snapshot.progress[report.id] = progress;
-              });
-            }
-          },
-          onReturned: () {
-            if (mounted) _refresh();
-          },
+          handover: snapshot.handoverFor(report.id),
+          reload: () => _reloadDetails(report.id),
           photo: _photos[report.id],
-          onDismissMatch: match == null
-              ? null
-              : () {
-            if (mounted) {
-              setState(
-                    () => _dismissedMatches.add((report.id, match.id)),
-              );
-            }
-          },
         ),
       ),
+    );
+    // Whatever happened over there (a handover, a rejection, a closed report) is on the list now.
+    if (mounted) await _refresh();
+  }
+
+  /// Reads everything again for the details page, and keeps the list behind it up to date.
+  Future<_DetailState> _reloadDetails(String reportId) async {
+    final next = _load();
+    if (mounted) {
+      setState(() {
+        _snapshot = next;
+      });
+    }
+    final data = await next;
+    final report = data.reports.firstWhere((item) => item.id == reportId);
+    return _DetailState(
+      report,
+      _findMatch(report, data),
+      data.handoverFor(reportId),
     );
   }
 
@@ -399,12 +413,12 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
         final mine = data?.reports
             .where(
               (report) =>
-          report.reporterId == widget.userId &&
-              report.type == _tab &&
-              '${report.title} ${report.description} ${report.trip.route}'
-                  .toLowerCase()
-                  .contains(query),
-        )
+                  report.reporterId == widget.userId &&
+                  report.type == _tab &&
+                  '${report.title} ${report.description} ${report.trip.route}'
+                      .toLowerCase()
+                      .contains(query),
+            )
             .toList();
         return _PageWidth(
           child: Column(
@@ -433,9 +447,9 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
                       _Notice(
                         text: _tab == _ReportType.lost
                             ? 'Lost something in a car? Check for similar items '
-                            'reported on the same trip.'
+                                  'reported on the same trip.'
                             : 'Found something in a car? Report it so the owner '
-                            'can identify it.',
+                                  'can identify it.',
                         highlighted: true,
                       ),
                       const SizedBox(height: 14),
@@ -457,25 +471,27 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
                           ),
                         )
                       else if (mine == null || mine.isEmpty)
-                          _Panel(
-                            child: Text(
-                              query.isNotEmpty
-                                  ? 'No reports match your search.'
-                                  : data?.trips.isEmpty == true
-                                  ? 'No eligible trips yet. Your eligible CarShare '
-                                  'trips will appear here.'
-                                  : 'Your ${_tab.label} item reports will appear here.',
-                            ),
-                          )
-                        else
-                          for (final report in mine) _reportCard(report, data!),
+                        _Panel(
+                          child: Text(
+                            query.isNotEmpty
+                                ? 'No reports match your search.'
+                                : data?.trips.isEmpty == true
+                                ? 'No eligible trips yet. Your eligible CarShare '
+                                      'trips will appear here.'
+                                : 'Your ${_tab.label} item reports will appear here.',
+                          ),
+                        )
+                      else
+                        for (final report in mine) _reportCard(report, data!),
                     ],
                   ),
                 ),
               ),
               if (snapshot.connectionState == ConnectionState.done)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                // SafeArea keeps the button clear of the phone's navigation bar.
+                SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: FilledButton.icon(
                     style: _filledStyle(pill: true),
                     onPressed: () => _newReport(data?.trips ?? const []),
@@ -520,12 +536,12 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
 
   Widget _reportCard(_Report report, _Snapshot snapshot) {
     final match = _findMatch(report, snapshot);
-    final progress = snapshot.progress[report.id];
+    final handover = snapshot.handoverFor(report.id);
     final status = report.resolved
         ? 'Returned'
-        : progress?.note != null
+        : handover?.isArranged == true
         ? 'Handover'
-        : progress != null
+        : handover != null
         ? 'Matched'
         : match != null
         ? 'Match found'
@@ -588,7 +604,7 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
                   FilledButton(
                     style: _filledStyle(pill: true, height: 40),
                     onPressed: () => _details(report, match, snapshot),
-                    child: Text(progress == null ? 'See match' : 'View report'),
+                    child: Text(handover == null ? 'See match' : 'View report'),
                   )
                 else
                   TextButton(
@@ -642,11 +658,11 @@ class _ReportFormState extends State<_ReportForm> {
 
   bool get _supportsDrafts =>
       !kIsWeb &&
-          const {
-            TargetPlatform.android,
-            TargetPlatform.iOS,
-            TargetPlatform.macOS,
-          }.contains(defaultTargetPlatform);
+      const {
+        TargetPlatform.android,
+        TargetPlatform.iOS,
+        TargetPlatform.macOS,
+      }.contains(defaultTargetPlatform);
 
   @override
   void initState() {
@@ -717,7 +733,7 @@ class _ReportFormState extends State<_ReportForm> {
         reportType: _type.apiValue,
         title: _legacyTitle ?? _category?.label ?? '',
         description:
-        '$_draftMarker${jsonEncode({'description': _description.text.trim(), 'color': _color.text.trim(), 'tripId': _trip?.id})}',
+            '$_draftMarker${jsonEncode({'description': _description.text.trim(), 'color': _color.text.trim(), 'tripId': _trip?.id})}',
         photo: _photo,
       );
       if (mounted) _message(context, 'Draft saved on this device.');
@@ -962,7 +978,7 @@ class _ReportFormState extends State<_ReportForm> {
               _Notice(
                 text: hasTrips
                     ? 'People on this trip can see your report. The optional '
-                    'photo stays on this device with your draft.'
+                          'photo stays on this device with your draft.'
                     : 'An eligible trip is required to submit a report.',
               ),
             ],
@@ -1021,10 +1037,10 @@ class _ReportFormState extends State<_ReportForm> {
               onPressed: _busy
                   ? null
                   : () => setState(() {
-                _category = category;
-                _legacyTitle = null;
-                _missingCategory = false;
-              }),
+                      _category = category;
+                      _legacyTitle = null;
+                      _missingCategory = false;
+                    }),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1040,11 +1056,21 @@ class _ReportFormState extends State<_ReportForm> {
   );
 }
 
+/// What the details page shows about one report, recomputed from the server on every refresh.
+class _DetailState {
+  const _DetailState(this.report, this.match, this.handover);
+  final _Report report;
+  final _Report? match;
+  final _Handover? handover;
+}
+
+/// A sample match and handover, only reachable in a build made with
+/// `--dart-define=LF_DEMO_PREVIEW=true`. Nothing in it touches the server.
 void _openMatchPreview(
-    BuildContext context, {
-      required _Report report,
-      Uint8List? photo,
-    }) {
+  BuildContext context, {
+  required _Report report,
+  Uint8List? photo,
+}) {
   final isLost = report.type == _ReportType.lost;
   final label = report.category?.label.toLowerCase() ?? 'item';
   final description = isLost
@@ -1067,14 +1093,18 @@ void _openMatchPreview(
       builder: (_) => _ReportDetails(
         report: report,
         match: demoMatch,
-        progress: _HandoverProgress(
-          demoMatch.id,
-          note: 'Ariana station, main entrance',
-          when: 'Today · 18:30',
-          code: isLost ? '5319' : null,
-        ),
-        onProgressChanged: (_) {},
-        onReturned: () {},
+        handover: _Handover({
+          'id': 'preview-handover',
+          'lostReportId': isLost ? report.id : demoMatch.id,
+          'foundReportId': isLost ? demoMatch.id : report.id,
+          'status': 'ARRANGED',
+          'meetingPoint': 'Ariana station, main entrance',
+          'meetingTime': 'Today · 18:30',
+          'role': isLost ? 'OWNER' : 'FINDER',
+          'otherReporterName': 'Demo participant',
+          'code': isLost ? _previewCode : null,
+        }),
+        reload: null,
         photo: photo,
         preview: true,
       ),
@@ -1082,25 +1112,25 @@ void _openMatchPreview(
   );
 }
 
+const _previewCode = '5319';
+
 class _ReportDetails extends StatefulWidget {
   const _ReportDetails({
     required this.report,
     required this.match,
-    required this.progress,
-    required this.onProgressChanged,
-    required this.onReturned,
+    required this.handover,
+    required this.reload,
     this.photo,
-    this.onDismissMatch,
     this.preview = false,
   });
 
   final _Report report;
   final _Report? match;
-  final _HandoverProgress? progress;
-  final ValueChanged<_HandoverProgress?> onProgressChanged;
-  final VoidCallback onReturned;
+  final _Handover? handover;
+
+  /// Reads the report, its match and its handover again from the server; null in the preview.
+  final Future<_DetailState> Function()? reload;
   final Uint8List? photo;
-  final VoidCallback? onDismissMatch;
   final bool preview;
 
   @override
@@ -1108,63 +1138,94 @@ class _ReportDetails extends StatefulWidget {
 }
 
 class _ReportDetailsState extends State<_ReportDetails> {
-  late _HandoverProgress? _progress = widget.progress;
-  late bool _returned = !widget.preview && widget.report.resolved;
+  final _codeForm = GlobalKey<FormState>();
+  final _code = TextEditingController();
+  late _Report _report = widget.report;
+  late _Report? _match = widget.match;
+  late _Handover? _handover = widget.handover;
   bool _saving = false;
   bool _dismissed = false;
+  bool _previewReturned = false;
 
-  String get _returnLabel => widget.report.type == _ReportType.lost
-      ? 'Confirm item received'
-      : 'Confirm item returned';
+  /// The finder's inline error after a wrong code ("3 tries left"), from the server.
+  String? _codeError;
 
-  Future<void> _saveProgress(_HandoverProgress progress) async {
-    if (widget.preview) {
-      setState(() => _progress = progress);
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await progress.save(widget.report.id);
-      if (!mounted) return;
-      setState(() => _progress = progress);
-      widget.onProgressChanged(progress);
-    } catch (_) {
-      if (mounted) _message(context, 'Could not save progress on this device.');
-    } finally {
-      if (mounted) setState(() => _saving = false);
+  bool get _isLost => _report.type == _ReportType.lost;
+  bool get _returned => widget.preview
+      ? _previewReturned
+      : _report.resolved || (_handover?.isCompleted ?? false);
+
+  @override
+  void initState() {
+    super.initState();
+    // The other person may have acted since the list was loaded: ask the server again.
+    if (widget.reload != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
     }
   }
 
-  Future<void> _dismissMatch() async {
-    if (widget.preview) {
-      Navigator.of(context).pop();
-      return;
-    }
-    setState(() => _saving = true);
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  /// Pull-to-refresh, the first load, and the end of every action.
+  Future<void> _reload() async {
+    final reload = widget.reload;
+    if (reload == null) return;
     try {
-      if (_progress != null) {
-        await _HandoverProgress.clear(widget.report.id);
-      }
+      final state = await reload();
       if (!mounted) return;
       setState(() {
-        _dismissed = true;
-        _progress = null;
+        _report = state.report;
+        _match = state.match;
+        _handover = state.handover;
+        if (state.handover != null) _dismissed = false;
       });
-      widget.onProgressChanged(null);
-      widget.onDismissMatch?.call();
-    } catch (_) {
-      if (mounted) _message(context, 'Could not remove the match.');
+    } catch (error) {
+      if (mounted) _message(context, _errorMessage(error));
+    }
+  }
+
+  /// Runs one server action with the busy flag, shows its error, then reloads.
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _saving = true);
+    try {
+      await action();
+      await _reload();
+    } catch (error) {
+      if (mounted) _message(context, _errorMessage(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _planHandover() async {
-    final progress = _progress;
-    if (progress == null) return;
+  /// Starts the handover for the match the phone found. Both sides may press this; the server
+  /// gives the second one the handover the first one created.
+  Future<_Handover> _propose(_Report match) async {
+    final json = await ApiClient.instance.post('$_module/handovers', {
+      'lostReportId': _isLost ? _report.id : match.id,
+      'foundReportId': _isLost ? match.id : _report.id,
+    });
+    return _Handover(json);
+  }
 
-    var place = progress.note ?? '';
-    var when = progress.when ?? '';
+  Future<void> _confirmMatch() async {
+    final match = _match;
+    if (match == null) return;
+    await _run(() async {
+      final handover = await _propose(match);
+      if (mounted) setState(() => _handover = handover);
+    });
+  }
+
+  Future<void> _arrange() async {
+    final handover = _handover;
+    if (handover == null) return;
+
+    var place = handover.meetingPoint ?? '';
+    var when = handover.meetingTime ?? '';
     final result = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -1204,9 +1265,9 @@ class _ReportDetailsState extends State<_ReportDetails> {
               onPressed: place.trim().isEmpty || when.trim().isEmpty
                   ? null
                   : () => Navigator.pop(dialogContext, (
-              place.trim(),
-              when.trim(),
-              )),
+                      place.trim(),
+                      when.trim(),
+                    )),
               child: const Text('Save handover'),
             ),
           ],
@@ -1215,57 +1276,57 @@ class _ReportDetailsState extends State<_ReportDetails> {
     );
     if (!mounted || result == null) return;
     final (meetingPoint, meetingTime) = result;
-    final code = widget.report.type == _ReportType.lost
-        ? progress.code ??
-        Random.secure().nextInt(10000).toString().padLeft(4, '0')
-        : null;
-    await _saveProgress(
-      _HandoverProgress(
-        progress.matchId,
-        note: meetingPoint,
-        when: meetingTime,
-        code: code,
-      ),
-    );
-  }
 
-  Future<void> _resolve() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(_returnLabel),
-        content: Text(
-          widget.preview
-              ? 'Mark the demo item as returned?'
-              : 'Has the item already been handed back?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
     if (widget.preview) {
-      setState(() => _returned = true);
+      setState(
+        () => _handover = _Handover({
+          ..._previewJson(handover),
+          'meetingPoint': meetingPoint,
+          'meetingTime': meetingTime,
+        }),
+      );
       return;
     }
+    await _run(() async {
+      final json = await ApiClient.instance.put(
+        '$_module/handovers/${handover.id}/arrange',
+        {'meetingPoint': meetingPoint, 'meetingTime': meetingTime},
+      );
+      if (mounted) setState(() => _handover = _Handover(json));
+    });
+  }
 
+  /// The finder types the code the owner read out; the server decides whether it is right.
+  Future<void> _verify() async {
+    final handover = _handover;
+    if (handover == null) return;
+    setState(() => _codeError = null);
+    if (_codeForm.currentState?.validate() != true) return;
+    final code = _code.text.trim();
+
+    if (widget.preview) {
+      setState(() {
+        if (code == _previewCode) {
+          _previewReturned = true;
+        } else {
+          _codeError = 'That code is not right.';
+        }
+      });
+      return;
+    }
     setState(() => _saving = true);
     try {
-      await ApiClient.instance.put(
-        '$_module/reports/${widget.report.id}/resolve',
-        {},
+      final json = await ApiClient.instance.post(
+        '$_module/handovers/${handover.id}/verify',
+        {'code': code},
       );
-      if (!mounted) return;
-      setState(() => _returned = true);
-      widget.onReturned();
+      if (mounted) setState(() => _handover = _Handover(json));
+      _code.clear();
+      await _reload();
+    } on ApiException catch (error) {
+      // A wrong code is an expected answer, not a failure: say so next to the field.
+      if (mounted) setState(() => _codeError = error.message);
+      await _reload();
     } catch (error) {
       if (mounted) _message(context, _errorMessage(error));
     } finally {
@@ -1273,195 +1334,364 @@ class _ReportDetailsState extends State<_ReportDetails> {
     }
   }
 
+  /// "Not my item": asks first, then calls the match off for both people. Both reports stay
+  /// open, and neither side is offered this same pair again.
+  Future<void> _reject() async {
+    final other =
+        _handover?.otherName ?? _match?.reporterName ?? 'the other person';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Not your item?'),
+        content: Text(
+          'This calls off the match with $other. Both reports stay open and '
+          'you will not be shown this match again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep match'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: carShareDanger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Not my item'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (widget.preview) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final match = _match;
+    setState(() => _saving = true);
+    try {
+      // A match nobody confirmed yet has no handover: create it so the refusal is stored too.
+      final handover =
+          _handover ?? (match == null ? null : await _propose(match));
+      if (handover != null) {
+        await ApiClient.instance.post(
+          '$_module/handovers/${handover.id}/reject',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _dismissed = true;
+        _handover = null;
+        _match = null;
+      });
+      await _reload();
+      if (mounted) setState(() => _dismissed = _match == null);
+    } catch (error) {
+      if (mounted) _message(context, _errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Closes a report nobody matched ("I recovered my item"). A report in a handover cannot be
+  /// closed this way: the server answers 409 and the finder's code does it for both sides.
+  Future<void> _resolve() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          _isLost ? 'I recovered my item' : 'I already returned the item',
+        ),
+        content: const Text('Close this report?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Close report'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (widget.preview) {
+      setState(() => _previewReturned = true);
+      return;
+    }
+    await _run(() async {
+      await ApiClient.instance.put(
+        '$_module/reports/${_report.id}/resolve',
+        {},
+      );
+    });
+  }
+
+  Map<String, dynamic> _previewJson(_Handover h) => {
+    'id': h.id,
+    'lostReportId': h.lostReportId,
+    'foundReportId': h.foundReportId,
+    'status': h.status,
+    'meetingPoint': h.meetingPoint,
+    'meetingTime': h.meetingTime,
+    'role': h.isOwner ? 'OWNER' : 'FINDER',
+    'otherReporterName': h.otherName,
+    'code': h.code,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final report = widget.report;
-    final match = _dismissed ? null : widget.match;
-    final progress = _progress;
-    final handover = progress?.note;
+    final report = _report;
+    final match = _dismissed ? null : _match;
+    final handover = _handover;
+    final returned = _returned;
+    final arranged = handover?.isArranged ?? false;
     final sameColor =
         match != null &&
-            report.color.isNotEmpty &&
-            report.color.toLowerCase() == match.color.toLowerCase();
+        report.color.isNotEmpty &&
+        report.color.toLowerCase() == match.color.toLowerCase();
     final matchingCriteria = sameColor ? 3 : 2;
     final confidence = (100 * matchingCriteria / 3).round();
+    final otherName =
+        handover?.otherName ?? match?.reporterName ?? 'the other person';
+
+    // The one button at the bottom: what this person can do next. The owner has none once the
+    // meeting is arranged, because only the finder's code ends the handover.
+    String? action;
+    VoidCallback? onAction;
+    if (!returned && match != null) {
+      if (handover == null) {
+        action = 'Confirm match';
+        onAction = _confirmMatch;
+      } else if (!arranged) {
+        action = 'Arrange handover';
+        onAction = _arrange;
+      } else if (!handover.isOwner) {
+        action = 'Confirm returned';
+        onAction = _verify;
+      }
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _detailBar(
-        match != null && !_returned ? 'Match found' : 'Item report',
+        match != null && !returned ? 'Match found' : 'Item report',
       ),
       body: _PageWidth(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          children: [
-            _Progress(
-              matched: progress != null,
-              handover: handover != null,
-              returned: _returned,
-            ),
-            const SizedBox(height: 18),
-            if (widget.preview) ...[
-              const _Notice(text: 'Demo preview · Sample match and handover'),
-              const SizedBox(height: 12),
-            ],
-            if (match == null)
-              _comparison(report, 'Your report', photo: widget.photo)
-            else ...[
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _comparison(
-                        report,
-                        'Your report',
-                        photo: widget.photo,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _comparison(
-                        match,
-                        match.type == _ReportType.found
-                            ? 'Found item'
-                            : 'Lost item',
-                      ),
-                    ),
-                  ],
-                ),
+        child: RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            children: [
+              _Progress(
+                matched: handover != null || returned,
+                handover: arranged || returned,
+                returned: returned,
               ),
-              const SizedBox(height: 16),
-              _Panel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Flexible(
-                          child: Text('Match confidence', style: _strong),
-                        ),
-                        Text(
-                          '$confidence%',
-                          style: _strong.copyWith(color: carShareGreen),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: matchingCriteria / 3,
-                      minHeight: 6,
-                      color: carShareGreen,
-                      backgroundColor: carShareBorder,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 6,
-                      children: [
-                        const _Criterion('Same trip'),
-                        const _Criterion('Same item type'),
-                        _Criterion(
-                          sameColor ? 'Color matches' : 'Color unknown',
-                          matches: sameColor,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (progress != null && (handover != null || !_returned)) ...[
-              const SizedBox(height: 22),
-              const Text('Handover', style: _strong),
-              const SizedBox(height: 8),
-              if (handover != null)
-                _HandoverCard(
-                  place: handover,
-                  when: progress.when,
-                  code: progress.code,
-                  onEdit: _saving || _returned ? null : _planHandover,
-                )
-              else
-                const _Notice(
-                  text: 'Agree on a meeting place and time with the other person.',
-                ),
-            ],
-            if (match != null && !_returned)
-              Center(
-                child: TextButton(
-                  style: TextButton.styleFrom(foregroundColor: carShareDanger),
-                  onPressed: _saving ? null : _dismissMatch,
-                  child: const Text('Not my item'),
-                ),
-              ),
-            if (_returned) ...[
               const SizedBox(height: 18),
-              _Notice(
-                text: widget.preview
-                    ? 'Demo item marked as returned.'
-                    : 'The item has been returned. Report closed.',
-              ),
-            ] else if (match == null && progress == null) ...[
-              const SizedBox(height: 18),
-              const _Notice(
-                text: 'Waiting for a matching report on this trip.',
-              ),
-              if (kDebugMode) ...[
+              if (widget.preview) ...[
+                const _Notice(text: 'Demo preview · Sample match and handover'),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _saving
-                      ? null
-                      : () => _openMatchPreview(
-                    context,
-                    report: report,
-                    photo: widget.photo,
+              ],
+              if (match == null)
+                _comparison(report, 'Your report', photo: widget.photo)
+              else ...[
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _comparison(
+                          report,
+                          'Your report',
+                          photo: widget.photo,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _comparison(
+                          match,
+                          match.type == _ReportType.found
+                              ? 'Found item'
+                              : 'Lost item',
+                        ),
+                      ),
+                    ],
                   ),
-                  icon: const Icon(Icons.preview_outlined),
-                  label: const Text('Preview match'),
+                ),
+                const SizedBox(height: 16),
+                _Panel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Flexible(
+                            child: Text('Match confidence', style: _strong),
+                          ),
+                          Text(
+                            '$confidence%',
+                            style: _strong.copyWith(color: carShareGreen),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: matchingCriteria / 3,
+                        minHeight: 6,
+                        color: carShareGreen,
+                        backgroundColor: carShareBorder,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [
+                          const _Criterion('Same trip'),
+                          const _Criterion('Same item type'),
+                          _Criterion(
+                            sameColor ? 'Color matches' : 'Color unknown',
+                            matches: sameColor,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
-              Center(
-                child: TextButton(
-                  onPressed: _saving ? null : _resolve,
-                  child: Text(
-                    report.type == _ReportType.lost
-                        ? 'I recovered my item'
-                        : 'I already returned the item',
+              if (handover != null &&
+                  (handover.meetingPoint != null || !returned)) ...[
+                const SizedBox(height: 22),
+                const Text('Handover', style: _strong),
+                const SizedBox(height: 8),
+                if (handover.meetingPoint != null)
+                  _HandoverCard(
+                    place: handover.meetingPoint!,
+                    when: handover.meetingTime,
+                    code: handover.isOwner ? handover.code : null,
+                    onEdit: _saving || returned ? null : _arrange,
+                  )
+                else
+                  _Notice(
+                    text: 'Agree on a meeting place and time with $otherName.',
+                  ),
+                if (arranged && !returned) ...[
+                  const SizedBox(height: 12),
+                  if (handover.isOwner)
+                    _Notice(
+                      text:
+                          'Give this code to $otherName when you get your item back. '
+                          'The handover ends when they enter it.',
+                    )
+                  else
+                    _codeEntry(otherName, handover),
+                ],
+              ],
+              if (match != null && !returned)
+                Center(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: carShareDanger,
+                    ),
+                    onPressed: _saving ? null : _reject,
+                    child: const Text('Not my item'),
                   ),
                 ),
-              ),
+              if (returned) ...[
+                const SizedBox(height: 18),
+                _Notice(
+                  text: widget.preview
+                      ? 'Demo item marked as returned.'
+                      : 'The item has been returned. Report closed.',
+                ),
+              ] else if (match == null && handover == null) ...[
+                const SizedBox(height: 18),
+                const _Notice(
+                  text: 'Waiting for a matching report on this trip.',
+                ),
+                if (_demoPreview) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _saving
+                        ? null
+                        : () => _openMatchPreview(
+                            context,
+                            report: report,
+                            photo: widget.photo,
+                          ),
+                    icon: const Icon(Icons.preview_outlined),
+                    label: const Text('Preview match'),
+                  ),
+                ],
+                Center(
+                  child: TextButton(
+                    onPressed: _saving ? null : _resolve,
+                    child: Text(
+                      _isLost
+                          ? 'I recovered my item'
+                          : 'I already returned the item',
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
-        ),
-      ),
-      bottomNavigationBar: _returned || (match == null && progress == null)
-          ? null
-          : _Footer(
-        child: FilledButton(
-          style: _filledStyle(),
-          onPressed: _saving
-              ? null
-              : match != null && progress == null
-              ? () => _saveProgress(_HandoverProgress(match.id))
-              : handover == null
-              ? _planHandover
-              : _resolve,
-          child: Text(
-            _saving
-                ? 'Saving…'
-                : progress == null
-                ? 'Confirm match'
-                : handover == null
-                ? 'Arrange handover'
-                : _returnLabel,
           ),
         ),
       ),
+      bottomNavigationBar: action == null
+          ? null
+          : _Footer(
+              child: FilledButton(
+                style: _filledStyle(),
+                onPressed: _saving ? null : onAction,
+                child: Text(_saving ? 'Saving…' : action),
+              ),
+            ),
     );
   }
+
+  /// The finder's side of the check: the owner reads four digits out, the finder types them.
+  Widget _codeEntry(String ownerName, _Handover handover) => Form(
+    key: _codeForm,
+    child: _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Enter the code', style: _strong),
+          const SizedBox(height: 4),
+          Text(
+            'Ask $ownerName for the 4-digit code when you hand the item over.',
+            style: _muted,
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _code,
+            enabled: !_saving,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            textInputAction: TextInputAction.done,
+            decoration: _field('4-digit code', icon: Icons.pin_outlined)
+                .copyWith(
+                  counterText: '',
+                  errorText: _codeError,
+                  errorMaxLines: 2,
+                ),
+            validator: (value) =>
+                RegExp(r'^\d{4}$').hasMatch(value?.trim() ?? '')
+                ? null
+                : 'Enter exactly 4 digits.',
+            onChanged: (_) {
+              if (_codeError != null) setState(() => _codeError = null);
+            },
+            onFieldSubmitted: (_) => _verify(),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _comparison(_Report report, String label, {Uint8List? photo}) =>
       Container(
@@ -1621,7 +1851,7 @@ class _HandoverCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 6,
               children: [
-                const Text('Code to give the finder', style: _muted),
+                const Text('Give this code to the finder', style: _muted),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1776,15 +2006,15 @@ class _ItemIcon extends StatelessWidget {
     dimension: 44,
     child: photo == null
         ? DecoratedBox(
-      decoration: BoxDecoration(
-        color: carShareTint,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        category?.icon ?? Icons.inventory_2_outlined,
-        color: carShareGreen,
-      ),
-    )
+            decoration: BoxDecoration(
+              color: carShareTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              category?.icon ?? Icons.inventory_2_outlined,
+              color: carShareGreen,
+            ),
+          )
         : _Photo(photo!, height: 44),
   );
 }

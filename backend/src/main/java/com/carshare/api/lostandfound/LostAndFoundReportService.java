@@ -28,16 +28,22 @@ public class LostAndFoundReportService {
     private final TripRepository trips;
     private final ReservationRepository reservations;
     private final UserRepository users;
+    private final LostAndFoundHandoverService handovers;
+    private final LostAndFoundHandoverRepository handoverRows;
 
     public LostAndFoundReportService(
             LostAndFoundReportRepository reports,
             TripRepository trips,
             ReservationRepository reservations,
-            UserRepository users) {
+            UserRepository users,
+            LostAndFoundHandoverService handovers,
+            LostAndFoundHandoverRepository handoverRows) {
         this.reports = reports;
         this.trips = trips;
         this.reservations = reservations;
         this.users = users;
+        this.handovers = handovers;
+        this.handoverRows = handoverRows;
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +106,16 @@ public class LostAndFoundReportService {
                     "Only the author can resolve this report.");
         }
 
+        // A report in a live handover is closed by the finder's code, which closes both sides.
+        // Closing it here would leave the other person holding a handover that cannot finish.
+        if (handoverRows.existsByLostReport_IdAndStatusIn(
+                        reportId, LostAndFoundHandoverService.ACTIVE)
+                || handoverRows.existsByFoundReport_IdAndStatusIn(
+                        reportId, LostAndFoundHandoverService.ACTIVE)) {
+            throw new ApiException(HttpStatus.CONFLICT, "handover_in_progress",
+                    "This report is in a handover. Finish it with the code, or call it off.");
+        }
+
         report.resolve();
         return toView(report, userId);
     }
@@ -109,6 +125,7 @@ public class LostAndFoundReportService {
         LostAndFoundReport report = reports.findById(reportId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         "report_not_found", "Report not found."));
+        handovers.cancelActiveFor(reportId);
         report.resolve();
         return toView(report, report.getReporter().getId());
     }
@@ -152,7 +169,8 @@ public class LostAndFoundReportService {
         return new ReportView(
                 report.getId(), report.getTrip().getId(), report.getType(),
                 report.getTitle(), report.getDescription(), report.getStatus(),
-                report.getCreatedAt(), canResolve, reporterId);
+                report.getCreatedAt(), canResolve, reporterId,
+                report.getReporter().getFullName());
     }
 
     public record TripOption(
@@ -162,6 +180,15 @@ public class LostAndFoundReportService {
     public record ReportView(
             UUID id, UUID tripId, LostAndFoundReport.Type type,
             String title, String description, LostAndFoundReport.Status status,
-            Instant createdAt, boolean canResolve, UUID reporterId) {
+            Instant createdAt, boolean canResolve, UUID reporterId, String reporterName) {
+
+        /** The shape before names were added; the admin list still builds its rows this way. */
+        public ReportView(
+                UUID id, UUID tripId, LostAndFoundReport.Type type,
+                String title, String description, LostAndFoundReport.Status status,
+                Instant createdAt, boolean canResolve, UUID reporterId) {
+            this(id, tripId, type, title, description, status, createdAt, canResolve,
+                    reporterId, null);
+        }
     }
 }

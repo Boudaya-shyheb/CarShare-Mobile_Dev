@@ -19,9 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class LostAndFoundReportController {
 
     private final LostAndFoundReportService service;
+    private final LostAndFoundHandoverService handovers;
 
-    public LostAndFoundReportController(LostAndFoundReportService service) {
+    public LostAndFoundReportController(
+            LostAndFoundReportService service, LostAndFoundHandoverService handovers) {
         this.service = service;
+        this.handovers = handovers;
     }
 
     @GetMapping("/trips")
@@ -53,6 +56,55 @@ public class LostAndFoundReportController {
             @AuthenticationPrincipal SessionPrincipal principal,
             @PathVariable("reportId") UUID reportId) {
         return service.resolve(principal.userId(), reportId);
+    }
+
+    /** A phone matched two reports and asks to start (or rejoin) their handover. */
+    @PostMapping("/handovers")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LostAndFoundHandoverService.HandoverView proposeHandover(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @RequestBody ProposeHandoverRequest request) {
+        return handovers.propose(
+                principal.userId(), request.lostReportId(), request.foundReportId());
+    }
+
+    @GetMapping("/handovers/mine")
+    public List<LostAndFoundHandoverService.HandoverView> myHandovers(
+            @AuthenticationPrincipal SessionPrincipal principal) {
+        return handovers.mine(principal.userId());
+    }
+
+    @PutMapping("/handovers/{handoverId}/arrange")
+    public LostAndFoundHandoverService.HandoverView arrangeHandover(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable("handoverId") UUID handoverId,
+            @RequestBody ArrangeHandoverRequest request) {
+        return handovers.arrange(
+                principal.userId(), handoverId, request.meetingPoint(), request.meetingTime());
+    }
+
+    @PostMapping("/handovers/{handoverId}/verify")
+    public LostAndFoundHandoverService.HandoverView verifyHandover(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable("handoverId") UUID handoverId,
+            @RequestBody VerifyHandoverRequest request) {
+        return handovers.verify(principal.userId(), handoverId, request.code());
+    }
+
+    @PostMapping("/handovers/{handoverId}/reject")
+    public LostAndFoundHandoverService.HandoverView rejectHandover(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable("handoverId") UUID handoverId) {
+        return handovers.reject(principal.userId(), handoverId);
+    }
+
+    public record ProposeHandoverRequest(UUID lostReportId, UUID foundReportId) {
+    }
+
+    public record ArrangeHandoverRequest(String meetingPoint, String meetingTime) {
+    }
+
+    public record VerifyHandoverRequest(String code) {
     }
 
     public record CreateReportRequest(

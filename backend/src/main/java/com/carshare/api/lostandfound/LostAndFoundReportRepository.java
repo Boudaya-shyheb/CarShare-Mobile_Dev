@@ -11,5 +11,6 @@ public interface LostAndFoundReportRepository
     @EntityGraph(attributePaths = {"trip", "reporter"})
     List<LostAndFoundReport> findAllByOrderByCreatedAtDesc();
 
+    @EntityGraph(attributePaths = "reporter")
     List<LostAndFoundReport> findByTrip_IdOrderByCreatedAtDesc(UUID tripId);
 }
