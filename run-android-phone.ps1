@@ -45,15 +45,20 @@ $env:JAVA_TOOL_OPTIONS = (@($previousJavaToolOptions, $javaTempOption) |
 Push-Location -LiteralPath $repoRoot
 try {
     $flutterArgs = @('--dart-define=CARSHARE_API_BASE_URL=http://127.0.0.1:' + $apiPort + '/api')
-    if ($env:GOOGLE_SERVER_CLIENT_ID) {
-        $flutterArgs += '--dart-define=GOOGLE_SERVER_CLIENT_ID=' + $env:GOOGLE_SERVER_CLIENT_ID
+    $googleServerClientId = $env:GOOGLE_SERVER_CLIENT_ID
+    if ([string]::IsNullOrWhiteSpace($googleServerClientId)) {
+        $projectEnvFile = Join-Path $repoRoot '.env.local'
+        if (Test-Path -LiteralPath $projectEnvFile) {
+            $googleEntry = Get-Content -LiteralPath $projectEnvFile |
+                Where-Object { $_ -match '^\s*GOOGLE_SERVER_CLIENT_ID\s*=' } |
+                Select-Object -Last 1
+            if ($googleEntry -match '^\s*GOOGLE_SERVER_CLIENT_ID\s*=\s*(.*?)\s*$') {
+                $googleServerClientId = $Matches[1].Trim('"').Trim("'")
+            }
+        }
     }
-    if ($env:FACEBOOK_APP_ID) {
-        $flutterArgs += '--dart-define=FACEBOOK_APP_ID=' + $env:FACEBOOK_APP_ID
-        $flutterArgs += '-PfacebookAppId=' + $env:FACEBOOK_APP_ID
-    }
-    if ($env:FACEBOOK_CLIENT_TOKEN) {
-        $flutterArgs += '-PfacebookClientToken=' + $env:FACEBOOK_CLIENT_TOKEN
+    if (-not [string]::IsNullOrWhiteSpace($googleServerClientId)) {
+        $flutterArgs += '--dart-define=GOOGLE_SERVER_CLIENT_ID=' + $googleServerClientId
     }
     flutter run @flutterArgs
     exit $LASTEXITCODE

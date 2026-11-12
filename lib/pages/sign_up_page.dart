@@ -25,7 +25,6 @@ class _SignUpPageState extends State<SignUpPage> {
   String? _role;
   bool _showRoleError = false;
   bool _loading = false;
-
   @override
   void dispose() {
     _fullName.dispose();

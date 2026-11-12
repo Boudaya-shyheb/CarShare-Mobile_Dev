@@ -27,10 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminOperationsController {
     private final AdminOperationsService admin;
     private final VehicleService vehicles;
+    private final DriverLicenseAdminService driverLicenses;
 
-    public AdminOperationsController(AdminOperationsService admin, VehicleService vehicles) {
+    public AdminOperationsController(AdminOperationsService admin, VehicleService vehicles,
+            DriverLicenseAdminService driverLicenses) {
         this.admin = admin;
         this.vehicles = vehicles;
+        this.driverLicenses = driverLicenses;
     }
 
     @GetMapping("/vehicles")
@@ -48,6 +51,22 @@ public class AdminOperationsController {
         VehicleService.PhotoContent photo = vehicles.getAdminPhoto(vehicleId, photoId);
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(photo.mimeType()))
                 .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff").body(photo.bytes());
+    }
+
+    @GetMapping("/driver-licenses")
+    public List<DriverLicenseAdminService.LicenseReview> driverLicenses() { return driverLicenses.pending(); }
+
+    @GetMapping("/driver-licenses/{userId}/image")
+    public ResponseEntity<byte[]> driverLicenseImage(@PathVariable UUID userId) {
+        var image = driverLicenses.image(userId);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(image.contentType()))
+                .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff").body(image.bytes());
+    }
+
+    @PutMapping("/driver-licenses/{userId}/review")
+    public DriverLicenseAdminService.LicenseReview reviewDriverLicense(@PathVariable UUID userId,
+            @RequestBody DriverLicenseAdminService.ReviewRequest request) {
+        return driverLicenses.review(userId, request);
     }
 
     /** `?status=SCHEDULED` keeps one status (omit or "ALL" for every status); `?limit=` defaults to 100. */

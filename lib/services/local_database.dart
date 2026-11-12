@@ -32,9 +32,10 @@ class LocalDatabase {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       path.join(databasePath, _databaseName),
-      // 3 added the GPS buffer (reservation), 4 merged in the lost-and-found drafts,
-      // 5 adds the reservation tables for recent searches, favourite places and the trips cache.
-      version: 5,
+      // 3 added the GPS buffer, 4 added the lost-and-found drafts, 5 cached the driver-license review
+      // status (user management) and, on another branch, the reservation tables; 6 merges both, so an
+      // upgrade from ANY older version ends with every table and column.
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableName (
@@ -46,7 +47,10 @@ class LocalDatabase {
             created_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'ACTIVE',
             status_until TEXT,
-            has_profile_photo INTEGER NOT NULL DEFAULT 0
+            has_profile_photo INTEGER NOT NULL DEFAULT 0,
+            driver_license_expiry TEXT,
+            driver_license_status TEXT NOT NULL DEFAULT 'NOT_SUBMITTED',
+            driver_license_review_reason TEXT
           )
         ''');
         await _createGpsTable(db);
@@ -72,14 +76,36 @@ class LocalDatabase {
           await _createGpsTable(db);
           await _createDraftTable(db);
         }
-        // Version 5 only adds the three reservation tables; nothing existing is touched.
-        if (oldVersion < 5) {
+        // Version 6: both branches had used 5 for different changes (the license columns on one,
+        // the reservation tables on the other), so a phone at 5 may have either. Every step is
+        // idempotent: the tables use IF NOT EXISTS and the columns are added only when missing.
+        if (oldVersion < 6) {
+          await _addColumnIfMissing(db, _tableName, 'driver_license_expiry', 'TEXT');
+          await _addColumnIfMissing(
+            db,
+            _tableName,
+            'driver_license_status',
+            "TEXT NOT NULL DEFAULT 'NOT_SUBMITTED'",
+          );
+          await _addColumnIfMissing(db, _tableName, 'driver_license_review_reason', 'TEXT');
           await createReservationTables(db);
         }
       },
     );
 
     return _database!;
+  }
+
+  /// ALTER TABLE ... ADD COLUMN only when the column is not there yet (SQLite has no IF NOT EXISTS).
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((row) => row['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   Future<void> _createDraftTable(Database db) async {

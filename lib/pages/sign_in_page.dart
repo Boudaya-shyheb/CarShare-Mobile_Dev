@@ -63,14 +63,10 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  Future<void> _signInSocial(String provider) async {
+  Future<void> _signInWithGoogle() async {
     setState(() => _loading = true);
     try {
-      if (provider == 'google') {
-        await _service.signInWithGoogle();
-      } else {
-        await _service.signInWithFacebook();
-      }
+      await _service.signInWithGoogle();
       if (mounted && _service.currentUser.value != null) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
@@ -79,7 +75,10 @@ class _SignInPageState extends State<SignInPage> {
         final profile = await _askForSocialProfile();
         if (profile != null) {
           try {
-            await _service.completeSocialProfile(phone: profile['phone']!, role: profile['role']!);
+            await _service.completeGoogleProfile(
+              phone: profile['phone']!,
+              role: profile['role']!,
+            );
             if (mounted && _service.currentUser.value != null) {
               Navigator.of(context).popUntil((route) => route.isFirst);
             }
@@ -95,53 +94,126 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  Future<Map<String, String>?> _askForSocialProfile() => showDialog<Map<String, String>>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Finish your CarShare profile'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: _socialPhone, keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone number')),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _socialRole,
-              decoration: const InputDecoration(labelText: 'I want to'),
-              items: const [
-                DropdownMenuItem(value: 'passenger', child: Text('Ride as passenger')),
-                DropdownMenuItem(value: 'driver', child: Text('Drive & share')),
+  Future<Map<String, String>?> _askForSocialProfile() =>
+      showDialog<Map<String, String>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Finish your CarShare profile'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _socialPhone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone number'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _socialRole,
+                  decoration: const InputDecoration(labelText: 'I want to'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'passenger',
+                      child: Text('Ride as passenger'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'driver',
+                      child: Text('Drive & share'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => _socialRole = value),
+                ),
               ],
-              onChanged: (value) => setDialogState(() => _socialRole = value),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (_socialPhone.text.trim().isEmpty || _socialRole == null) {
+                    return;
+                  }
+                  Navigator.pop(dialogContext, {
+                    'phone': _socialPhone.text.trim(),
+                    'role': _socialRole!,
+                  });
+                },
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Future<String?> _askForResetEmail() async {
+    final controller = TextEditingController(text: _email.text.trim());
+    final formKey = GlobalKey<FormState>();
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Reset your password'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: _validateEmail,
+              onFieldSubmitted: (_) {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, controller.text.trim());
+                }
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, controller.text.trim());
+                }
+              },
+              child: const Text('Send code'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            if (_socialPhone.text.trim().isEmpty || _socialRole == null) return;
-            Navigator.pop(dialogContext, {'phone': _socialPhone.text.trim(), 'role': _socialRole!});
-          }, child: const Text('Continue')),
-        ],
-      ),
-    ),
-  );
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
 
   Future<void> _resetPassword() async {
-    final emailError = _validateEmail(_email.text);
+    var email = _email.text.trim();
+    if (email.isEmpty) {
+      final requestedEmail = await _askForResetEmail();
+      if (!mounted || requestedEmail == null) return;
+      email = requestedEmail;
+      _email.text = email;
+    }
+    final emailError = _validateEmail(email);
     if (emailError != null) {
-      _formKey.currentState!.validate();
+      _formKey.currentState?.validate();
       return;
     }
     setState(() => _sendingReset = true);
     try {
-      await _service.sendPasswordReset(_email.text);
+      await _service.sendPasswordReset(email);
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              ResetPasswordPage(token: '', email: _email.text.trim()),
+          builder: (_) => ResetPasswordPage(token: '', email: email),
         ),
       );
     } catch (error) {
@@ -160,8 +232,6 @@ class _SignInPageState extends State<SignInPage> {
   /// when there is nothing under it).
   static const _googleEnabled =
       String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID') != '';
-  static const _facebookEnabled =
-      String.fromEnvironment('FACEBOOK_APP_ID') != '';
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -262,7 +332,7 @@ class _SignInPageState extends State<SignInPage> {
                           loading: _loading,
                           onPressed: _signIn,
                         ),
-                        if (_googleEnabled || _facebookEnabled) ...[
+                        if (_googleEnabled) ...[
                           const SizedBox(height: 24),
                           const Row(
                             children: [
@@ -280,28 +350,13 @@ class _SignInPageState extends State<SignInPage> {
                           const SizedBox(height: 18),
                           Row(
                             children: [
-                              if (_googleEnabled)
-                                Expanded(
-                                  child: _SocialButton(
-                                    label: 'Google',
-                                    icon: Icons.g_mobiledata,
-                                    onPressed: _loading
-                                        ? null
-                                        : () => _signInSocial('google'),
-                                  ),
+                              Expanded(
+                                child: _SocialButton(
+                                  label: 'Google',
+                                  icon: Icons.g_mobiledata,
+                                  onPressed: _loading ? null : _signInWithGoogle,
                                 ),
-                              if (_googleEnabled && _facebookEnabled)
-                                const SizedBox(width: 12),
-                              if (_facebookEnabled)
-                                Expanded(
-                                  child: _SocialButton(
-                                    label: 'Facebook',
-                                    icon: Icons.facebook,
-                                    onPressed: _loading
-                                        ? null
-                                        : () => _signInSocial('facebook'),
-                                  ),
-                                ),
+                              ),
                             ],
                           ),
                         ],

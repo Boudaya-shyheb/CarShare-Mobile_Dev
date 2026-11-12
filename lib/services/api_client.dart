@@ -176,10 +176,12 @@ class ApiClient {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    Map<String, String> fields = const {},
   }) async {
     final token = await readToken();
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll(fields);
     request.files.add(
       http.MultipartFile.fromBytes(
         fieldName,

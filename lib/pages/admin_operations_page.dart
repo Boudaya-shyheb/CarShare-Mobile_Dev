@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/admin_section_header.dart';
 import '../widgets/empty_state.dart';
@@ -28,7 +29,8 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   bool _working = false;
 
   String get _path => switch (widget.section) {
-    AdminSection.vehicles => '/admin/vehicles',
+    AdminSection.vehicles =>
+      _showSecondary ? '/admin/driver-licenses' : '/admin/vehicles',
     AdminSection.trips =>
       _showSecondary ? '/admin/reservations' : '/admin/trips',
     AdminSection.support =>
@@ -56,6 +58,8 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     );
     if (mounted) _refresh();
   }
+
+  Future<void> _signOut() => AuthService.instance.signOut();
 
   Future<void> _act(Future<void> Function() action, String message) async {
     setState(() => _working = true);
@@ -85,7 +89,9 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     };
     final subtitle = switch (widget.section) {
       AdminSection.vehicles =>
-        'Check vehicle details and document dates before approval.',
+        _showSecondary
+            ? 'Review driver licenses. Images are removed after a decision.'
+            : 'Check vehicle details and document dates before approval.',
       AdminSection.trips =>
         'Review trip progress, reservations, and reported deviations.',
       AdminSection.support =>
@@ -109,17 +115,31 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
           ),
+          IconButton(
+            onPressed: _working ? null : _signOut,
+            tooltip: 'Sign out',
+            icon: const Icon(Icons.logout_rounded),
+          ),
         ],
       ),
       body: Column(
         children: [
           adminSectionHeader(context, title, subtitle, icon),
-          if (widget.section == AdminSection.trips ||
+          if (widget.section == AdminSection.vehicles ||
+              widget.section == AdminSection.trips ||
               widget.section == AdminSection.support)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: SegmentedButton<bool>(
-                segments: widget.section == AdminSection.trips
+                segments: widget.section == AdminSection.vehicles
+                    ? const [
+                        ButtonSegment(value: false, label: Text('Vehicles')),
+                        ButtonSegment(
+                          value: true,
+                          label: Text('Driver licenses'),
+                        ),
+                      ]
+                    : widget.section == AdminSection.trips
                     ? const [
                         ButtonSegment(value: false, label: Text('Trips')),
                         ButtonSegment(value: true, label: Text('Reservations')),
@@ -178,7 +198,10 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   }
 
   String _emptyMessage() => switch (widget.section) {
-    AdminSection.vehicles => 'No registered vehicles to review.',
+    AdminSection.vehicles =>
+      _showSecondary
+          ? 'No driver licenses are waiting for review.'
+          : 'No registered vehicles to review.',
     AdminSection.trips =>
       _showSecondary ? 'No reservations found.' : 'No trips found.',
     AdminSection.support =>
@@ -187,7 +210,8 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   };
 
   Widget _buildCard(Map<String, dynamic> item) => switch (widget.section) {
-    AdminSection.vehicles => _vehicleCard(item),
+    AdminSection.vehicles =>
+      _showSecondary ? _driverLicenseCard(item) : _vehicleCard(item),
     AdminSection.trips =>
       _showSecondary ? _reservationCard(item) : _tripCard(item),
     AdminSection.support =>
@@ -269,6 +293,144 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
       ),
     );
   }
+
+  Widget _driverLicenseCard(Map<String, dynamic> item) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.badge_outlined, color: carShareGreen),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item['fullName'] as String? ?? 'Driver',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              _status(item['status']),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('${item['email']} · ${item['phone']}'),
+          Text('License expires: ${_date(item['expiryDate'])}'),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: SizedBox(
+                width: double.infinity,
+                child: _DriverLicenseImage(userId: '${item['userId']}'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _working
+                    ? null
+                    : () => _reviewDriverLicense(item, 'APPROVED'),
+                icon: const Icon(Icons.check),
+                label: const Text('Approve'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _working
+                    ? null
+                    : () => _reviewDriverLicense(item, 'REJECTED'),
+                icon: const Icon(Icons.close),
+                label: const Text('Reject'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _reviewDriverLicense(
+    Map<String, dynamic> item,
+    String status,
+  ) async {
+    final reason = TextEditingController();
+    var reasonMissing = false;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            status == 'APPROVED'
+                ? 'Approve driver license'
+                : 'Reject driver license',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: reason,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: status == 'REJECTED'
+                      ? 'Reason (required)'
+                      : 'Review note (optional)',
+                ),
+              ),
+              if (reasonMissing)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'A reason is required to reject this license.',
+                    style: TextStyle(color: carShareDanger),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (status == 'REJECTED' && reason.text.trim().isEmpty) {
+                  setDialogState(() => reasonMissing = true);
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: Text(status == 'APPROVED' ? 'Approve' : 'Reject'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) {
+      reason.dispose();
+      return;
+    }
+    final note = reason.text.trim();
+    reason.dispose();
+    await _act(
+      () async {
+        await ApiClient.instance.put(
+          '/admin/driver-licenses/${item['userId']}/review',
+          {'status': status, 'reason': note},
+        );
+      },
+      status == 'APPROVED'
+          ? 'Driver license approved. The uploaded image was deleted.'
+          : 'Driver license rejected. The uploaded image was deleted.',
+    );
+  }
+
 
   Widget _tripCard(Map<String, dynamic> item) => Card(
     child: ListTile(
@@ -669,6 +831,38 @@ class _VehiclePhotoState extends State<_VehiclePhoto> {
           fit: BoxFit.cover,
         ),
       );
+    },
+  );
+}
+
+class _DriverLicenseImage extends StatefulWidget {
+  const _DriverLicenseImage({required this.userId});
+  final String userId;
+  @override
+  State<_DriverLicenseImage> createState() => _DriverLicenseImageState();
+}
+
+class _DriverLicenseImageState extends State<_DriverLicenseImage> {
+  late final Future<Uint8List> _bytes = ApiClient.instance.getBytes(
+    '/admin/driver-licenses/${widget.userId}/image',
+  );
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    future: _bytes,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return const SizedBox(
+          height: 150,
+          child: Center(child: Text('License image unavailable.')),
+        );
+      }
+      if (!snapshot.hasData) {
+        return const SizedBox(
+          height: 150,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        );
+      }
+      return Image.memory(snapshot.data!, fit: BoxFit.contain);
     },
   );
 }

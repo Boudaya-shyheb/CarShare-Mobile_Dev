@@ -32,7 +32,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/signin",
                         "/api/auth/forgot-password", "/api/auth/reset-password",
-                        "/api/auth/social/google", "/api/auth/social/facebook").permitAll()
+                        "/api/auth/social/google").permitAll()
                 .requestMatchers(HttpMethod.GET, "/reset-password.html").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(new TokenAuthenticationFilter(sessions), UsernamePasswordAuthenticationFilter.class);

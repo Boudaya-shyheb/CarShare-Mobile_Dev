@@ -58,6 +58,7 @@ class AdminEndpointsSecurityTest {
     @MockitoBean private AdminStatsService adminStats;
     @MockitoBean private AdminOperationsService adminOperations;
     @MockitoBean private VehicleService vehicleService; // the operations controller needs it
+    @MockitoBean private DriverLicenseAdminService driverLicenseAdminService; // and the license review
     @MockitoBean private AuthSessionRepository sessions;
 
     private final UUID tripId = UUID.randomUUID();

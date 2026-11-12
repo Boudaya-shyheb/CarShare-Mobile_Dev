@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/user_profile.dart';
+import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/driver_license_ocr_service.dart';
 import '../services/user_management_service.dart';
 import '../theme.dart';
 import '../widgets/form_field.dart';
@@ -33,6 +36,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _role;
   bool _loading = false;
   bool _photoLoading = false;
+  bool _licenseLoading = false;
   Future<Uint8List>? _photoFuture;
   final ExpansibleController _editTileController = ExpansibleController();
   final GlobalKey _editTileKey = GlobalKey();
@@ -274,6 +278,11 @@ class _ProfilePageState extends State<ProfilePage> {
                         const ProfileStatsCard(),
                         _statusCard(user.status, user.statusUntil),
                         const SizedBox(height: 12),
+                        // Driver-license verification (drivers only), above the menu card.
+                        if (user.role.toLowerCase() == 'driver') ...[
+                          _driverLicenseCard(user),
+                          const SizedBox(height: 12),
+                        ],
                         Card(
                     color: Colors.white,
                     elevation: 4,
@@ -634,6 +643,162 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String _formatDate(DateTime date) => date.toIso8601String().substring(0, 10);
+
+  Future<void> _scanDriverLicense() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 68,
+    );
+    if (image == null || !mounted) return;
+    setState(() => _licenseLoading = true);
+    try {
+      final candidates = await DriverLicenseOcrService()
+          .readPossibleExpiryDates(image.path);
+      if (!mounted) return;
+      final today = DateUtils.dateOnly(DateTime.now());
+      DateTime? detected;
+      for (final date in candidates) {
+        if (!date.isBefore(today)) {
+          detected = date;
+          break;
+        }
+      }
+      final expiry = await showDatePicker(
+        context: context,
+        initialDate:
+            detected ?? DateTime(today.year + 1, today.month, today.day),
+        firstDate: today,
+        lastDate: DateTime(today.year + 30),
+        helpText: detected == null
+            ? 'Select the license expiry date'
+            : 'Confirm the expiry date read from the license',
+      );
+      if (expiry == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > 2 * 1024 * 1024) {
+        throw const ApiException(
+          'The license image is larger than 2 MB. Please scan it again closer and in better light.',
+        );
+      }
+      final ext = image.name.split('.').last.toLowerCase();
+      final mime = switch (ext) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        _ => 'image/jpeg',
+      };
+      await UserManagementService.instance.submitDriverLicense(
+        bytes: bytes,
+        fileName: image.name,
+        mimeType: mime,
+        expiryDate: expiry,
+      );
+      await AuthService.instance.refreshProfile();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('License submitted for admin review.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+      }
+    } finally {
+      try {
+        final localImage = File(image.path);
+        if (await localImage.exists()) await localImage.delete();
+      } catch (_) {
+        // The temporary camera file is best-effort cleanup.
+      }
+      if (mounted) setState(() => _licenseLoading = false);
+    }
+  }
+
+  Widget _driverLicenseCard(UserProfile user) {
+    final pending = user.driverLicenseStatus == 'PENDING_REVIEW';
+    final approved = user.driverLicenseStatus == 'APPROVED';
+    final label = switch (user.driverLicenseStatus) {
+      'PENDING_REVIEW' => 'Waiting for admin review',
+      'APPROVED' => 'Verified by admin',
+      'REJECTED' => 'Needs a new scan',
+      _ => 'Not submitted',
+    };
+    return Card(
+      color: Colors.white,
+      elevation: 4,
+      shadowColor: const Color(0x22000000),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(carShareCardRadius),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.badge_outlined, color: carShareGreen),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Driver license',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: approved ? carShareGreen : Colors.blueGrey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            if (user.driverLicenseExpiry != null) ...[
+              const SizedBox(height: 8),
+              Text('Expiry date: ${_formatDate(user.driverLicenseExpiry!)}'),
+            ],
+            if ((user.driverLicenseReviewReason ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Admin note: ${user.driverLicenseReviewReason}',
+                style: const TextStyle(color: Colors.deepOrange),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'The expiry date is read on your phone. The license image is visible to admins only and is deleted after their decision.',
+              style: TextStyle(color: Color(0xFF718096), fontSize: 12),
+            ),
+            if (!pending) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _licenseLoading ? null : _scanDriverLicense,
+                icon: _licenseLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.document_scanner_outlined),
+                label: Text(
+                  _licenseLoading
+                      ? 'Reading license…'
+                      : user.driverLicenseStatus == 'REJECTED'
+                      ? 'Scan again'
+                      : 'Scan driver license',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
   /// The small round buttons on the avatar's lower corners: 32 dp with a white ring, like the
   /// mockup's verified badge.

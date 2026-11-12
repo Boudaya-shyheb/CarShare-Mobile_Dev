@@ -33,6 +33,25 @@ class UserManagementService {
 
   Future<void> deleteProfilePhoto() => _api.deletePhoto();
 
+  Future<void> submitDriverLicense({
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+    required DateTime expiryDate,
+  }) async {
+    await _api.uploadMultipart(
+      path: '/users/me/driver-license',
+      fieldName: 'image',
+      bytes: bytes,
+      fileName: fileName,
+      mimeType: mimeType,
+      fields: {
+        'expiryDate':
+            '${expiryDate.year.toString().padLeft(4, '0')}-${expiryDate.month.toString().padLeft(2, '0')}-${expiryDate.day.toString().padLeft(2, '0')}',
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getEmergencyContacts() =>
       _api.getList('/users/me/emergency-contacts');
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../services/auth_service.dart';
 import '../theme.dart';
 
 Widget adminSectionHeader(BuildContext context, String title, String subtitle, IconData icon) =>
@@ -20,7 +19,5 @@ Widget adminSectionHeader(BuildContext context, String title, String subtitle, I
           const SizedBox(height: 3),
           Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
         ])),
-        IconButton(onPressed: () => AuthService.instance.signOut(), tooltip: 'Sign out',
-          style: IconButton.styleFrom(foregroundColor: Colors.white), icon: const Icon(Icons.logout)),
       ]),
     );

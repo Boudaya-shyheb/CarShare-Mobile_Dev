@@ -64,20 +64,26 @@ public final class AuthDtos {
     }
     public record ProfilePhoto(byte[] bytes, String contentType) { }
     public record UserProfile(UUID id, String fullName, String phone, String email, String role, Instant createdAt,
-            String status, Instant statusUntil, boolean hasProfilePhoto) {
+            String status, Instant statusUntil, boolean hasProfilePhoto,
+            java.time.LocalDate driverLicenseExpiry, String driverLicenseStatus,
+            String driverLicenseReviewReason) {
         public static UserProfile from(AppUser user) {
             return new UserProfile(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(),
                     user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(),
-                    user.getStatusUntil(), user.getProfilePhoto() != null);
+                    user.getStatusUntil(), user.getProfilePhoto() != null,
+                    user.getDriverLicenseExpiry(), user.getDriverLicenseStatus(), user.getDriverLicenseReviewReason());
         }
     }
     public record AdminUser(UUID id, String fullName, String phone, String email, String role,
             Instant createdAt, String status, Instant statusUntil, String statusReason,
-            boolean hasProfilePhoto) {
+            boolean hasProfilePhoto, java.time.LocalDate driverLicenseExpiry,
+            String driverLicenseStatus, String driverLicenseReviewReason) {
         public static AdminUser from(AppUser user) {
             return new AdminUser(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(),
                     user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(),
-                    user.getStatusUntil(), user.getStatusReason(), user.getProfilePhoto() != null);
+                    user.getStatusUntil(), user.getStatusReason(), user.getProfilePhoto() != null,
+                    user.getDriverLicenseExpiry(), user.getDriverLicenseStatus(),
+                    user.getDriverLicenseReviewReason());
         }
     }
     public record AuthResponse(String accessToken, String tokenType, Instant expiresAt, UserProfile user) { }

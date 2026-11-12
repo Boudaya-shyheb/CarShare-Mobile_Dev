@@ -36,6 +36,10 @@ For local testing on a physical Android phone, keep the phone connected by USB a
 
 Without a real SMTP configuration, sign up, sign in, profile lookup, and sign out work, but password recovery returns a clear setup error. A public HTTPS deployment is needed only if reset links must work when the phone cannot reach the development API (for example, without USB forwarding).
 
+## Driver license review
+
+Drivers can scan their license in the app. Text recognition happens locally, and the driver confirms the detected expiry date before upload. The uploaded image is available only through admin-authorized endpoints while review is pending and is removed from the database as soon as an administrator approves or rejects it. The current implementation records the review status; ride publishing is not gated by that status because that belongs to the trip/vehicle feature rules.
+
 ## Flutter client
 
 The Android emulator reaches the host machine's API at `http://10.0.2.2:8081/api`, which is the Flutter client's local default. The local backend script uses port `8081` to avoid conflicts with services that commonly occupy port `8080`. Start the backend with `.\run-local.ps1`, then run `..\run-android-phone.ps1` for a USB-connected phone; that script forwards port `8081` to the phone. For a hosted API, provide a reachable base URL:
@@ -63,8 +67,9 @@ For a deployed API, use its HTTPS URL. The debug Android manifest allows clearte
 - `GET /api/admin/users` lists accounts for authenticated `ADMIN` users
 - `PUT /api/admin/users/{userId}` updates a user's name, phone, email, and role
 - `PUT /api/admin/users/{userId}/status` applies an admin status and reason
-- `POST /api/auth/social/google` and `/api/auth/social/facebook` verify provider credentials and create CarShare sessions
+- `POST /api/auth/social/google` verifies Google credentials and creates a CarShare session
 - `GET /api/admin/vehicles` and `PUT /api/admin/vehicles/{vehicleId}/review` review vehicle details and photos
+- `POST /api/users/me/driver-license` submits a driver's license image and confirmed expiry date; `/api/admin/driver-licenses` and its image/review routes are admin-only
 - `GET /api/admin/trips` and `/api/admin/reservations` read trip and reservation information without bypassing their state rules
 - `GET /api/support/tickets` and `POST /api/support/tickets` manage the signed-in user's support requests
 - `GET /api/admin/support-tickets` and `PUT /api/admin/support-tickets/{ticketId}` review and resolve support requests
@@ -91,4 +96,4 @@ Five failed sign-in attempts lock that account for 15 minutes. Phone numbers are
 
 The first admin account must be promoted manually in the database after the admin role migration has run. Admins can then manage user roles and account statuses in the app. The mobile sign-up flow never accepts the `ADMIN` role. Manual warnings and suspensions need an end date and reason; a ban has no automatic end date. When an admin restores an account to `ACTIVE`, the backend immediately recalculates its status from active sanctions. Expired manual warnings and suspensions return to the sanction-based status during the daily status job.
 
-Google and Facebook login require provider configuration. Set `GOOGLE_SERVER_CLIENT_ID`, `FACEBOOK_APP_ID`, and `FACEBOOK_APP_SECRET` on the backend. The Google server client ID must also be passed to Flutter as `--dart-define=GOOGLE_SERVER_CLIENT_ID=...`; Android Facebook App ID and Client Token are passed by `run-android-phone.ps1` through environment variables. Do not place the Facebook App Secret in the mobile app. These flows cannot be tested until valid provider applications and credentials are configured.
+Google login requires an Android OAuth client configured with the package name and SHA-1 fingerprint, plus a Web OAuth client. Set its ID as `GOOGLE_SERVER_CLIENT_ID` in the root `.env.local`; `run-local.ps1` loads it for the backend and `run-android-phone.ps1` passes it to Flutter.
