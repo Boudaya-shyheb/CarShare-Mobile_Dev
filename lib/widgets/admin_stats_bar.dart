@@ -79,29 +79,15 @@ class _AdminStatsBarState extends State<AdminStatsBar> {
           ('Reservations', stats.reservations),
           ('Lost & found', stats.lostAndFoundReports),
         ];
-        return Row(
-          children: [
-            Expanded(
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-                itemCount: counters.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, index) => _Counter(
-                  label: counters[index].$1,
-                  value: counters[index].$2,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Refresh counters',
-              onPressed: _reload,
-              icon: const Icon(Icons.refresh, size: 20),
-            ),
-          ],
+        // No refresh button of its own: the counters reload when the admin changes tab, and
+        // the AppBar refresh below reloads the list.
+        return ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          itemCount: counters.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) =>
+              _Counter(label: counters[index].$1, value: counters[index].$2),
         );
       },
     ),

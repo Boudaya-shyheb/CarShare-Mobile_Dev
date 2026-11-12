@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../theme.dart';
 import '../widgets/admin_section_header.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/route_title.dart';
+import '../widgets/status_chip.dart';
+import '../widgets/trip_formats.dart';
 import 'admin_trip_details_page.dart';
 
 enum AdminSection { vehicles, trips, support, sanctions }
@@ -161,17 +165,17 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
 
   Widget _tripCard(Map<String, dynamic> item) => Card(child: ListTile(
     onTap: () => _openTrip(item),
-    leading: Icon(item['incidentReported'] == true ? Icons.warning_amber_rounded : Icons.route, color: item['incidentReported'] == true ? Colors.deepOrange : carShareGreen),
-    title: Text('${item['origin']} → ${item['destination']}', maxLines: 2, overflow: TextOverflow.ellipsis),
-    subtitle: Text('${item['driverName']} · ${_date(item['departureTime'])}\n${item['status']}${item['incidentReported'] == true ? ' · Reported deviation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}'),
-    isThreeLine: true, trailing: _status(item['status']),
+    leading: Icon(item['incidentReported'] == true ? Icons.warning_amber_rounded : Icons.route, color: item['incidentReported'] == true ? carShareWarning : carShareGreen),
+    title: Text('${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}', maxLines: 2, overflow: TextOverflow.ellipsis),
+    subtitle: Text('${item['driverName']} · ${_date(item['departureTime'])}${item['incidentReported'] == true ? '\nReported deviation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}'),
+    isThreeLine: item['incidentReported'] == true || item['cancelReason'] != null, trailing: _tripChip('${item['status']}'),
   ));
 
   Widget _reservationCard(Map<String, dynamic> item) => Card(child: ListTile(
     leading: const Icon(Icons.event_seat_outlined, color: carShareGreen),
-    title: Text('${item['origin']} → ${item['destination']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+    title: Text('${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}', maxLines: 1, overflow: TextOverflow.ellipsis),
     subtitle: Text('Passenger: ${item['passengerName']} · Driver: ${item['driverName']}\n${item['seats']} seat(s) · ${item['status']}${item['lateCancellation'] == true ? ' · Late cancellation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}'),
-    isThreeLine: true, trailing: _status(item['status']),
+    isThreeLine: true, trailing: StatusChip(label: reservationStatusLabel('${item['status']}'), colour: reservationStatusColour('${item['status']}')),
   ));
 
   Widget _ticketCard(Map<String, dynamic> item) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -195,7 +199,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   ])));
 
   Widget _sanctionCard(Map<String, dynamic> item) => Card(child: ListTile(
-    leading: const CircleAvatar(backgroundColor: Color(0xFFFFEDD5), child: Icon(Icons.gavel, color: Colors.deepOrange)),
+    leading: const CircleAvatar(backgroundColor: Color(0xFFFEF3C7), child: Icon(Icons.gavel, color: carShareWarning)),
     title: Text('${item['userName']} · ${item['points']} point(s)', style: const TextStyle(fontWeight: FontWeight.w700)),
     subtitle: Text('${item['reason']}\nIssued ${_date(item['issuedAt'])} · Expires ${_date(item['expiresAt'])} · ${item['accountStatus']}'),
     isThreeLine: true, trailing: _status(item['active'] == true ? 'ACTIVE' : 'EXPIRED'),
@@ -265,13 +269,15 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     await _act(() async { await ApiClient.instance.post('/admin/users/${result['userId']}/sanctions', {'points': result['points'], 'reason': result['reason']}); }, 'Sanction recorded for 90 days.');
   }
 
+  /// The same label and colour the trip details page and the passenger screens use.
+  Widget _tripChip(String status) =>
+      StatusChip(label: prettyStatus(status), colour: tripStatusColour(status));
+
   Widget _status(Object? value) {
     final text = '$value'.replaceAll('_', ' ').toLowerCase();
     final good = const {'approved', 'active', 'resolved', 'completed'}.contains(text);
-    final color = good ? carShareGreen : text.contains('reject') || text.contains('ban') ? carShareDanger : Colors.deepOrange;
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(color: color.withValues(alpha: .1), borderRadius: BorderRadius.circular(99)),
-      child: Text(text.isEmpty ? 'Unknown' : text[0].toUpperCase() + text.substring(1), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)));
+    final color = good ? carShareGreen : text.contains('reject') || text.contains('ban') || text.contains('cancel') ? carShareDanger : carShareWarning;
+    return StatusChip(label: text.isEmpty ? 'Unknown' : text[0].toUpperCase() + text.substring(1), colour: color);
   }
 
   String _date(Object? value) {
@@ -304,9 +310,9 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
   @override
-  Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-    const Icon(Icons.cloud_off_outlined, size: 38, color: carShareMuted), const SizedBox(height: 10),
-    Text(message, textAlign: TextAlign.center), const SizedBox(height: 12), OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+  Widget build(BuildContext context) => Center(child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+    EmptyState(icon: Icons.cloud_off_outlined, title: 'Could not load this list', line: message),
+    OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
   ])));
 }
 
@@ -314,7 +320,5 @@ class _EmptyView extends StatelessWidget {
   const _EmptyView({required this.message});
   final String message;
   @override
-  Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(30), child: Column(mainAxisSize: MainAxisSize.min, children: [
-    const Icon(Icons.inbox_outlined, size: 42, color: carShareGreen), const SizedBox(height: 10), Text(message, textAlign: TextAlign.center, style: const TextStyle(color: carShareMuted)),
-  ])));
+  Widget build(BuildContext context) => EmptyState(icon: Icons.inbox_outlined, title: 'Nothing here yet', line: message);
 }

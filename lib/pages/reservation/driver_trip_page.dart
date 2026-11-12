@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/reservation_service.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
+import '../../widgets/route_title.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/trip_formats.dart';
 
@@ -165,13 +166,9 @@ class _DriverTripPageState extends State<DriverTripPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              Text(
-                '${trip.originLabel} → ${trip.destinationLabel}',
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  color: carShareText,
-                ),
+              RouteTitle(
+                origin: RouteTitle.shortName(trip.originLabel),
+                destination: RouteTitle.shortName(trip.destinationLabel),
               ),
               const SizedBox(height: 10),
               Text(

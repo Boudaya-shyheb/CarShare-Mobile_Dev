@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/status_chip.dart';
 
 class AdminUsersPage extends StatefulWidget {
   const AdminUsersPage({super.key});
@@ -332,6 +334,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    backgroundColor: carShareBackground,
     appBar: AppBar(
       title: const Text('Admin · User accounts'),
       actions: [
@@ -355,13 +358,15 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         }
         if (snapshot.hasError) {
           return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(snapshot.error.toString(), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
+                  EmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Could not load the accounts',
+                    line: snapshot.error.toString(),
+                  ),
                   OutlinedButton(
                     onPressed: _refresh,
                     child: const Text('Try again'),
@@ -462,13 +467,15 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 child: users.isEmpty
                     ? ListView(
                         children: [
-                          const SizedBox(height: 100),
-                          Center(
-                            child: Text(
-                              (snapshot.data ?? const []).isEmpty
-                                  ? 'No user accounts yet.'
-                                  : 'No users match these filters.',
-                            ),
+                          const SizedBox(height: 40),
+                          EmptyState(
+                            icon: Icons.people_outline,
+                            title: (snapshot.data ?? const []).isEmpty
+                                ? 'No user accounts yet'
+                                : 'No users match',
+                            line: (snapshot.data ?? const []).isEmpty
+                                ? 'Accounts appear here once people sign up.'
+                                : 'Try another search or clear the filters.',
                           ),
                         ],
                       )
@@ -493,23 +500,33 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
       child: ListTile(
         onTap: _working ? null : () => _showDetails(user),
         leading: CircleAvatar(
-          backgroundColor: const Color(0xFFD1FAE5),
+          backgroundColor: carShareTint,
           child: Text(
             name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
             style: const TextStyle(color: carShareGreen),
           ),
         ),
         title: Text(name),
-        subtitle: Text(
-          '${user['email'] ?? ''}\n${user['phone'] ?? ''} · ${_label(user['role'])}',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${user['email'] ?? ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              '${user['phone'] ?? ''} · ${_label(user['role'])}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
-        isThreeLine: true,
-        trailing: Text(
-          _label(status),
-          style: TextStyle(
-            color: status == 'ACTIVE' ? carShareGreen : Colors.deepOrange,
-            fontWeight: FontWeight.w700,
-          ),
+        trailing: StatusChip(
+          label: _label(status),
+          colour: status == 'ACTIVE'
+              ? carShareGreen
+              : (status == 'BANNED' ? carShareDanger : carShareWarning),
         ),
       ),
     );

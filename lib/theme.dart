@@ -4,8 +4,9 @@ const carShareGreen = Color(0xFF059669);
 const carShareGreenDark = Color(0xFF065F46); // second stop of the green header gradients
 
 // Support module palette (used by lib/pages/support and the support_* widgets).
-const supportGreen = Color(0xFF079B70);
-const supportDarkGreen = Color(0xFF047857);
+// The two greens are now the brand greens (they were #079B70 and #047857, a shade off).
+const supportGreen = carShareGreen;
+const supportDarkGreen = carShareGreenDark;
 const supportWarningBackground = Color(0xFFFFF1C2);
 const supportWarningText = Color(0xFFD97706);
 
@@ -42,6 +43,74 @@ final carShareTheme = ThemeData(
   ),
   scaffoldBackgroundColor: Colors.white,
   fontFamily: 'Roboto',
+  // One AppBar for every screen: white, flat, bold dark title, no Material 3 tint on scroll.
+  appBarTheme: const AppBarTheme(
+    backgroundColor: Colors.white,
+    foregroundColor: carShareText,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    scrolledUnderElevation: 0,
+    titleTextStyle: TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 20,
+      fontWeight: FontWeight.w800,
+      color: carShareText,
+    ),
+  ),
+  // Cards (the admin lists use the plain Card widget): white, hairline border, 16 px corners.
+  cardTheme: CardThemeData(
+    color: Colors.white,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    margin: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: const BorderSide(color: carShareBorder),
+    ),
+  ),
+  filledButtonTheme: FilledButtonThemeData(
+    style: FilledButton.styleFrom(
+      minimumSize: const Size(64, 50),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+    ),
+  ),
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: carShareGreen,
+      side: const BorderSide(color: carShareBorder),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+    ),
+  ),
+  navigationBarTheme: NavigationBarThemeData(
+    backgroundColor: Colors.white,
+    surfaceTintColor: Colors.transparent,
+    indicatorColor: carShareTint,
+    labelTextStyle: WidgetStateProperty.resolveWith(
+      (states) => TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: states.contains(WidgetState.selected)
+            ? carShareGreen
+            : carShareMuted,
+      ),
+    ),
+  ),
+  dialogTheme: DialogThemeData(
+    backgroundColor: Colors.white,
+    surfaceTintColor: Colors.transparent,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+  ),
+  snackBarTheme: SnackBarThemeData(
+    behavior: SnackBarBehavior.floating,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+  floatingActionButtonTheme: const FloatingActionButtonThemeData(
+    backgroundColor: carShareGreen,
+    foregroundColor: Colors.white,
+  ),
+  dividerTheme: const DividerThemeData(color: carShareBorder, space: 1),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
     fillColor: Colors.white,
