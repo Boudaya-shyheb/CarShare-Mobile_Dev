@@ -25,9 +25,13 @@ class ReservationService {
 
   /// The caller's own trips. [scope] is upcoming, past or cancelled; null for all of them.
   Future<List<Trip>> myTrips({String? scope}) async =>
-      (await _api.getList('/trips/mine${scope == null ? '' : '?scope=$scope'}'))
+      (await myTripsJson(scope: scope))
           .map(Trip.fromJson)
           .toList(growable: false);
+
+  /// The raw JSON rows behind [myTrips]. My trips keeps a copy of them in SQLite for offline use.
+  Future<List<Map<String, dynamic>>> myTripsJson({String? scope}) =>
+      _api.getList('/trips/mine${scope == null ? '' : '?scope=$scope'}');
 
   /// Searches for trips matching a route and a time. Results come back ordered by [sort] and
   /// already filtered to a match score of 50 or more.
@@ -100,9 +104,13 @@ class ReservationService {
 
   /// The caller's own reservations. [scope] is upcoming, past or cancelled; null for all.
   Future<List<Reservation>> myReservations({String? scope}) async =>
-      (await _api.getList(
-        '/reservations/mine${scope == null ? '' : '?scope=$scope'}',
-      )).map(Reservation.fromJson).toList(growable: false);
+      (await myReservationsJson(scope: scope))
+          .map(Reservation.fromJson)
+          .toList(growable: false);
+
+  /// The raw JSON rows behind [myReservations], kept for the offline copy of My trips.
+  Future<List<Map<String, dynamic>>> myReservationsJson({String? scope}) =>
+      _api.getList('/reservations/mine${scope == null ? '' : '?scope=$scope'}');
 
   /// Who booked a trip. Trip owner only, and never with a pickup code.
   Future<List<PassengerView>> tripReservations(String tripId) async =>

@@ -3,11 +3,17 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../models/favorite_place.dart';
 import '../../models/place.dart';
+import '../../models/recent_search.dart';
 import '../../models/user_profile.dart';
 import '../../services/geo_service.dart';
 import '../../services/location_service.dart';
+import '../../services/reservation_local_store.dart';
 import '../../theme.dart';
+import '../../widgets/favorite_place_widgets.dart';
+import '../../widgets/route_title.dart';
+import 'my_places_page.dart';
 import 'place_search_page.dart';
 import 'search_results_page.dart';
 
@@ -48,10 +54,16 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
   int _seats = 1;
   bool _locating = true;
 
+  /// SQLite, through the Reservation store: the last searches and the saved places.
+  final ReservationLocalStore _store = ReservationLocalStore.instance;
+  List<RecentSearch> _recent = const [];
+  List<FavoritePlace> _favorites = const [];
+
   @override
   void initState() {
     super.initState();
     _locate();
+    _loadSaved();
   }
 
   @override
@@ -249,7 +261,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
     setState(() => _seats = chosen);
   }
 
-  void _search() {
+  Future<void> _search() async {
     final from = _from;
     final to = _to;
     if (from == null || to == null) {
@@ -260,7 +272,13 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
       _say('Pick a destination different from your pickup point.');
       return;
     }
-    Navigator.of(context).push(
+    try {
+      await _store.addRecentSearch(widget.user.id, from, to);
+    } catch (_) {
+      // The history is a convenience: if SQLite fails, the search itself must still run.
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SearchResultsPage(
           from: from,
@@ -270,7 +288,125 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
         ),
       ),
     );
+    if (mounted) _loadSaved();
   }
+
+  // --- recent searches and favourite places (SQLite) -----------------------------------------
+
+  /// Reads both lists from SQLite: at start, and after anything that may have changed them.
+  Future<void> _loadSaved() async {
+    final userId = widget.user.id;
+    final recent = await _store.getRecentSearches(userId, limit: 5);
+    final favorites = await _store.getFavorites(userId);
+    if (!mounted) return;
+    setState(() {
+      _recent = recent;
+      _favorites = favorites;
+    });
+  }
+
+  /// Tap on a recent search: fill the form with its two places and search again.
+  void _useRecent(RecentSearch search) {
+    setState(() {
+      _from = search.from;
+      _to = search.to;
+    });
+    _search();
+  }
+
+  Future<void> _deleteRecent(RecentSearch search) async {
+    await _store.deleteRecentSearch(search.id!);
+    await _loadSaved();
+  }
+
+  Future<void> _clearRecent() async {
+    await _store.clearRecentSearches(widget.user.id);
+    await _loadSaved();
+  }
+
+  /// Tap on a favourite chip: ask whether it is the pick-up point or the destination.
+  Future<void> _useFavorite(FavoritePlace favorite) async {
+    final asPickup = await _chooseOption<bool>(favorite.name, [
+      (Icons.trip_origin, 'Use as pick-up point', true),
+      (Icons.flag_outlined, 'Use as destination', false),
+    ]);
+    if (!mounted || asPickup == null) return;
+    setState(() {
+      if (asPickup) {
+        _from = favorite.place;
+      } else {
+        _to = favorite.place;
+      }
+    });
+  }
+
+  /// Long-press on a favourite chip: rename it or delete it.
+  Future<void> _editFavorite(FavoritePlace favorite) async {
+    final action = await _chooseOption<String>(favorite.name, [
+      (Icons.edit_outlined, 'Rename', 'rename'),
+      (Icons.delete_outline, 'Delete', 'delete'),
+    ]);
+    if (!mounted || action == null) return;
+    if (action == 'rename') {
+      final name = await askFavoriteName(
+        context,
+        initialName: favorite.name,
+        takenNames: _favorites
+            .where((other) => other.id != favorite.id)
+            .map((other) => other.name),
+      );
+      if (name == null) return;
+      await _store.renameFavorite(favorite.id!, name);
+    } else {
+      await _store.deleteFavorite(favorite.id!);
+    }
+    await _loadSaved();
+  }
+
+  Future<void> _managePlaces() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => MyPlacesPage(userId: widget.user.id)),
+    );
+    if (mounted) _loadSaved();
+  }
+
+  /// A small bottom sheet with one row per option; pops the value of the row that was tapped.
+  Future<T?> _chooseOption<T>(
+    String title,
+    List<(IconData, String, T)> options,
+  ) => showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 14),
+          const _DragHandle(),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: carShareText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final (icon, label, value) in options)
+            ListTile(
+              leading: Icon(icon, color: carShareGreen),
+              title: Text(label),
+              onTap: () => Navigator.of(sheetContext).pop(value),
+            ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    ),
+  );
 
   void _say(String message) =>
       ScaffoldMessenger.of(context)
@@ -326,7 +462,16 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
           alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [_buildRecenterButton(), _buildSheet()],
+            children: [
+              _buildRecenterButton(),
+              // The sheet grows with the saved lists; past 65% of the screen it scrolls.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.65,
+                ),
+                child: _buildSheet(),
+              ),
+            ],
           ),
         ),
       ],
@@ -402,6 +547,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
     child: SafeArea(
       top: false,
       child: Center(
+        heightFactor: 1,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: SingleChildScrollView(
@@ -459,6 +605,9 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 18),
+                _buildFavorites(),
+                _buildRecentSearches(),
               ],
             ),
           ),
@@ -466,6 +615,66 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
       ),
     ),
   );
+
+  /// "Home", "Work"... as chips. Tap to use one, long-press to rename or delete it.
+  Widget _buildFavorites() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _SectionHeader(
+        title: 'Favourite places',
+        actionLabel: 'Manage',
+        onAction: _managePlaces,
+      ),
+      if (_favorites.isEmpty)
+        const Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: Text(
+            'Tap the star on a place while you search to save it here.',
+            style: TextStyle(fontSize: 13, color: carShareMuted),
+          ),
+        )
+      else
+        SizedBox(
+          height: 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _favorites.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final favorite = _favorites[index];
+              return _FavouriteChip(
+                favorite: favorite,
+                onTap: () => _useFavorite(favorite),
+                onLongPress: () => _editFavorite(favorite),
+              );
+            },
+          ),
+        ),
+    ],
+  );
+
+  /// The last five searches. Tap one to search it again; the bin deletes it.
+  Widget _buildRecentSearches() {
+    if (_recent.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        _SectionHeader(
+          title: 'Recent searches',
+          actionLabel: 'Clear',
+          onAction: _clearRecent,
+        ),
+        // At most five rows, so a plain loop is enough.
+        for (final search in _recent)
+          _RecentRow(
+            search: search,
+            onTap: () => _useRecent(search),
+            onDelete: () => _deleteRecent(search),
+          ),
+      ],
+    );
+  }
 
   Widget _buildSearchCard() => Container(
     decoration: BoxDecoration(
@@ -804,6 +1013,124 @@ class _Chip extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// A section title with one text button on the right ("Manage", "Clear").
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final String title;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: carShareText,
+          ),
+        ),
+      ),
+      TextButton(
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+        onPressed: onAction,
+        child: Text(actionLabel),
+      ),
+    ],
+  );
+}
+
+/// One favourite place as a chip: its icon and its name.
+class _FavouriteChip extends StatelessWidget {
+  const _FavouriteChip({
+    required this.favorite,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final FavoritePlace favorite;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: carShareTint,
+    borderRadius: BorderRadius.circular(999),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(favoriteIcon(favorite.name), size: 17, color: carShareGreen),
+            const SizedBox(width: 8),
+            Text(
+              favorite.name,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: carShareText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// One recent search: "Origin -> Destination", tap to search again, bin to delete.
+class _RecentRow extends StatelessWidget {
+  const _RecentRow({
+    required this.search,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final RecentSearch search;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap: onTap,
+    child: Row(
+      children: [
+        const Icon(Icons.history, size: 20, color: carShareMuted),
+        const SizedBox(width: 12),
+        Expanded(
+          child: RouteTitle(
+            origin: search.from.shortLabel,
+            destination: search.to.shortLabel,
+            fontSize: 15,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Remove from recent searches',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(
+            Icons.delete_outline,
+            size: 20,
+            color: carShareMuted,
+          ),
+          onPressed: onDelete,
+        ),
+      ],
     ),
   );
 }
