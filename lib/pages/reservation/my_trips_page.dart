@@ -53,13 +53,30 @@ class _MyTripsPageState extends State<MyTripsPage>
   void initState() {
     super.initState();
     _loaded[0] = _fetch(0);
+    carShareShellTab.addListener(_onShellTab);
   }
 
   @override
   void dispose() {
+    carShareShellTab.removeListener(_onShellTab);
     _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
+  }
+
+  /// The shell keeps this page alive behind the other tabs, so its lists would otherwise stay as
+  /// they were when the app opened. Whenever the Trips tab is brought to the front — by the
+  /// bottom bar, or by the booking screen after a successful booking — the list on show is
+  /// loaded again and the other lists are dropped, to be fetched when their tab is opened.
+  void _onShellTab() {
+    if (carShareShellTab.value != 1 || !mounted) return;
+    _refreshAll(_tabs.index);
+  }
+
+  /// Loads [index] again and forgets every other tab's list.
+  Future<void> _refreshAll(int index) {
+    _loaded.removeWhere((key, _) => key != index);
+    return _refresh(index);
   }
 
   void _onTabChanged() {
@@ -136,7 +153,7 @@ class _MyTripsPageState extends State<MyTripsPage>
   Future<void> _publish() async {
     final published = await Navigator.of(context)
         .push<bool>(MaterialPageRoute(builder: (_) => const PublishTripPage()));
-    if (published == true && mounted) await _refresh(_tabs.index);
+    if (published == true && mounted) await _refreshAll(_tabs.index);
   }
 
   @override
@@ -318,7 +335,7 @@ class _MyTripsPageState extends State<MyTripsPage>
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => DriverTripPage(tripId: trip.id)),
     );
-    if (changed == true && mounted) await _refresh(index);
+    if (changed == true && mounted) await _refreshAll(index);
   }
 
   /// A finished trip opens its summary — replay, timeline and rating — rather than the
@@ -356,13 +373,8 @@ class _MyTripsPageState extends State<MyTripsPage>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Reservation cancelled.')));
-      await _refresh(index);
-      // A cancelled row leaves Upcoming for the Cancelled tab, so drop its cached list too.
-      if (mounted) {
-        setState(() {
-          _loaded.remove(2);
-        });
-      }
+      // A cancelled row leaves Upcoming for the Cancelled tab, so every other list is dropped.
+      await _refreshAll(index);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)

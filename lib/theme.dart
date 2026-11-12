@@ -42,7 +42,7 @@ final carShareTheme = ThemeData(
     primary: carShareGreen,
   ),
   scaffoldBackgroundColor: Colors.white,
-  fontFamily: 'Roboto',
+  fontFamily: 'PlusJakartaSans',
   // One AppBar for every screen: white, flat, bold dark title, no Material 3 tint on scroll.
   appBarTheme: const AppBarTheme(
     backgroundColor: Colors.white,
@@ -51,7 +51,7 @@ final carShareTheme = ThemeData(
     elevation: 0,
     scrolledUnderElevation: 0,
     titleTextStyle: TextStyle(
-      fontFamily: 'Roboto',
+      fontFamily: 'PlusJakartaSans',
       fontSize: 20,
       fontWeight: FontWeight.w800,
       color: carShareText,

@@ -36,6 +36,13 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     'earliest': 'Earliest',
   };
 
+  /// How the "N drivers found" line names the order the list is in.
+  static const _sortedBy = {
+    'best': 'match score',
+    'cheapest': 'price',
+    'earliest': 'departure time',
+  };
+
   String _sort = 'best';
   late Future<List<TripSearchResult>> _results = _search();
 
@@ -180,7 +187,16 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LiveBanner(count: results.length),
+          const _LiveBanner(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Text(
+              '${results.length} '
+              '${results.length == 1 ? 'driver' : 'drivers'} found · '
+              'sorted by ${_sortedBy[_sort]}',
+              style: const TextStyle(fontSize: 14, color: carShareMuted),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
@@ -236,9 +252,7 @@ class _SortChip extends StatelessWidget {
 }
 
 class _LiveBanner extends StatelessWidget {
-  const _LiveBanner({required this.count});
-
-  final int count;
+  const _LiveBanner();
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -255,8 +269,7 @@ class _LiveBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Live matching · $count '
-              '${count == 1 ? 'driver' : 'drivers'} found',
+              'Live matching · new drivers appear here',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
