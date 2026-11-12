@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../theme.dart';
 import '../widgets/admin_section_header.dart';
+import 'admin_trip_details_page.dart';
 
 enum AdminSection { vehicles, trips, support, sanctions }
 
@@ -31,6 +32,17 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   Future<List<Map<String, dynamic>>> _load() => ApiClient.instance.getList(_path);
 
   void _refresh() => setState(() => _items = _load());
+
+  /// Opens one trip's details (passengers, timeline, cancel). The list reloads on return, since
+  /// the admin may have cancelled the trip over there.
+  Future<void> _openTrip(Map<String, dynamic> item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdminTripDetailsPage(tripId: item['id'] as String),
+      ),
+    );
+    if (mounted) _refresh();
+  }
 
   Future<void> _act(Future<void> Function() action, String message) async {
     setState(() => _working = true);
@@ -148,6 +160,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   }
 
   Widget _tripCard(Map<String, dynamic> item) => Card(child: ListTile(
+    onTap: () => _openTrip(item),
     leading: Icon(item['incidentReported'] == true ? Icons.warning_amber_rounded : Icons.route, color: item['incidentReported'] == true ? Colors.deepOrange : carShareGreen),
     title: Text('${item['origin']} → ${item['destination']}', maxLines: 2, overflow: TextOverflow.ellipsis),
     subtitle: Text('${item['driverName']} · ${_date(item['departureTime'])}\n${item['status']}${item['incidentReported'] == true ? ' · Reported deviation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}'),

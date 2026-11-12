@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,18 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
      * ReservationQueries before it lets a car be removed.
      */
     boolean existsByVehicleIdAndStatusIn(UUID vehicleId, Collection<TripStatus> statuses);
+
+    long countByStatus(TripStatus status);
+
+    long countByStatusIn(Collection<TripStatus> statuses);
+
+    /**
+     * The admin trips list: newest departure first, one page of it, with the driver loaded.
+     * Pass every status to get them all.
+     */
+    @EntityGraph(attributePaths = "driver")
+    List<Trip> findByStatusInOrderByDepartureTimeDesc(Collection<TripStatus> statuses,
+            Pageable pageable);
     @EntityGraph(attributePaths = "driver")
     List<Trip> findByDriver_IdOrderByDepartureTimeDesc(UUID driverId);
 

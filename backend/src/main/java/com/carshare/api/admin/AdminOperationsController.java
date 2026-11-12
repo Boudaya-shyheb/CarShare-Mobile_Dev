@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -49,8 +50,13 @@ public class AdminOperationsController {
                 .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff").body(photo.bytes());
     }
 
+    /** `?status=SCHEDULED` keeps one status (omit or "ALL" for every status); `?limit=` defaults to 100. */
     @GetMapping("/trips")
-    public List<AdminOperationsService.AdminTrip> trips() { return admin.trips(); }
+    public List<AdminOperationsService.AdminTrip> trips(
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "limit", defaultValue = "100") int limit) {
+        return admin.trips(status, limit);
+    }
 
     @GetMapping("/reservations")
     public List<AdminOperationsService.AdminReservation> reservations() { return admin.reservations(); }

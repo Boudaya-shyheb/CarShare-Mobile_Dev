@@ -353,6 +353,62 @@ class TripServiceTest {
         assertFalse(detail.locked());
     }
 
+    // --- cancelling as an admin --------------------------------------------------------------
+
+    @Test
+    @DisplayName("an admin cancel records the reason, names the admin and closes the reservations")
+    void adminCancelRecordsReasonAndActor() {
+        Trip trip = scheduledTrip();
+        trip.recordConfirmedSeats(2);
+        UUID adminId = UUID.randomUUID(); // not the driver
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+
+        TripDtos.TripDetail detail =
+                service.cancelAsAdmin(adminId, trip.getId(), "  Reported by two riders  ");
+
+        assertEquals("CANCELLED", detail.status());
+        assertEquals("Reported by two riders", detail.cancelReason());
+        assertEquals(3, detail.seatsAvailable()); // the seats are released
+        assertEquals(0, detail.confirmedSeats());
+        TripEvent event = capturedEvent();
+        assertEquals(TripEventType.CANCELLED, event.getType());
+        assertEquals(adminId, event.getActorId());
+        assertEquals("Reported by two riders", event.getDetail());
+        verify(reservationService).cancelAllForCancelledTrip(trip, adminId);
+    }
+
+    @Test
+    @DisplayName("an admin cannot cancel a trip the state machine no longer lets move to CANCELLED")
+    void adminCancelFollowsTheStateMachine() {
+        Trip trip = scheduledTrip();
+        trip.applyStatus(TripStatus.DRIVER_EN_ROUTE);
+        trip.applyStatus(TripStatus.DRIVER_ARRIVED);
+        UUID adminId = UUID.randomUUID();
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.cancelAsAdmin(adminId, trip.getId(), "Too late"));
+
+        assertEquals(HttpStatus.CONFLICT, error.getStatus());
+        assertEquals("invalid_trip_transition", error.getCode());
+        assertEquals(TripStatus.DRIVER_ARRIVED, trip.getStatus());
+        verify(tripEvents, never()).save(any(TripEvent.class));
+        verify(reservationService, never()).cancelAllForCancelledTrip(any(), any());
+    }
+
+    @Test
+    @DisplayName("an admin cancel of an unknown trip is a 404")
+    void adminCancelOfUnknownTripIs404() {
+        UUID missing = UUID.randomUUID();
+        when(trips.findById(missing)).thenReturn(Optional.empty());
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.cancelAsAdmin(UUID.randomUUID(), missing, "Whatever"));
+
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
+        assertEquals("trip_not_found", error.getCode());
+    }
+
     @Test
     @DisplayName("cancelling a trip hands its live reservations to the reservation service")
     void cancelClosesReservations() {

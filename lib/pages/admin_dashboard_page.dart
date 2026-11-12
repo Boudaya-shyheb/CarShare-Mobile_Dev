@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/admin_stats_bar.dart';
 import 'admin_operations_page.dart';
 import 'admin_users_page.dart';
 
@@ -15,14 +16,27 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: IndexedStack(
-      index: _selected,
-      children: const [
-        AdminUsersPage(),
-        AdminOperationsPage(section: AdminSection.vehicles),
-        AdminOperationsPage(section: AdminSection.trips),
-        AdminOperationsPage(section: AdminSection.support),
-        AdminOperationsPage(section: AdminSection.sanctions),
+    body: Column(
+      children: [
+        // The counters sit above whichever tab is showing and reload when the tab changes.
+        SafeArea(bottom: false, child: AdminStatsBar(reloadKey: _selected)),
+        Expanded(
+          // The strip already clears the status bar, so the tabs' own app bars must not pad again.
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: IndexedStack(
+              index: _selected,
+              children: const [
+                AdminUsersPage(),
+                AdminOperationsPage(section: AdminSection.vehicles),
+                AdminOperationsPage(section: AdminSection.trips),
+                AdminOperationsPage(section: AdminSection.support),
+                AdminOperationsPage(section: AdminSection.sanctions),
+              ],
+            ),
+          ),
+        ),
       ],
     ),
     bottomNavigationBar: NavigationBar(

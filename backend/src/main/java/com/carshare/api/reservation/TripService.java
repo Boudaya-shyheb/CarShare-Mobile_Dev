@@ -141,6 +141,19 @@ public class TripService {
         return TripDtos.TripDetail.from(trip);
     }
 
+    /**
+     * An admin calls a trip off. The same rules and the same effects as the driver's cancel: the
+     * state machine decides whether it is allowed, the seats are released, every active
+     * reservation is closed, and the CANCELLED event names the admin as the actor.
+     */
+    @Transactional
+    public TripDtos.TripDetail cancelAsAdmin(UUID adminId, UUID tripId, String reason) {
+        Trip trip = trips.findById(tripId).orElseThrow(TripService::tripNotFound);
+        changeStatus(trip, TripStatus.CANCELLED, adminId, null, null, reason.trim());
+        reservationService.cancelAllForCancelledTrip(trip, adminId);
+        return TripDtos.TripDetail.from(trip);
+    }
+
     @Transactional
     public TripDtos.TripDetail changeStatus(UUID driverId, UUID tripId, TripDtos.ChangeStatusRequest request) {
         if (request.status() == TripStatus.CANCELLED) {

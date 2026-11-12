@@ -6,6 +6,7 @@ import com.carshare.api.lostandfound.LostAndFoundReportRepository;
 import com.carshare.api.lostandfound.LostAndFoundReportService;
 import com.carshare.api.reservation.ReservationRepository;
 import com.carshare.api.reservation.TripRepository;
+import com.carshare.api.reservation.TripStatus;
 import com.carshare.api.support.SupportService;
 import com.carshare.api.support.SupportTicket;
 import com.carshare.api.support.SupportTicketRepository;
@@ -18,14 +19,21 @@ import com.carshare.api.vehicles.Vehicle;
 import com.carshare.api.vehicles.VehiclePhoto;
 import com.carshare.api.vehicles.VehicleRepository;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AdminOperationsService {
+    /** The most trips one call may return, whatever limit is asked for. */
+    static final int MAX_TRIPS = 500;
+
     private final VehicleRepository vehicles;
     private final TripRepository trips;
     private final ReservationRepository reservations;
@@ -71,9 +79,23 @@ public class AdminOperationsService {
         return AdminVehicle.from(vehicle);
     }
 
+    /** Newest departure first. [status] keeps one status (null, blank or "all" keeps every one). */
     @Transactional(readOnly = true)
-    public List<AdminTrip> trips() {
-        return trips.findAllByOrderByDepartureTimeDesc().stream().map(AdminTrip::from).toList();
+    public List<AdminTrip> trips(String status, int limit) {
+        int size = Math.min(Math.max(limit, 1), MAX_TRIPS);
+        return trips.findByStatusInOrderByDepartureTimeDesc(tripStatuses(status), PageRequest.of(0, size))
+                .stream().map(AdminTrip::from).toList();
+    }
+
+    private static Set<TripStatus> tripStatuses(String status) {
+        if (status == null || status.isBlank() || status.trim().equalsIgnoreCase("all")) {
+            return EnumSet.allOf(TripStatus.class);
+        }
+        try {
+            return EnumSet.of(TripStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException invalid) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_status", "Choose a valid trip status.");
+        }
     }
 
     @Transactional(readOnly = true)

@@ -29,6 +29,9 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // The admin endpoints are tested through the real security rules, so MockMvc is needed.
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
 }

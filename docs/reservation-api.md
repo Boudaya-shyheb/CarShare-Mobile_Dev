@@ -42,6 +42,7 @@ On the Flutter side `ApiClient` already turns this into
 | `invalid_coordinates` | 400 | A latitude or longitude is out of range |
 | `same_origin_and_destination` | 400 | Pickup and drop-off are the same point |
 | `invalid_search` | 400 | A search parameter is missing, unparseable, or out of range |
+| `invalid_status` | 400 | The admin trips list was asked for a status that does not exist |
 | `invalid_positions` | 400 | A position batch is empty, over 50, or holds a bad point |
 | `wrong_pickup_code` | 400 | The code did not match; the detail names the tries left |
 | `own_trip` | 400 | You cannot book a seat on a trip you are driving |
@@ -580,6 +581,87 @@ driver, and to a passenger whose reservation is `COMPLETED` or `NO_SHOW`.
 
 Ordered by `recordedAt`, not by arrival, so a buffer sent late after a dead spot still sits in
 the right place on the map. Errors: `trip_not_found`.
+
+## Admin
+
+Every route under `/api/admin/**` needs an account whose `app_users.role` is `ADMIN`. It is the same
+rule that protects `GET /api/admin/users`: `SecurityConfig` lets the path through only for
+`ROLE_ADMIN`, which the token filter builds from the role stored on the account. Anyone else,
+signed in or not, gets **403**. The Flutter app sends admin accounts to the admin dashboard after
+sign-in.
+
+In development, an account is made an admin in SQL (there is no screen for it):
+
+```sql
+UPDATE app_users SET role = 'ADMIN' WHERE email = 'your-test-account@example.com';
+```
+
+Sign out and in again afterwards so the app reloads the role.
+
+The admin trips screens use four routes. The list belongs to the admin operations screens
+(`AdminOperationsController`); the other three belong to this module.
+
+### `GET /api/admin/trips`
+
+`?status=SCHEDULED&limit=50`, both optional. Trips ordered by departure, newest first.
+`status` is any `TripStatus`, or `ALL` (the default); `limit` defaults to **100** and is kept
+between 1 and 500.
+
+```json
+[{
+  "id": "4f1c...", "driverId": "9ab2...", "driverName": "Ahmed Ben Salah",
+  "origin": "Tunis Centre", "destination": "Sousse",
+  "departureTime": "2026-11-21T07:30:00Z", "status": "SCHEDULED",
+  "incidentReported": false, "vehicleId": null, "cancelReason": null,
+  "createdAt": "2026-11-20T22:10:00Z"
+}]
+```
+
+`incidentReported` is true while the trip is flagged as deviating from its route.
+Errors: `invalid_status`.
+
+### `GET /api/admin/trips/{tripId}`
+
+The trip, everyone who booked it, and everything that happened to it.
+
+```json
+{
+  "trip": { "...": "a TripDetail, exactly as GET /api/trips/{tripId} returns it" },
+  "reservations": [{ "...": "PassengerView rows, oldest first, never with a pickup code" }],
+  "events": [{ "...": "EventView rows, oldest first" }]
+}
+```
+
+Errors: `trip_not_found`.
+
+### `POST /api/admin/trips/{tripId}/cancel`
+
+```json
+{ "reason": "Reported by two riders" }
+```
+
+`reason` is required, 1 to 300 characters. It runs the driver's own cancel path, so the same rules
+hold: only from `SCHEDULED` or `DRIVER_EN_ROUTE` (anything later is a `409`
+`invalid_trip_transition`), every seat is released, and every active reservation is closed with
+`cancel_reason` `trip_cancelled`. The `CANCELLED` event records the **admin's** id as `actorId` and
+the reason as `detail`. → `TripDetail` with `status` `CANCELLED`.
+
+Errors: `validation_error`, `trip_not_found`, `invalid_trip_transition`.
+
+### `GET /api/admin/stats`
+
+Every counter of the dashboard in one call.
+
+```json
+{
+  "users": 12, "tripsTotal": 30, "tripsInProgress": 2, "tripsCompleted": 18,
+  "tripsCancelled": 4, "reservations": 41, "lostAndFoundReports": 3
+}
+```
+
+`tripsInProgress` counts the trips the driver has set off on and not finished: `DRIVER_EN_ROUTE`,
+`DRIVER_ARRIVED`, `PICKED_UP` and `IN_PROGRESS`. `reservations` counts every reservation, whatever
+its status.
 
 ## Using the Reservation module from another module
 
