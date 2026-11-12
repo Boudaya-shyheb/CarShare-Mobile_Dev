@@ -6,6 +6,54 @@ import 'package:image_picker/image_picker.dart';
 
 import '../theme.dart';
 
+const int supportMaxEvidenceBytes = 5 * 1024 * 1024;
+
+bool isSupportEvidenceSizeAllowed(int bytes) =>
+    bytes > 0 && bytes <= supportMaxEvidenceBytes;
+
+Future<SupportEvidence?> pickSupportPhoto(BuildContext context) async {
+  try {
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 85,
+    );
+    if (photo == null) return null;
+
+    final bytes = await photo.readAsBytes();
+    if (!context.mounted) return null;
+    if (!isSupportEvidenceSizeAllowed(bytes.length)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose a non-empty photo no larger than 5 MB.'),
+        ),
+      );
+      return null;
+    }
+    return SupportEvidence(name: photo.name, isImage: true, bytes: bytes);
+  } on PlatformException catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message == null || error.message!.isEmpty
+                ? 'Could not open the photo gallery.'
+                : 'Could not select the photo: ${error.message}',
+          ),
+        ),
+      );
+    }
+  } on FileSystemException {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The selected photo could not be read.')),
+      );
+    }
+  }
+  return null;
+}
+
 class SupportEvidence {
   const SupportEvidence({
     required this.name,
@@ -80,19 +128,9 @@ class SupportEvidenceController {
   Future<void> _pick(_EvidenceType type, BuildContext context) async {
     try {
       if (type == _EvidenceType.photo) {
-        final photo = await ImagePicker().pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 1600,
-          maxHeight: 1600,
-          imageQuality: 85,
-        );
+        final photo = await pickSupportPhoto(context);
         if (photo == null) return;
-        final bytes = await photo.readAsBytes();
-        if (!context.mounted) return;
-        evidence.value = [
-          ...evidence.value,
-          SupportEvidence(name: photo.name, isImage: true, bytes: bytes),
-        ];
+        evidence.value = [...evidence.value, photo];
         return;
       }
 
