@@ -57,7 +57,7 @@ if ($variables.ContainsKey('DATABASE_URL_UNPOOLED')) {
 # This keeps the backend launcher independent from the shell's current directory
 # and avoids stale, empty process environment variables overriding these values.
 foreach ($name in @(
-    'GOOGLE_SERVER_CLIENT_ID',
+    'GOOGLE_SERVER_CLIENT_ID', 'ABSTRACT_EMAIL_API_KEY', 'ABSTRACT_EMAIL_API_URL',
     'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_FROM',
     'MAIL_SMTP_AUTH', 'MAIL_SMTP_STARTTLS'
 )) {

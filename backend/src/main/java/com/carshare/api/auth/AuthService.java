@@ -29,11 +29,14 @@ public class AuthService {
     private final ResetMailService resetMailService;
     private final ReservationQueries reservationQueries;
     private final AccountDeletionService accountDeletion;
+    private final EmailVerificationService emailVerification;
 
     public AuthService(UserRepository users, AuthSessionRepository sessions,
             PasswordResetTokenRepository resetTokens, PasswordEncoder passwordEncoder,
             SecurityProperties securityProperties, ResetMailService resetMailService,
-            ReservationQueries reservationQueries, AccountDeletionService accountDeletion) {
+            ReservationQueries reservationQueries, AccountDeletionService accountDeletion,
+            EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.reservationQueries = reservationQueries;
         this.accountDeletion = accountDeletion;
         this.users = users;
@@ -58,6 +61,8 @@ public class AuthService {
         if (users.existsByNormalizedPhone(phone)) {
             throw new ApiException(HttpStatus.CONFLICT, "phone_in_use", "An account already exists for this phone number.");
         }
+        // Last, so the provider is only asked about a sign-up that is otherwise acceptable.
+        emailVerification.verify(email);
         AppUser user = new AppUser(request.fullName().trim(), phone, email,
                 passwordEncoder.encode(request.password()), UserRole.valueOf(request.role().toUpperCase(Locale.ROOT)));
         user = users.save(user);
@@ -109,6 +114,9 @@ public class AuthService {
         });
         String phone = normalizePhone(request.phone());
         validatePhone(phone);
+        if (!email.equals(normalizeEmail(user.getEmail()))) {
+            emailVerification.verify(email);
+        }
         String currentPhone = normalizePhone(user.getPhone());
         boolean phoneChanged = !phone.equals(currentPhone);
         if (!phone.equals(currentPhone) && users.existsByNormalizedPhoneAndIdNot(phone, userId)) {

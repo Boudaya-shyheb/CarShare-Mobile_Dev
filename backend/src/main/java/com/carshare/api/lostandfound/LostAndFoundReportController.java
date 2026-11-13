@@ -77,6 +77,14 @@ public class LostAndFoundReportController {
         }
     }
 
+    /** One report by id, for a notification whose trip is no longer in the trip list. */
+    @GetMapping("/reports/{reportId}")
+    public LostAndFoundReportService.ReportView reportById(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable("reportId") UUID reportId) {
+        return service.reportById(principal.userId(), reportId);
+    }
+
     /** The report's photo: only for the two people it concerns, and for admins. */
     @GetMapping("/reports/{reportId}/photo")
     public ResponseEntity<byte[]> reportPhoto(
@@ -126,6 +134,15 @@ public class LostAndFoundReportController {
             @PathVariable("handoverId") UUID handoverId,
             @RequestBody VerifyHandoverRequest request) {
         return handovers.verify(principal.userId(), handoverId, request.code());
+    }
+
+    /** "Not my item" on a match nobody confirmed: recorded, without starting a handover. */
+    @PostMapping("/handovers/reject")
+    public LostAndFoundHandoverService.HandoverView rejectPair(
+            @AuthenticationPrincipal SessionPrincipal principal,
+            @RequestBody ProposeHandoverRequest request) {
+        return handovers.rejectPair(
+                principal.userId(), request.lostReportId(), request.foundReportId());
     }
 
     @PostMapping("/handovers/{handoverId}/reject")

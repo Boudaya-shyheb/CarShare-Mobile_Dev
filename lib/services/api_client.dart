@@ -8,13 +8,22 @@ import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode, this.code, this.statusUntil});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.statusUntil,
+    this.suggestion,
+  });
   final String message;
   final int? statusCode;
   final String? code;
 
   /// When a suspension ends, sent with `account_suspended` and `delete_blocked_suspended`.
   final DateTime? statusUntil;
+
+  /// A corrected address, sent with the `email_*` refusals ("Did you mean …?").
+  final String? suggestion;
   @override
   String toString() => message;
 }
@@ -327,6 +336,7 @@ class ApiClient {
       statusCode: statusCode,
       code: data['code'] as String?,
       statusUntil: DateTime.tryParse('${data['statusUntil'] ?? ''}')?.toLocal(),
+      suggestion: data['suggestion'] as String?,
     );
   }
 

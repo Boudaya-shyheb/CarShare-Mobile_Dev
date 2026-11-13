@@ -61,26 +61,7 @@ public class LostAndFoundHandoverService {
         }
         LostAndFoundReport lost = requireReport(lostReportId);
         LostAndFoundReport found = requireReport(foundReportId);
-
-        if (lost.getType() != LostAndFoundReport.Type.LOST
-                || found.getType() != LostAndFoundReport.Type.FOUND) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
-                    "A handover needs one lost report and one found report.");
-        }
-        if (!lost.getTrip().getId().equals(found.getTrip().getId())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
-                    "Both reports must be about the same trip.");
-        }
-        UUID ownerId = lost.getReporter().getId();
-        UUID finderId = found.getReporter().getId();
-        if (ownerId.equals(finderId)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
-                    "The two reports must come from different people.");
-        }
-        if (!userId.equals(ownerId) && !userId.equals(finderId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "not_report_owner",
-                    "Only the two people who made the reports can start a handover.");
-        }
+        requireValidPair(userId, lost, found);
 
         var existing = handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(
                 lostReportId, foundReportId, ACTIVE);
@@ -103,6 +84,65 @@ public class LostAndFoundHandoverService {
                 new LostAndFoundHandover(lost.getTrip(), lost, found, creator));
         notifications.matchConfirmed(handover, userId);
         return view(handover, userId);
+    }
+
+    /**
+     * "Not my item" on a match nobody confirmed. The pair is recorded as called off (a CANCELLED
+     * handover, which is what keeps it from being offered again) without ever being proposed:
+     * no "Match confirmed" goes out, only one "Match called off" to the other person. If the pair
+     * already has a live handover this is the ordinary rejection; asking twice does nothing new.
+     */
+    @Transactional
+    public HandoverView rejectPair(UUID userId, UUID lostReportId, UUID foundReportId) {
+        ActiveUserGuard.requireActive(users, userId);
+        if (lostReportId == null || foundReportId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "handover_reports_required",
+                    "Choose the lost report and the found report to match.");
+        }
+        LostAndFoundReport lost = requireReport(lostReportId);
+        LostAndFoundReport found = requireReport(foundReportId);
+        requireValidPair(userId, lost, found);
+
+        var live = handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(
+                lostReportId, foundReportId, ACTIVE);
+        if (live.isPresent()) {
+            return reject(userId, live.get().getId());
+        }
+        var already = handovers.findFirstByLostReport_IdAndFoundReport_IdAndStatusOrderByUpdatedAtDesc(
+                lostReportId, foundReportId, Status.CANCELLED);
+        if (already.isPresent()) {
+            return view(already.get(), userId);
+        }
+        AppUser creator = users.findById(userId)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                        "account_not_found", "Your account could not be found."));
+        LostAndFoundHandover handover = new LostAndFoundHandover(lost.getTrip(), lost, found, creator);
+        handover.cancel();
+        handovers.save(handover);
+        notifications.handoverRejected(handover, userId);
+        return view(handover, userId);
+    }
+
+    private static void requireValidPair(UUID userId, LostAndFoundReport lost, LostAndFoundReport found) {
+        if (lost.getType() != LostAndFoundReport.Type.LOST
+                || found.getType() != LostAndFoundReport.Type.FOUND) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
+                    "A handover needs one lost report and one found report.");
+        }
+        if (!lost.getTrip().getId().equals(found.getTrip().getId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
+                    "Both reports must be about the same trip.");
+        }
+        UUID ownerId = lost.getReporter().getId();
+        UUID finderId = found.getReporter().getId();
+        if (ownerId.equals(finderId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_report_pair",
+                    "The two reports must come from different people.");
+        }
+        if (!userId.equals(ownerId) && !userId.equals(finderId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "not_report_owner",
+                    "Only the two people who made the reports can start a handover.");
+        }
     }
 
     /** Either side sets or changes the meeting; the code is created on the first call. */

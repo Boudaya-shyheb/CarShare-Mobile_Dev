@@ -36,6 +36,9 @@ public interface LostAndFoundHandoverRepository
             UUID lostReportId, UUID foundReportId,
             Collection<LostAndFoundHandover.Status> statuses);
 
+    Optional<LostAndFoundHandover> findFirstByLostReport_IdAndFoundReport_IdAndStatusOrderByUpdatedAtDesc(
+            UUID lostReportId, UUID foundReportId, LostAndFoundHandover.Status status);
+
     boolean existsByLostReport_IdAndStatusIn(
             UUID lostReportId, Collection<LostAndFoundHandover.Status> statuses);
 

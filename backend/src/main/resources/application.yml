@@ -51,6 +51,10 @@ carshare:
     google-client-id: ${GOOGLE_SERVER_CLIENT_ID:}
   mail:
     from: ${MAIL_FROM:}
+  email-verification:
+    api-key: ${ABSTRACT_EMAIL_API_KEY:}
+    url: ${ABSTRACT_EMAIL_API_URL:https://emailreputation.abstractapi.com/v1/}
+    timeout-ms: ${ABSTRACT_EMAIL_TIMEOUT_MS:3000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
   uploads:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/email_problem_notice.dart';
 import '../widgets/labeled_text_field.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/round_back_button.dart';
@@ -25,6 +26,17 @@ class _SignUpPageState extends State<SignUpPage> {
   String? _role;
   bool _showRoleError = false;
   bool _loading = false;
+  @override
+  void initState() {
+    super.initState();
+    // Typing in the email field makes the refusal stale: take the notice away.
+    _email.addListener(() {
+      if (_emailProblem != null && _email.text != _refusedEmail) {
+        setState(() => _emailProblem = null);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _fullName.dispose();
@@ -64,7 +76,11 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
+  EmailProblem? _emailProblem;
+  String _refusedEmail = '';
+
   Future<void> _createAccount() async {
+    setState(() => _emailProblem = null);
     if (!_formKey.currentState!.validate()) return;
     if (_role == null) {
       setState(() => _showRoleError = true);
@@ -84,7 +100,13 @@ class _SignUpPageState extends State<SignUpPage> {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (error) {
-      if (mounted) {
+      final problem = EmailProblem.from(error);
+      if (mounted && problem != null) {
+        setState(() {
+          _emailProblem = problem;
+          _refusedEmail = _email.text;
+        });
+      } else if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
@@ -168,6 +190,14 @@ class _SignUpPageState extends State<SignUpPage> {
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                   ),
+                  if (_emailProblem != null)
+                    EmailProblemNotice(
+                      problem: _emailProblem!,
+                      onUseSuggestion: (address) => setState(() {
+                        _email.text = address;
+                        _emailProblem = null;
+                      }),
+                    ),
                   const SizedBox(height: 18),
                   LabeledTextField(
                     controller: _password,

@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/driver_license_ocr_service.dart';
 import '../services/user_management_service.dart';
 import '../theme.dart';
+import '../widgets/email_problem_notice.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/profile_stats_card.dart';
@@ -53,6 +54,11 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     AuthService.instance.currentUser.addListener(_userChanged);
+    _email.addListener(() {
+      if (_emailProblem != null && _email.text != _refusedEmail) {
+        setState(() => _emailProblem = null);
+      }
+    });
     final user = _user;
     if (user != null) {
       _fullName.text = user.fullName;
@@ -96,7 +102,11 @@ class _ProfilePageState extends State<ProfilePage> {
         : 'Enter a valid email address.';
   }
 
+  EmailProblem? _emailProblem;
+  String _refusedEmail = '';
+
   Future<void> _saveProfile() async {
+    setState(() => _emailProblem = null);
     if (!_formKey.currentState!.validate()) return;
     if (_role == null) return;
 
@@ -115,7 +125,13 @@ class _ProfilePageState extends State<ProfilePage> {
         Navigator.of(context).pop();
       }
     } catch (error) {
-      if (mounted) {
+      final problem = EmailProblem.from(error);
+      if (mounted && problem != null) {
+        setState(() {
+          _emailProblem = problem;
+          _refusedEmail = _email.text;
+        });
+      } else if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
         // A refused role switch leaves the account as it was, so the form must say so too.
@@ -360,6 +376,14 @@ class _ProfilePageState extends State<ProfilePage> {
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.done,
                             ),
+                            if (_emailProblem != null)
+                              EmailProblemNotice(
+                                problem: _emailProblem!,
+                                onUseSuggestion: (address) => setState(() {
+                                  _email.text = address;
+                                  _emailProblem = null;
+                                }),
+                              ),
                             const SizedBox(height: 14),
                             if (_role == 'admin')
                               InputDecorator(

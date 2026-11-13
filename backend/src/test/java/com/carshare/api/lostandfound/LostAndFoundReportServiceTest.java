@@ -173,4 +173,31 @@ class LostAndFoundReportServiceTest {
         assertEquals("report_photo_not_found",
                 assertThrows(ApiException.class, () -> service.photoOf(passenger.getId(), lost.getId())).getCode());
     }
+
+    // --- one report by id ----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("a reporter can open their own report by id, with its trip's route")
+    void reportByIdForTheReporter() {
+        var lost = lostWithPhoto();
+
+        var view = service.reportById(passenger.getId(), lost.getId());
+
+        assertEquals(lost.getId(), view.id());
+        assertEquals("Ennasr, Ariana", view.originLabel());
+        assertEquals("Sousse", view.destinationLabel());
+        assertTrue(view.canResolve());
+    }
+
+    @Test
+    @DisplayName("somebody with no part in the report gets 'not found'")
+    void reportByIdForAStranger() {
+        var lost = lostWithPhoto();
+        var stranger = new AppUser("Sami", "+21655111222", "sami@carshare.tn", "h", UserRole.PASSENGER);
+        when(users.findById(stranger.getId())).thenReturn(Optional.of(stranger));
+
+        ApiException error = assertThrows(ApiException.class, () -> service.reportById(stranger.getId(), lost.getId()));
+
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
+    }
 }

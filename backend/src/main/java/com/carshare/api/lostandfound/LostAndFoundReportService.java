@@ -124,24 +124,47 @@ public class LostAndFoundReportService {
     public PhotoContent photoOf(UUID userId, UUID reportId) {
         LostAndFoundReport report = reports.findById(reportId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "report_not_found", "Report not found."));
-        AppUser viewer = users.findById(userId)
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
-                        "account_not_found", "Your account could not be found."));
-        boolean allowed = report.getReporter().getId().equals(userId)
-                || viewer.getRole() == com.carshare.api.users.UserRole.ADMIN
-                || reports.findByTrip_IdOrderByCreatedAtDesc(report.getTrip().getId()).stream()
-                        .anyMatch(other -> other.getReporter().getId().equals(userId)
-                                && LostAndFoundMatcher.matches(report, other, false))
-                || handoverRows.findForReport(reportId, java.util.EnumSet.allOf(LostAndFoundHandover.Status.class))
-                        .stream().anyMatch(handover -> handover.getLostReport().getReporter().getId().equals(userId)
-                                || handover.getFoundReport().getReporter().getId().equals(userId));
-        if (!allowed || !report.hasPhoto()) {
+        if (!canSee(userId, report) || !report.hasPhoto()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "report_photo_not_found", "This report has no photo.");
         }
         return new PhotoContent(photoStorage.read(report.getPhotoFileName()), report.getPhotoContentType());
     }
 
     public record PhotoContent(byte[] bytes, String contentType) { }
+
+    /**
+     * One report by id, with its trip's route, for a notification that must open it even when the
+     * trip is no longer in {@link #listTrips}. Same audience as the photo: its reporter, the
+     * reporter of a matching report, a participant of a handover on it, or an admin; anybody else
+     * gets "not found".
+     */
+    @Transactional(readOnly = true)
+    public ReportView reportById(UUID userId, UUID reportId) {
+        LostAndFoundReport report = reports.findById(reportId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "report_not_found", "Report not found."));
+        if (!canSee(userId, report)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "report_not_found", "Report not found.");
+        }
+        ReportView base = toView(report, userId);
+        Trip trip = report.getTrip();
+        return new ReportView(base.id(), base.tripId(), base.type(), base.title(), base.description(),
+                base.status(), base.createdAt(), base.canResolve(), base.reporterId(), base.reporterName(),
+                trip.getOriginLabel(), trip.getDestinationLabel(), trip.getDepartureTime(), base.hasPhoto());
+    }
+
+    private boolean canSee(UUID userId, LostAndFoundReport report) {
+        AppUser viewer = users.findById(userId)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                        "account_not_found", "Your account could not be found."));
+        return report.getReporter().getId().equals(userId)
+                || viewer.getRole() == com.carshare.api.users.UserRole.ADMIN
+                || reports.findByTrip_IdOrderByCreatedAtDesc(report.getTrip().getId()).stream()
+                        .anyMatch(other -> other.getReporter().getId().equals(userId)
+                                && LostAndFoundMatcher.matches(report, other, false))
+                || handoverRows.findForReport(report.getId(), java.util.EnumSet.allOf(LostAndFoundHandover.Status.class))
+                        .stream().anyMatch(handover -> handover.getLostReport().getReporter().getId().equals(userId)
+                                || handover.getFoundReport().getReporter().getId().equals(userId));
+    }
 
     @Transactional(readOnly = true)
     public List<ReportView> listForTrip(UUID userId, UUID tripId) {

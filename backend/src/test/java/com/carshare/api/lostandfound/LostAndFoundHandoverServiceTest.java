@@ -502,4 +502,62 @@ class LostAndFoundHandoverServiceTest {
 
         verify(notifications).handoverRejected(handover, owner.getId());
     }
+
+    @Test
+    @DisplayName("'Not my item' on an unconfirmed match records the pair as called off, with one notification and no 'Match confirmed'")
+    void rejectPairWithoutAHandover() {
+        when(handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(handovers.findFirstByLostReport_IdAndFoundReport_IdAndStatusOrderByUpdatedAtDesc(any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        HandoverView view = service.rejectPair(owner.getId(), lost.getId(), found.getId());
+
+        assertEquals(Status.CANCELLED, view.status());
+        verify(handovers).save(any(LostAndFoundHandover.class));
+        verify(notifications, never()).matchConfirmed(any(), any());
+        verify(notifications, org.mockito.Mockito.times(1)).handoverRejected(any(), org.mockito.ArgumentMatchers.eq(owner.getId()));
+    }
+
+    @Test
+    @DisplayName("calling the same pair off twice records and notifies once")
+    void rejectPairTwiceDoesNothingNew() {
+        LostAndFoundHandover cancelled = new LostAndFoundHandover(trip, lost, found, owner);
+        cancelled.cancel();
+        when(handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(handovers.findFirstByLostReport_IdAndFoundReport_IdAndStatusOrderByUpdatedAtDesc(any(), any(), any()))
+                .thenReturn(Optional.of(cancelled));
+
+        HandoverView view = service.rejectPair(owner.getId(), lost.getId(), found.getId());
+
+        assertEquals(Status.CANCELLED, view.status());
+        verify(handovers, never()).save(any());
+        verify(notifications, never()).handoverRejected(any(), any());
+    }
+
+    @Test
+    @DisplayName("if the pair already has a live handover, rejecting the pair is the ordinary rejection")
+    void rejectPairWithALiveHandover() {
+        LostAndFoundHandover live = proposed();
+        when(handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(any(), any(), any()))
+                .thenReturn(Optional.of(live));
+
+        HandoverView view = service.rejectPair(owner.getId(), lost.getId(), found.getId());
+
+        assertEquals(Status.CANCELLED, view.status());
+        verify(notifications).handoverRejected(live, owner.getId());
+    }
+
+    @Test
+    @DisplayName("a stranger cannot call a pair off")
+    void rejectPairNeedsAParticipant() {
+        when(users.findById(stranger.getId())).thenReturn(Optional.of(stranger));
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.rejectPair(stranger.getId(), lost.getId(), found.getId()));
+
+        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
+        verify(handovers, never()).save(any());
+    }
 }

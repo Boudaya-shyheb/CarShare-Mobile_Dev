@@ -297,9 +297,50 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     final handovers = (await _api.getList('$_module/handovers/mine'))
         .map(_Handover.new)
         .toList();
+    await _addReportsOutsideTrips(reports, handovers);
     final data = _Snapshot(trips, reports, handovers);
     await _loadPhotos(data);
     return data;
+  }
+
+  /// A trip that ended drops out of the trip list, and its reports with it. A report still held
+  /// by a handover, or the one a notification opens, is read directly by id instead.
+  Future<void> _addReportsOutsideTrips(
+    List<_Report> reports,
+    List<_Handover> handovers,
+  ) async {
+    final known = reports.map((report) => report.id).toSet();
+    final wanted = <String>{
+      for (final handover in handovers) ...[
+        handover.lostReportId,
+        handover.foundReportId,
+      ],
+      ?widget.initialReportId,
+    }..removeAll(known);
+    final fetched = await Future.wait(
+      wanted.map((id) async {
+        try {
+          final json = await _api.get('$_module/reports/$id');
+          return _Report(
+            _Trip({
+              'id': json['tripId'],
+              'originLabel': json['originLabel'],
+              'destinationLabel': json['destinationLabel'],
+              'departureTime': json['departureTime'],
+            }),
+            json,
+          );
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+    reports.addAll(fetched.whereType<_Report>());
+    reports.sort(
+      (a, b) => (b.created?.millisecondsSinceEpoch ?? 0).compareTo(
+        a.created?.millisecondsSinceEpoch ?? 0,
+      ),
+    );
   }
 
   /// Fetches the photos the user may see and does not have yet: their own reports' and the
@@ -1085,6 +1126,10 @@ class _ReportFormState extends State<_ReportForm> {
                   ),
                 ],
               ),
+              if (photo != null && _suggestion != null) ...[
+                const SizedBox(height: 10),
+                _lookLikeChip(),
+              ],
               if (photo != null) ...[
                 const SizedBox(height: 10),
                 _Photo(photo, height: 120),
@@ -1098,7 +1143,6 @@ class _ReportFormState extends State<_ReportForm> {
                   ),
                 ),
               ],
-              if (photo != null && _suggestion != null) _lookLikeChip(),
               const SizedBox(height: 18),
               _Notice(
                 text: hasTrips
@@ -1529,13 +1573,18 @@ class _ReportDetailsState extends State<_ReportDetails> {
     final match = _match;
     setState(() => _saving = true);
     try {
-      // A match nobody confirmed yet has no handover: create it so the refusal is stored too.
-      final handover =
-          _handover ?? (match == null ? null : await _propose(match));
+      final handover = _handover;
       if (handover != null) {
         await ApiClient.instance.post(
           '$_module/handovers/${handover.id}/reject',
         );
+      } else if (match != null) {
+        // Nobody confirmed this match: the server records the refusal without ever starting
+        // a handover, so the other person is told once ("Match called off") and never "confirmed".
+        await ApiClient.instance.post('$_module/handovers/reject', {
+          'lostReportId': _isLost ? _report.id : match.id,
+          'foundReportId': _isLost ? match.id : _report.id,
+        });
       }
       if (!mounted) return;
       setState(() {

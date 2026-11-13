@@ -38,6 +38,7 @@ class AuthServiceAccountRulesTest {
     @Mock private ResetMailService resetMailService;
     @Mock private ReservationQueries reservationQueries;
     @Mock private AccountDeletionService accountDeletion;
+    @Mock private EmailVerificationService emailVerification;
 
     private AuthService service;
 
@@ -45,7 +46,7 @@ class AuthServiceAccountRulesTest {
     void setUp() {
         service = new AuthService(users, sessions, resetTokens, passwordEncoder,
                 new SecurityProperties(Duration.ofDays(30), Duration.ofMinutes(30)), resetMailService,
-                reservationQueries, accountDeletion);
+                reservationQueries, accountDeletion, emailVerification);
     }
 
     private AppUser account(UserRole role) {
@@ -164,5 +165,43 @@ class AuthServiceAccountRulesTest {
         assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
         assertEquals("role_not_allowed", error.getCode());
         assertEquals(UserRole.DRIVER, driver.getRole());
+    }
+
+    @Test
+    @DisplayName("editing the profile without changing the email never asks the provider")
+    void sameEmailIsNotChecked() {
+        AppUser driver = account(UserRole.DRIVER);
+
+        service.updateProfile(driver.getId(), edit("driver"));
+
+        verify(emailVerification, never()).verify(any());
+    }
+
+    @Test
+    @DisplayName("a new email is checked, and a refused one stops the edit")
+    void changedEmailIsChecked() {
+        AppUser driver = account(UserRole.DRIVER);
+        org.mockito.Mockito.doThrow(new ApiException(HttpStatus.BAD_REQUEST, "email_disposable", "no"))
+                .when(emailVerification).verify("new@mailinator.com");
+
+        ApiException error = assertThrows(ApiException.class, () -> service.updateProfile(driver.getId(),
+                new AuthDtos.UpdateProfileRequest("Yacine J.", "+21612345678", "New@Mailinator.com", "driver")));
+
+        assertEquals("email_disposable", error.getCode());
+    }
+
+    @Test
+    @DisplayName("sign-up checks the email last, and a refused one creates no account")
+    void signUpIsRefusedForABadEmail() {
+        when(users.existsByEmail(any())).thenReturn(false);
+        when(users.existsByNormalizedPhone(any())).thenReturn(false);
+        org.mockito.Mockito.doThrow(new ApiException(HttpStatus.BAD_REQUEST, "email_undeliverable", "no"))
+                .when(emailVerification).verify("test@gmial.com");
+
+        ApiException error = assertThrows(ApiException.class, () -> service.signUp(new AuthDtos.SignUpRequest(
+                "Yacine Jomni", "+21612345678", "test@gmial.com", "Passw0rd!x", "Passw0rd!x", "passenger")));
+
+        assertEquals("email_undeliverable", error.getCode());
+        verify(users, never()).save(any());
     }
 }
