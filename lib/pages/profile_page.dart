@@ -118,6 +118,12 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+        // A refused role switch leaves the account as it was, so the form must say so too.
+        if (error is ApiException &&
+            (error.code == 'role_change_active_trips' ||
+                error.code == 'role_not_allowed')) {
+          setState(() => _role = _user?.role);
+        }
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -205,7 +211,7 @@ class _ProfilePageState extends State<ProfilePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'This permanently deletes your account and profile data. Enter your password to continue.',
+              'Your name, email, phone and photo are removed and you are signed out everywhere. Your trips, ratings and history stay, shown as "Deleted user". You cannot delete while a trip or seat is still running, or while your account is suspended or banned. Enter your password to continue.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -732,6 +738,7 @@ class _ProfilePageState extends State<ProfilePage> {
       'PENDING_REVIEW' => 'Waiting for admin review',
       'APPROVED' => 'Verified by admin',
       'REJECTED' => 'Needs a new scan',
+      'EXPIRED' => 'Expired',
       _ => 'Not submitted',
     };
     return Card(
@@ -796,7 +803,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: Text(
                   _licenseLoading
                       ? 'Reading license…'
-                      : user.driverLicenseStatus == 'REJECTED'
+                      : user.driverLicenseStatus == 'REJECTED' ||
+                            user.driverLicenseStatus == 'EXPIRED'
                       ? 'Scan again'
                       : 'Scan driver license',
                 ),

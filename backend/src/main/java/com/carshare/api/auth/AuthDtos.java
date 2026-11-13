@@ -20,7 +20,7 @@ public final class AuthDtos {
     public record UpdateProfileRequest(@NotBlank @Size(max = 100) String fullName,
             @NotBlank @Size(max = 24) @Pattern(regexp = "^\\+?[0-9][0-9\\s().-]{5,19}$") String phone,
             @NotBlank @Email @Size(max = 254) String email,
-            @NotBlank @Pattern(regexp = "^(passenger|driver)$") String role) { }
+            @NotBlank @Pattern(regexp = "^(passenger|driver|admin)$") String role) { }
     public record ForgotPasswordRequest(@NotBlank @Email @Size(max = 254) String email) { }
     public record ResetPasswordRequest(@Email @Size(max = 254) String email, @NotBlank String token,
             @NotBlank @Size(min = 8, max = 72) String newPassword) { }

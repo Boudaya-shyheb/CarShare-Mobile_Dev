@@ -8,4 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface UserEmergencyContactRepository extends JpaRepository<UserEmergencyContact, UUID> {
     List<UserEmergencyContact> findByUser_IdOrderByName(UUID userId);
     Optional<UserEmergencyContact> findByIdAndUser_Id(UUID id, UUID userId);
+    void deleteByUser_Id(UUID userId);
 }

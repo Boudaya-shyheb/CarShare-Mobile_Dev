@@ -309,7 +309,7 @@ class TripServiceTest {
                 () -> service.publish(driver.getId(), publishRequest()));
 
         assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
-        assertEquals("account_restricted", error.getCode());
+        assertEquals("account_suspended", error.getCode());
     }
 
     @Test
@@ -322,7 +322,29 @@ class TripServiceTest {
                 () -> service.publish(driver.getId(), publishRequest()));
 
         assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
-        assertEquals("account_restricted", error.getCode());
+        assertEquals("account_banned", error.getCode());
+    }
+
+    @Test
+    @DisplayName("a suspension whose end date has passed no longer blocks publishing")
+    void publishAllowsDriverWhoseSuspensionEnded() {
+        driver.updateAccountStatus(UserStatus.SUSPENDED, Instant.now().minus(1, ChronoUnit.HOURS));
+        when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
+
+        assertEquals("SCHEDULED", service.publish(driver.getId(), publishRequest()).status());
+    }
+
+    @Test
+    @DisplayName("a licence the daily job has marked EXPIRED gives license_expired")
+    void publishRejectsAnExpiredLicenceStatus() {
+        AppUser lapsed = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+        lapsed.submitDriverLicense(LocalDate.now().minusDays(2), new byte[] {1}, "image/png");
+        lapsed.reviewDriverLicense("EXPIRED", null);
+
+        ApiException error = publishFailure(lapsed);
+
+        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
+        assertEquals("license_expired", error.getCode());
     }
 
     @Test

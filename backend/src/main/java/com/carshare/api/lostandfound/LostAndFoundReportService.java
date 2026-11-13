@@ -6,6 +6,7 @@ import com.carshare.api.reservation.ReservationRepository;
 import com.carshare.api.reservation.ReservationStatus;
 import com.carshare.api.reservation.Trip;
 import com.carshare.api.reservation.TripRepository;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.time.Instant;
@@ -67,6 +68,7 @@ public class LostAndFoundReportService {
     public ReportView create(
             UUID userId, UUID tripId, LostAndFoundReport.Type type,
             String title, String description) {
+        ActiveUserGuard.requireActive(users, userId);
         Trip trip = requireParticipant(userId, tripId);
 
         if (type == null) {

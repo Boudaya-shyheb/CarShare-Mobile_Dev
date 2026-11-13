@@ -896,6 +896,8 @@ class _Requirements {
         problems.add(_Problem.licensePending);
       case 'REJECTED':
         problems.add(_Problem.licenseRejected);
+      case 'EXPIRED':
+        problems.add(_Problem.licenseExpired);
       default:
         problems.add(_Problem.licenseMissing);
     }

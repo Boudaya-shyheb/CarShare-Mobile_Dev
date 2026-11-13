@@ -7,6 +7,7 @@ import com.carshare.api.reservation.ReservationStatus;
 import com.carshare.api.reservation.Trip;
 import com.carshare.api.reservation.TripRepository;
 import com.carshare.api.reservation.TripStatus;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.time.Instant;
@@ -213,6 +214,7 @@ public class SupportService {
 
     @Transactional
     public TicketView create(UUID userId, TicketRequest request) {
+        ActiveUserGuard.requireActive(users, userId);
         AppUser user = users.findById(userId).orElseThrow(() -> new ApiException(
                 HttpStatus.UNAUTHORIZED, "account_not_found", "Your account could not be found."));
         TicketCategory category = resolveCategory(request.categoryId(), request.category());
@@ -278,6 +280,7 @@ public class SupportService {
 
     @Transactional
     public TicketView update(UUID userId, UUID ticketId, UpdateTicketRequest request) {
+        ActiveUserGuard.requireActive(users, userId);
         SupportTicket ticket = ownedTicket(userId, ticketId);
         TicketCategory category = resolveCategory(request.categoryId(), request.category());
         try {
@@ -314,6 +317,7 @@ public class SupportService {
     @Transactional
     public EvidenceView addEvidence(UUID userId, UUID ticketId, TicketEvidence.Type type,
             String originalFileName, byte[] bytes) {
+        ActiveUserGuard.requireActive(users, userId);
         SupportTicket ticket = participantTicket(userId, ticketId);
         requireBeforeReview(ticket, "Evidence can only be added before review starts.");
         if (type == null || type == TicketEvidence.Type.TRIP_DATA) {
@@ -375,6 +379,7 @@ public class SupportService {
 
     @Transactional
     public StatementView addStatement(UUID userId, UUID ticketId, String text) {
+        ActiveUserGuard.requireActive(users, userId);
         SupportTicket ticket = participantTicket(userId, ticketId);
         requireBeforeReview(ticket, "A statement can only be added before review starts.");
         if (statements.findByTicket_IdAndAuthor_Id(ticketId, userId).isPresent()) {
@@ -392,6 +397,7 @@ public class SupportService {
 
     @Transactional
     public StatementView updateStatement(UUID userId, UUID ticketId, String text) {
+        ActiveUserGuard.requireActive(users, userId);
         SupportTicket ticket = participantTicket(userId, ticketId);
         requireBeforeReview(ticket, "A statement can only be edited before review starts.");
         TicketStatement statement = statements.findByTicket_IdAndAuthor_Id(ticketId, userId)
@@ -432,6 +438,7 @@ public class SupportService {
 
     @Transactional
     public ContestationView contest(UUID userId, UUID ticketId, String reason) {
+        ActiveUserGuard.requireActive(users, userId);
         SupportTicket ticket = participantTicket(userId, ticketId);
         if (ticket.getStatus() != SupportTicket.Status.RESOLVED) {
             throw new ApiException(HttpStatus.CONFLICT, "ticket_not_resolved",

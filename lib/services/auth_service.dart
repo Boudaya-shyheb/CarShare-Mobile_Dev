@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:intl/intl.dart';
 
 import '../models/user_profile.dart';
 import 'api_client.dart';
@@ -247,6 +248,23 @@ class AuthService {
   }
 }
 
-String authErrorMessage(Object error) => error is ApiException
-    ? error.message
-    : 'We could not complete your request. Please try again.';
+/// What to show for any failed request. The server already writes a plain sentence for every
+/// account rule (banned, suspended, role switch, deletion); this only puts a suspension's end in
+/// the phone's own time, so "until 13 Nov 2026 at 12:00 UTC" reads as the user's local time.
+String authErrorMessage(Object error) {
+  if (error is! ApiException) {
+    return 'We could not complete your request. Please try again.';
+  }
+  final until = error.statusUntil;
+  if (until != null) {
+    final when = DateFormat('d MMM yyyy, HH:mm').format(until);
+    if (error.code == 'account_suspended') {
+      return 'Your account is suspended until $when, so you cannot make changes. '
+          'You can still sign in and look around.';
+    }
+    if (error.code == 'delete_blocked_suspended') {
+      return 'You cannot delete your account while it is suspended. The suspension ends $when.';
+    }
+  }
+  return error.message;
+}

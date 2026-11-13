@@ -11,6 +11,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
+    /** Whether a passenger still holds a seat (pending or confirmed). */
+    boolean existsByPassenger_IdAndStatusIn(UUID passengerId, Collection<ReservationStatus> statuses);
+
     /** Seats a user rode (COMPLETED) or missed (NO_SHOW): the profile's trips and no-shows. */
     long countByPassenger_IdAndStatus(UUID passengerId, ReservationStatus status);
 

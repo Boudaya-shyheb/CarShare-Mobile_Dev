@@ -37,6 +37,7 @@ public class UserAccountService {
 
     @Transactional
     public AuthDtos.Preferences updatePreferences(UUID userId, AuthDtos.UpdatePreferences request) {
+        ActiveUserGuard.requireActive(users, userId);
         AppUser user = requireUser(userId);
         String language = request.language().trim().toLowerCase();
         if (!List.of("en", "fr", "ar").contains(language)) {
@@ -64,6 +65,7 @@ public class UserAccountService {
 
     @Transactional
     public void updatePhoto(UUID userId, byte[] photo, String mimeType) {
+        ActiveUserGuard.requireActive(users, userId);
         AppUser user = requireUser(userId);
         if (photo == null || photo.length == 0 || photo.length > 2 * 1024 * 1024) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_photo_size", "Choose an image smaller than 2 MB.");
@@ -85,11 +87,13 @@ public class UserAccountService {
 
     @Transactional
     public void deletePhoto(UUID userId) {
+        ActiveUserGuard.requireActive(users, userId);
         requireUser(userId).updateProfilePhoto(null, null);
     }
 
     @Transactional
     public void submitDriverLicense(UUID userId, LocalDate expiry, byte[] image, String mimeType) {
+        ActiveUserGuard.requireActive(users, userId);
         AppUser user = requireUser(userId);
         if (user.getRole() != UserRole.DRIVER) throw new ApiException(HttpStatus.FORBIDDEN,
                 "driver_license_driver_only", "Only driver accounts can submit a driving license.");
@@ -113,6 +117,7 @@ public class UserAccountService {
 
     @Transactional
     public AuthDtos.EmergencyContact addEmergencyContact(UUID userId, AuthDtos.EmergencyContactRequest request) {
+        ActiveUserGuard.requireActive(users, userId);
         AppUser user = requireUser(userId);
         String phone = normalizePhone(request.phone());
         validatePhone(phone);
@@ -124,6 +129,7 @@ public class UserAccountService {
     @Transactional
     public AuthDtos.EmergencyContact updateEmergencyContact(UUID userId, UUID contactId,
             AuthDtos.EmergencyContactRequest request) {
+        ActiveUserGuard.requireActive(users, userId);
         UserEmergencyContact contact = emergencyContacts.findByIdAndUser_Id(contactId, userId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "contact_not_found", "Emergency contact not found."));
         String phone = normalizePhone(request.phone());
@@ -135,6 +141,7 @@ public class UserAccountService {
 
     @Transactional
     public void deleteEmergencyContact(UUID userId, UUID contactId) {
+        ActiveUserGuard.requireActive(users, userId);
         UserEmergencyContact contact = emergencyContacts.findByIdAndUser_Id(contactId, userId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "contact_not_found", "Emergency contact not found."));
         emergencyContacts.delete(contact);
@@ -147,6 +154,19 @@ public class UserAccountService {
         for (AppUser user : users.findAll()) {
             refreshStatus(user, now);
         }
+    }
+
+    /**
+     * Once a day, an APPROVED driver licence whose expiry date has passed becomes EXPIRED. The
+     * profile then asks for a new scan, and publishing a trip is refused until it is reviewed.
+     * Tunisian time, because that is the calendar the licence date is read against.
+     *
+     * @return how many licences were expired
+     */
+    @Transactional
+    @Scheduled(cron = "0 10 0 * * *", zone = "Africa/Tunis")
+    public int expireDriverLicenses() {
+        return users.expireLicensesBefore(LocalDate.now(java.time.ZoneId.of("Africa/Tunis")));
     }
 
     public void refreshStatus(AppUser user, Instant now) {

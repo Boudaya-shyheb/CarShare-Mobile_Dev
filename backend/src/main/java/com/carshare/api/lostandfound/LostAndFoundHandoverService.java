@@ -2,6 +2,7 @@ package com.carshare.api.lostandfound;
 
 import com.carshare.api.common.ApiException;
 import com.carshare.api.lostandfound.LostAndFoundHandover.Status;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.security.MessageDigest;
@@ -51,6 +52,7 @@ public class LostAndFoundHandoverService {
      */
     @Transactional
     public HandoverView propose(UUID userId, UUID lostReportId, UUID foundReportId) {
+        ActiveUserGuard.requireActive(users, userId);
         if (lostReportId == null || foundReportId == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "handover_reports_required",
                     "Choose the lost report and the found report to match.");
@@ -104,6 +106,7 @@ public class LostAndFoundHandoverService {
     @Transactional
     public HandoverView arrange(
             UUID userId, UUID handoverId, String meetingPoint, String meetingTime) {
+        ActiveUserGuard.requireActive(users, userId);
         LostAndFoundHandover handover = requireParticipantHandover(userId, handoverId);
         requireActive(handover);
 

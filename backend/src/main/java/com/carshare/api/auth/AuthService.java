@@ -3,6 +3,9 @@ package com.carshare.api.auth;
 import com.carshare.api.common.ApiException;
 import com.carshare.api.security.SecurityProperties;
 import com.carshare.api.security.TokenUtil;
+import com.carshare.api.reservation.ReservationQueries;
+import com.carshare.api.users.AccountDeletionService;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
@@ -24,10 +27,15 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final SecurityProperties securityProperties;
     private final ResetMailService resetMailService;
+    private final ReservationQueries reservationQueries;
+    private final AccountDeletionService accountDeletion;
 
     public AuthService(UserRepository users, AuthSessionRepository sessions,
             PasswordResetTokenRepository resetTokens, PasswordEncoder passwordEncoder,
-            SecurityProperties securityProperties, ResetMailService resetMailService) {
+            SecurityProperties securityProperties, ResetMailService resetMailService,
+            ReservationQueries reservationQueries, AccountDeletionService accountDeletion) {
+        this.reservationQueries = reservationQueries;
+        this.accountDeletion = accountDeletion;
         this.users = users;
         this.sessions = sessions;
         this.resetTokens = resetTokens;
@@ -92,9 +100,8 @@ public class AuthService {
 
     @Transactional
     public AuthDtos.UserProfile updateProfile(UUID userId, AuthDtos.UpdateProfileRequest request) {
-        AppUser user = users.findById(userId)
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "account_not_found",
-                        "Your account could not be found."));
+        AppUser user = ActiveUserGuard.requireActive(users, userId);
+        UserRole role = resolveRole(user, request.role());
         String email = normalizeEmail(request.email());
         users.findByEmail(email).filter(existing -> !existing.getId().equals(userId)).ifPresent(existing -> {
             throw new ApiException(HttpStatus.CONFLICT, "email_in_use",
@@ -110,9 +117,32 @@ public class AuthService {
         // Preserve the stored format when the normalized phone did not change.
         // This lets legacy accounts with duplicate phones still edit other fields.
         String phoneToSave = phone.equals(currentPhone) ? user.getPhone() : phone;
-        user.updateProfile(request.fullName().trim(), phoneToSave, email,
-                UserRole.valueOf(request.role().toUpperCase(Locale.ROOT)));
+        user.updateProfile(request.fullName().trim(), phoneToSave, email, role);
         return AuthDtos.UserProfile.from(user);
+    }
+
+    /**
+     * The role the profile edit ends up with. An administrator keeps the role they have whatever
+     * is sent; nobody can make themselves one. A driver cannot become a passenger while a trip they
+     * drive has not finished (its passengers would be left with nobody). A passenger may always
+     * become a driver: the licence and vehicle checks happen when they publish.
+     */
+    private UserRole resolveRole(AppUser user, String requestedValue) {
+        UserRole requested = UserRole.valueOf(requestedValue.toUpperCase(Locale.ROOT));
+        if (user.getRole() == UserRole.ADMIN) {
+            return UserRole.ADMIN;
+        }
+        if (requested == UserRole.ADMIN) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "role_not_allowed",
+                    "You cannot give yourself the administrator role.");
+        }
+        if (user.getRole() == UserRole.DRIVER && requested == UserRole.PASSENGER
+                && reservationQueries.driverHasUnfinishedTrips(user.getId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "role_change_active_trips",
+                    "You cannot switch to a passenger account while you have a trip that has not "
+                            + "finished. Finish or cancel it first.");
+        }
+        return requested;
     }
 
     @Transactional
@@ -157,15 +187,12 @@ public class AuthService {
 
     @Transactional
     public void deleteAccount(UUID userId, String password) {
-        AppUser user = users.findById(userId).orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
-                "account_not_found", "Your account could not be found."));
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid_password", "The password is incorrect.");
-        }
-        users.delete(user);
+        accountDeletion.delete(userId, password);
     }
 
     public AuthDtos.AuthResponse createSession(AppUser user) {
+        // Sign-in, sign-up and the social flows all end here: a banned account gets no session.
+        ActiveUserGuard.checkCanSignIn(user);
         String rawToken = TokenUtil.newToken();
         Instant expiresAt = Instant.now().plus(securityProperties.sessionTtl());
         sessions.save(new AuthSession(user, TokenUtil.sha256(rawToken), expiresAt));

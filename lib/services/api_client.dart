@@ -8,10 +8,13 @@ import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode, this.code});
+  const ApiException(this.message, {this.statusCode, this.code, this.statusUntil});
   final String message;
   final int? statusCode;
   final String? code;
+
+  /// When a suspension ends, sent with `account_suspended` and `delete_blocked_suspended`.
+  final DateTime? statusUntil;
   @override
   String toString() => message;
 }
@@ -44,20 +47,7 @@ class ApiClient {
           .get(Uri.parse('$baseUrl$path'), headers: headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        dynamic decoded;
-        try {
-          decoded = jsonDecode(response.body);
-        } on FormatException {
-          decoded = null;
-        }
-        final data = decoded is Map<String, dynamic>
-            ? decoded
-            : <String, dynamic>{};
-        throw ApiException(
-          data['detail'] as String? ?? _messageForStatus(response.statusCode),
-          statusCode: response.statusCode,
-          code: data['code'] as String?,
-        );
+        throw _exceptionForResponse(response.statusCode, response.body);
       }
       final decoded = jsonDecode(response.body);
       if (decoded is! List) {
@@ -117,12 +107,7 @@ class ApiClient {
       );
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
         final response = await http.Response.fromStream(streamed);
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw ApiException(
-          data['detail'] as String? ?? _messageForStatus(response.statusCode),
-          statusCode: response.statusCode,
-          code: data['code'] as String?,
-        );
+        throw _exceptionForResponse(response.statusCode, response.body);
       }
     } on ApiException {
       rethrow;
@@ -306,11 +291,8 @@ class ApiClient {
           ? decoded
           : <String, dynamic>{};
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw ApiException(
-          data['detail'] as String? ?? _messageForStatus(response.statusCode),
-          statusCode: response.statusCode,
-          code: data['code'] as String?,
-        );
+        // One parser for every failure, so each error carries the same fields (code, statusUntil).
+        throw _exceptionForResponse(response.statusCode, response.body);
       }
       return data;
     } on ApiException {
@@ -344,6 +326,7 @@ class ApiClient {
       data['detail'] as String? ?? _messageForStatus(statusCode),
       statusCode: statusCode,
       code: data['code'] as String?,
+      statusUntil: DateTime.tryParse('${data['statusUntil'] ?? ''}')?.toLocal(),
     );
   }
 

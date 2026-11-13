@@ -163,6 +163,7 @@ class LostAndFoundHandoverServiceTest {
     @Test
     @DisplayName("someone who made neither report gets 403")
     void strangerCannotPropose() {
+        when(users.findById(stranger.getId())).thenReturn(Optional.of(stranger));
         ApiException error = assertThrows(ApiException.class,
                 () -> service.propose(stranger.getId(), lost.getId(), found.getId()));
 
@@ -255,6 +256,7 @@ class LostAndFoundHandoverServiceTest {
     @DisplayName("a non-participant gets 403 on arrange, verify and reject")
     void strangerIsForbiddenEverywhere() {
         LostAndFoundHandover handover = arranged();
+        when(users.findById(stranger.getId())).thenReturn(Optional.of(stranger));
 
         for (Runnable call : List.<Runnable>of(
                 () -> service.arrange(stranger.getId(), handover.getId(), "Here", "Now"),

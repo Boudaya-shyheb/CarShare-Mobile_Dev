@@ -217,7 +217,8 @@ class ReservationServiceTest {
                     () -> service.book(passengerId, UUID.randomUUID(), book(1)));
 
             assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
-            assertEquals("account_restricted", error.getCode());
+            assertEquals(restricted == UserStatus.BANNED ? "account_banned" : "account_suspended",
+                    error.getCode());
         }
         verify(trips, never()).holdSeats(any(), anyInt());
     }

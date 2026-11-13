@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.carshare.api.common.ApiException;
@@ -47,6 +48,10 @@ class RatingServiceTest {
     @BeforeEach
     void setUp() {
         service = new RatingService(ratings, trips, reservations, users);
+        // Every rating write first checks the rater's account; unless a test says otherwise the
+        // rater is an ordinary active user.
+        lenient().when(users.findById(any())).thenAnswer(call -> Optional.of(
+                new AppUser("Some Rider", "+21633333333", "rider@carshare.tn", "hash", UserRole.PASSENGER)));
         driver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash",
                 UserRole.DRIVER);
         passenger = new AppUser("Mariem Rider", "+21622222222", "mariem@carshare.tn", "hash",

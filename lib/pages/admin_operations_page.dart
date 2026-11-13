@@ -72,7 +72,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _working = false);

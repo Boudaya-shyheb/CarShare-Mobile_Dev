@@ -18,6 +18,12 @@ public interface UserRepository extends JpaRepository<AppUser, UUID> {
     @Query(value = "SELECT EXISTS (SELECT 1 FROM app_users WHERE id <> :id AND regexp_replace(phone, '[[:space:]().-]', '', 'g') = :phone)", nativeQuery = true)
     boolean existsByNormalizedPhoneAndIdNot(@Param("phone") String phone, @Param("id") UUID id);
     List<AppUser> findAllByOrderByCreatedAtDesc();
+
+    /** APPROVED licences whose date has passed become EXPIRED. @return how many were moved */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @Query("update AppUser u set u.driverLicenseStatus = 'EXPIRED' "
+            + "where u.driverLicenseStatus = 'APPROVED' and u.driverLicenseExpiry < :today")
+    int expireLicensesBefore(@Param("today") java.time.LocalDate today);
     List<AppUser> findByRoleAndDriverLicenseStatusOrderByCreatedAtDesc(UserRole role, String driverLicenseStatus);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -22,6 +22,9 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     long countByStatus(TripStatus status);
 
+    /** Whether a driver still has a trip that has not finished: blocks a role switch or deletion. */
+    boolean existsByDriver_IdAndStatusIn(UUID driverId, Collection<TripStatus> statuses);
+
     /** Trips still waiting to start whose departure is before the cut-off: the expiry job's input. */
     @EntityGraph(attributePaths = "driver")
     List<Trip> findByStatusAndDepartureTimeBefore(TripStatus status, Instant cutoff);

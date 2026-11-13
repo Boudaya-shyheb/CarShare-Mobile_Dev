@@ -6,6 +6,7 @@ import '../data/vehicle_catalog.dart';
 import '../models/vehicle.dart';
 import '../models/vehicle_registration.dart';
 import '../services/api_client.dart';
+import '../services/auth_service.dart' show authErrorMessage;
 import '../services/vehicle_service.dart';
 import '../theme.dart';
 import '../widgets/dashed_border.dart';
@@ -990,6 +991,4 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   );
 }
 
-String vehicleErrorMessage(Object error) => error is ApiException
-    ? error.message
-    : 'We could not complete your request. Please try again.';
+String vehicleErrorMessage(Object error) => authErrorMessage(error);

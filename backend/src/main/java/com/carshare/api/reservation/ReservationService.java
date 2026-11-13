@@ -1,6 +1,7 @@
 package com.carshare.api.reservation;
 
 import com.carshare.api.common.ApiException;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserStatus;
@@ -288,11 +289,7 @@ public class ReservationService {
     private AppUser requireBookingPassenger(UUID userId) {
         AppUser user = users.findById(userId).orElseThrow(() -> new ApiException(
                 HttpStatus.UNAUTHORIZED, "account_not_found", "Your account could not be found."));
-        if (user.getAccountStatus() == UserStatus.SUSPENDED
-                || user.getAccountStatus() == UserStatus.BANNED) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "account_restricted",
-                    "Your account is restricted, so you cannot book a seat.");
-        }
+        ActiveUserGuard.check(user, clock.instant());
         return user;
     }
 

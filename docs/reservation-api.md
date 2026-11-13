@@ -53,7 +53,8 @@ On the Flutter side `ApiClient` already turns this into
 | `invalid_reservation_scope` | 400 | Same, for the reservation list |
 | `account_not_found` | 401 | The signed-in account no longer exists |
 | `driver_role_required` | 403 | Only a driver account can publish |
-| `account_restricted` | 403 | The account is SUSPENDED or BANNED |
+| `account_banned` | 403 | The account is BANNED: refused on every route, and at sign-in |
+| `account_suspended` | 403 | The account is SUSPENDED and the suspension has not ended; the body carries `statusUntil` |
 | `license_not_verified` | 403 | The driver licence is missing, waiting for review, or rejected; the message says which |
 | `license_expired` | 403 | The licence expires before the trip's departure day |
 | `trip_not_found` | 404 | No such trip — **also what a non-owner gets** |
@@ -120,8 +121,8 @@ booking.
 
 Allowed when **all** of these hold, checked in this order:
 
-1. the account is a `DRIVER` (`driver_role_required`) and not `SUSPENDED` or `BANNED`
-   (`account_restricted`);
+1. the account is a `DRIVER` (`driver_role_required`) and not `SUSPENDED` (`account_suspended`) or
+   `BANNED` (`account_banned`);
 2. the driver licence is `APPROVED` (`license_not_verified`) and does not expire before the
    departure day, Tunisian time (`license_expired`);
 3. `vehicleId` is present (`vehicle_required`), belongs to the caller (`vehicle_not_found`), is
@@ -172,7 +173,7 @@ Response — `TripDetail`, the shape every trip write returns:
 }
 ```
 
-Errors: `driver_role_required`, `account_restricted`, `license_not_verified`, `license_expired`,
+Errors: `driver_role_required`, `account_banned`, `account_suspended`, `license_not_verified`, `license_expired`,
 `vehicle_required`, `vehicle_not_found`, `vehicle_not_available`, `vehicle_not_approved`,
 `trip_seats_exceed_vehicle_capacity`, `invalid_coordinates`, `same_origin_and_destination`,
 `validation_error`.
@@ -363,7 +364,7 @@ back `CONFIRMED` with its `pickupCode`; otherwise `PENDING` with `pickupCode` nu
 `trip` deliberately carries no seat counts — they move whenever anyone books. Read
 `GET /api/trips/{tripId}` for live availability.
 
-Errors: `own_trip`, `trip_not_bookable`, `account_restricted`, `overlapping_reservation`,
+Errors: `own_trip`, `trip_not_bookable`, `account_banned`, `account_suspended`, `overlapping_reservation`,
 `seats_unavailable`, `trip_not_found`, `validation_error`.
 
 ### `GET /api/reservations/mine` — the passenger's own reservations

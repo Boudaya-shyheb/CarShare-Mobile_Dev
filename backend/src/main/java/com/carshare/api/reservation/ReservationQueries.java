@@ -114,6 +114,19 @@ public class ReservationQueries {
         return trips.existsByVehicleIdAndStatusIn(vehicleId, TripStatus.UNFINISHED);
     }
 
+    /** True while the user is the driver of a trip that has not finished. */
+    @Transactional(readOnly = true)
+    public boolean driverHasUnfinishedTrips(UUID userId) {
+        return trips.existsByDriver_IdAndStatusIn(userId, TripStatus.UNFINISHED);
+    }
+
+    /** True while the user holds a pending or confirmed seat on somebody's trip. */
+    @Transactional(readOnly = true)
+    public boolean passengerHasActiveReservations(UUID userId) {
+        return reservations.existsByPassenger_IdAndStatusIn(userId,
+                Set.of(ReservationStatus.PENDING, ReservationStatus.CONFIRMED));
+    }
+
     /**
      * How many trips each vehicle has completed, for the vehicle card's "Used in N trips".
      * A vehicle that never finished a trip is simply not in the map.

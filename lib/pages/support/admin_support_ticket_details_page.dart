@@ -11,6 +11,7 @@ import '../../services/geo_service.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
 import '../../widgets/support_status_badge.dart';
+import '../../services/auth_service.dart' show authErrorMessage;
 
 class AdminSupportTicketDetailsPage extends StatefulWidget {
   const AdminSupportTicketDetailsPage({super.key, required this.ticketId});
@@ -48,7 +49,7 @@ class _AdminSupportTicketDetailsPageState
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _working = false);

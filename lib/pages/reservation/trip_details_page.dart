@@ -112,8 +112,6 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
         'You already have a reservation on another trip at this time.',
       'seats_unavailable' =>
         'Somebody took those seats first. Try fewer seats, or another trip.',
-      'account_restricted' =>
-        'Your account cannot book trips at the moment. Check your profile.',
       'trip_not_bookable' => 'This trip is no longer taking reservations — it has left or been cancelled.',
       _ => authErrorMessage(error),
     };

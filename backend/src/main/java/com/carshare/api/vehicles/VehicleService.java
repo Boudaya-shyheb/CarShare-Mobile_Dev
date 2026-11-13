@@ -2,6 +2,7 @@ package com.carshare.api.vehicles;
 
 import com.carshare.api.common.ApiException;
 import com.carshare.api.reservation.ReservationQueries;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
@@ -58,7 +59,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDtos.VehicleResponse createVehicle(UUID ownerId, VehicleDtos.VehicleRequest request) {
-        AppUser owner = requireDriver(ownerId);
+        AppUser owner = requireActiveDriver(ownerId);
         String registrationNumber = validateRequest(request, null);
         Vehicle vehicle;
         try {
@@ -72,7 +73,7 @@ public class VehicleService {
     @Transactional
     public VehicleDtos.VehicleResponse updateVehicle(
             UUID ownerId, UUID vehicleId, VehicleDtos.VehicleRequest request) {
-        requireDriver(ownerId);
+        requireActiveDriver(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         String registrationNumber = validateRequest(request, vehicleId);
         vehicle.update(request, registrationNumber);
@@ -86,7 +87,7 @@ public class VehicleService {
 
     @Transactional
     public void deleteVehicle(UUID ownerId, UUID vehicleId) {
-        requireDriverForUpdate(ownerId);
+        requireActiveDriverForUpdate(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         if (reservationQueries.vehicleHasUpcomingTrips(vehicleId)) {
             throw new ApiException(HttpStatus.CONFLICT, "vehicle_in_use",
@@ -112,7 +113,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDtos.VehicleResponse setDefault(UUID ownerId, UUID vehicleId) {
-        requireDriverForUpdate(ownerId);
+        requireActiveDriverForUpdate(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         if (vehicle.getStatus() != Vehicle.Status.ACTIVE) {
             throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_available",
@@ -152,6 +153,21 @@ public class VehicleService {
         }
         vehicle.markUsed(Instant.now());
         return vehicle;
+    }
+
+    /**
+     * Removes every vehicle a user owns, photos included. Used when an account is deleted; the
+     * caller has already checked that none is on a trip that has not finished. Trips keep their
+     * history, since their vehicle id is set to null by the foreign key.
+     */
+    @Transactional
+    public void deleteAllOwnedBy(UUID ownerId) {
+        List<Vehicle> owned = vehicles.findByOwner_IdOrderByCreatedAtDesc(ownerId);
+        List<String> fileNames = owned.stream().flatMap(vehicle -> vehicle.getPhotos().stream())
+                .map(VehiclePhoto::getFileName).toList();
+        vehicles.deleteAll(owned);
+        vehicles.flush();
+        deleteFilesAfterCommit(fileNames);
     }
 
     /**
@@ -198,7 +214,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDtos.VehicleResponse uploadPhoto(UUID ownerId, UUID vehicleId, byte[] bytes) {
-        requireDriver(ownerId);
+        requireActiveDriver(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         if (bytes == null || bytes.length == 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_photo_size",
@@ -252,7 +268,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDtos.VehicleResponse setPrimaryPhoto(UUID ownerId, UUID vehicleId, UUID photoId) {
-        requireDriver(ownerId);
+        requireActiveDriver(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         VehiclePhoto selected = photos.findByIdAndVehicle_Id(photoId, vehicleId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
@@ -272,7 +288,7 @@ public class VehicleService {
 
     @Transactional
     public void deletePhoto(UUID ownerId, UUID vehicleId, UUID photoId) {
-        requireDriver(ownerId);
+        requireActiveDriver(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
         VehiclePhoto photo = photos.findByIdAndVehicle_Id(photoId, vehicleId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
@@ -304,6 +320,19 @@ public class VehicleService {
                 : vehicles.existsByRegistrationNumberAndIdNot(registrationNumber, currentVehicleId);
         if (used) throw registrationConflict(null);
         return registrationNumber;
+    }
+
+    /** A driver who may make changes: not banned, not suspended. Reads use {@link #requireDriver}. */
+    private AppUser requireActiveDriver(UUID ownerId) {
+        AppUser user = requireDriver(ownerId);
+        ActiveUserGuard.check(user, Instant.now());
+        return user;
+    }
+
+    private AppUser requireActiveDriverForUpdate(UUID ownerId) {
+        AppUser user = requireDriverForUpdate(ownerId);
+        ActiveUserGuard.check(user, Instant.now());
+        return user;
     }
 
     private AppUser requireDriver(UUID ownerId) {

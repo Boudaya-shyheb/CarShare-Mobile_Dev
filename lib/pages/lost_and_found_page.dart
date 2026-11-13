@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:image_picker/image_picker.dart';
 
 import '../services/api_client.dart';
+import '../services/auth_service.dart' show authErrorMessage;
 import '../services/local_database.dart';
 import '../theme.dart';
 
@@ -2109,7 +2110,7 @@ AppBar _detailBar(String title) => AppBar(
 );
 
 String _errorMessage(Object? error) => error is ApiException
-    ? error.message
+    ? authErrorMessage(error)
     : 'Could not read the Lost & Found response. Try again.';
 
 void _message(BuildContext context, String message) =>

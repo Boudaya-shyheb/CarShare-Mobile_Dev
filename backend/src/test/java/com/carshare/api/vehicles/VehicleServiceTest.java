@@ -183,4 +183,33 @@ class VehicleServiceTest {
         assertEquals("Peugeot", hidden.brand());
         assertTrue(!hidden.hasPhoto());
     }
+
+    // --- a suspended or banned owner -----------------------------------------------------------
+
+    @Test
+    @DisplayName("a suspended owner cannot add, edit, delete or change a vehicle, but can still list them")
+    void suspendedOwnerCannotChangeVehicles() {
+        driver.updateAccountStatus(com.carshare.api.users.UserStatus.SUSPENDED,
+                java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
+        when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
+        when(users.findForUpdate(driver.getId())).thenReturn(Optional.of(driver));
+        VehicleDtos.VehicleRequest request = new VehicleDtos.VehicleRequest("Peugeot", "208", 2022, "Black",
+                "123 TU 4567", 4, Vehicle.TrunkSize.MEDIUM, true, null, null);
+        UUID someVehicle = UUID.randomUUID();
+
+        for (Runnable change : List.<Runnable>of(
+                () -> service.createVehicle(driver.getId(), request),
+                () -> service.updateVehicle(driver.getId(), someVehicle, request),
+                () -> service.deleteVehicle(driver.getId(), someVehicle),
+                () -> service.setDefault(driver.getId(), someVehicle),
+                () -> service.uploadPhoto(driver.getId(), someVehicle, new byte[] {1}),
+                () -> service.setPrimaryPhoto(driver.getId(), someVehicle, UUID.randomUUID()),
+                () -> service.deletePhoto(driver.getId(), someVehicle, UUID.randomUUID()))) {
+            assertEquals("account_suspended", assertThrows(ApiException.class, change::run).getCode());
+        }
+        verify(vehicles, never()).saveAndFlush(any());
+
+        when(vehicles.findByOwner_IdOrderByCreatedAtDesc(driver.getId())).thenReturn(List.of());
+        assertEquals(0, service.getVehicles(driver.getId()).size());
+    }
 }

@@ -1,6 +1,7 @@
 package com.carshare.api.reservation;
 
 import com.carshare.api.common.ApiException;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import java.time.Instant;
@@ -38,6 +39,7 @@ public class RatingService {
 
     @Transactional
     public RatingDtos.RatingView rate(UUID raterId, UUID tripId, RatingDtos.RateRequest request) {
+        ActiveUserGuard.requireActive(users, raterId);
         Instant now = Instant.now();
         Trip trip = completedTrip(tripId, raterId);
         AppUser rated = ratablePartner(trip, raterId, request.toUserId());
@@ -55,6 +57,7 @@ public class RatingService {
     @Transactional
     public RatingDtos.RatingView revise(UUID raterId, UUID tripId, UUID ratedId,
             RatingDtos.ReviseRatingRequest request) {
+        ActiveUserGuard.requireActive(users, raterId);
         Instant now = Instant.now();
         completedTrip(tripId, raterId);
         Rating rating = ratings.findByTrip_IdAndFrom_IdAndTo_Id(tripId, raterId, ratedId)

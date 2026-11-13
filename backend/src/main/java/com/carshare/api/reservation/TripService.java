@@ -1,6 +1,7 @@
 package com.carshare.api.reservation;
 
 import com.carshare.api.common.ApiException;
+import com.carshare.api.users.ActiveUserGuard;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
@@ -366,12 +367,13 @@ public class TripService {
             throw new ApiException(HttpStatus.FORBIDDEN, "driver_role_required",
                     "Only a driver account can publish a trip.");
         }
-        if (user.getAccountStatus() == UserStatus.SUSPENDED || user.getAccountStatus() == UserStatus.BANNED) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "account_restricted",
-                    "Your account is restricted, so you cannot publish a trip.");
-        }
+        ActiveUserGuard.check(user, clock.instant());
         // A driver is only as good as the verified licence behind the account.
         String licence = user.getDriverLicenseStatus();
+        if ("EXPIRED".equals(licence)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "license_expired",
+                    "Your driver license has expired. Scan the renewed one to publish a trip.");
+        }
         if (!"APPROVED".equals(licence)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "license_not_verified", switch (licence) {
                 case "PENDING_REVIEW" ->

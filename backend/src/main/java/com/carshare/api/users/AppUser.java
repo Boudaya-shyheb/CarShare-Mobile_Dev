@@ -28,6 +28,7 @@ public class AppUser {
     @Column(name = "driver_license_image", columnDefinition = "bytea") private byte[] driverLicenseImage;
     @Column(name = "driver_license_content_type", length = 50) private String driverLicenseContentType;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "anonymized_at") private Instant anonymizedAt;
 
     protected AppUser() { }
 
@@ -55,6 +56,7 @@ public class AppUser {
     public Instant getSignInLockedUntil() { return signInLockedUntil; }
     public byte[] getProfilePhoto() { return profilePhoto; }
     public String getProfilePhotoMimeType() { return profilePhotoMimeType; }
+    public Instant getAnonymizedAt() { return anonymizedAt; }
     public LocalDate getDriverLicenseExpiry() { return driverLicenseExpiry; }
     public String getDriverLicenseStatus() { return driverLicenseStatus; }
     public String getDriverLicenseReviewReason() { return driverLicenseReviewReason; }
@@ -81,6 +83,29 @@ public class AppUser {
         driverLicenseContentType = contentType;
         driverLicenseStatus = "PENDING_REVIEW";
         driverLicenseReviewReason = null;
+    }
+    /**
+     * Replaces everything personal and keeps the row, so history that points at this user (trips,
+     * ratings, sanctions, tickets) stays intact. The caller supplies values that cannot collide
+     * with a real email or phone, and a password hash nobody knows the password of.
+     */
+    public void anonymize(String placeholderEmail, String placeholderPhone, String unusablePasswordHash,
+            Instant now) {
+        fullName = "Deleted user";
+        email = placeholderEmail;
+        phone = placeholderPhone;
+        passwordHash = unusablePasswordHash;
+        profilePhoto = null;
+        profilePhotoMimeType = null;
+        driverLicenseExpiry = null;
+        driverLicenseStatus = "NOT_SUBMITTED";
+        driverLicenseReviewReason = null;
+        driverLicenseImage = null;
+        driverLicenseContentType = null;
+        statusReason = null;
+        failedSignInAttempts = 0;
+        signInLockedUntil = null;
+        anonymizedAt = now;
     }
     public void reviewDriverLicense(String status, String reason) {
         driverLicenseStatus = status;

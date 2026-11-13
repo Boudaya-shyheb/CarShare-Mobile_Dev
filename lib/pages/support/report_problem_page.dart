@@ -292,7 +292,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
