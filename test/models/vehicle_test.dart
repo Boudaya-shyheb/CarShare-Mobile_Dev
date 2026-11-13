@@ -18,6 +18,9 @@ void main() {
       'defaultVehicle': true,
       'insuranceExpiryDate': '2027-04-15',
       'inspectionExpiryDate': '2026-12-01',
+      'reviewStatus': 'APPROVED',
+      'reviewReason': null,
+      'tripsCompleted': 3,
       'photos': [
         {
           'id': 'photo-1',
@@ -34,6 +37,12 @@ void main() {
     expect(vehicle.insuranceExpiryDate, DateTime(2027, 4, 15));
     expect(vehicle.inspectionExpiryDate, DateTime(2026, 12, 1));
     expect(vehicle.photos.single.url, '/vehicles/vehicle-1/photos/photo-1');
+    expect(vehicle.reviewStatus, 'APPROVED');
+    expect(vehicle.tripsCompleted, 3);
+    expect(
+      Vehicle.fromJson(vehicle.toCacheJson()).toCacheJson(),
+      vehicle.toCacheJson(),
+    );
   });
 
   test('reads the review state and the completed-trip count', () {

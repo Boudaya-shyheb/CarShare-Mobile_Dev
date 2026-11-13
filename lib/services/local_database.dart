@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/user_profile.dart';
+import '../models/vehicle.dart';
 
 class LocalDatabase {
   LocalDatabase._();
@@ -12,6 +14,7 @@ class LocalDatabase {
   static const _databaseName = 'carshare.db';
   static const _tableName = 'user_profiles';
   static const _draftTable = 'lost_and_found_drafts';
+  static const _vehiclesTable = 'cached_vehicles';
 
   /// GPS fixes the driver recorded while the API could not be reached. Flushed in order on
   /// the next successful send, so a dead spot leaves a gap that fills itself in.
@@ -34,8 +37,8 @@ class LocalDatabase {
       path.join(databasePath, _databaseName),
       // 3 added the GPS buffer, 4 added the lost-and-found drafts, 5 cached the driver-license review
       // status (user management) and, on another branch, the reservation tables; 6 merges both, so an
-      // upgrade from ANY older version ends with every table and column.
-      version: 6,
+      // upgrade from ANY older version ends with every table and column. Version 7 caches vehicles.
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableName (
@@ -56,6 +59,7 @@ class LocalDatabase {
         await _createGpsTable(db);
         await _createDraftTable(db);
         await createReservationTables(db);
+        await _createVehiclesTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -90,6 +94,7 @@ class LocalDatabase {
           await _addColumnIfMissing(db, _tableName, 'driver_license_review_reason', 'TEXT');
           await createReservationTables(db);
         }
+        if (oldVersion < 7) await _createVehiclesTable(db);
       },
     );
 
@@ -189,6 +194,81 @@ class LocalDatabase {
 
   Future<void> clearProfile() async {
     await (await database).delete(_tableName);
+  }
+
+  Future<List<Vehicle>> getVehicles(String userId) async {
+    final rows = await (await database).query(
+      _vehiclesTable,
+      columns: ['json'],
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    return rows
+        .map(
+          (row) => Vehicle.fromJson(
+            jsonDecode(row['json']! as String) as Map<String, dynamic>,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<Vehicle?> getVehicle(String userId, String vehicleId) async {
+    final rows = await (await database).query(
+      _vehiclesTable,
+      columns: ['json'],
+      where: 'user_id = ? AND vehicle_id = ?',
+      whereArgs: [userId, vehicleId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return Vehicle.fromJson(
+      jsonDecode(rows.first['json']! as String) as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> saveVehicles(String userId, List<Vehicle> vehicles) async {
+    final db = await database;
+    await db.transaction((transaction) async {
+      await transaction.delete(
+        _vehiclesTable,
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      for (final vehicle in vehicles) {
+        await transaction.insert(_vehiclesTable, {
+          'user_id': userId,
+          'vehicle_id': vehicle.id,
+          'json': jsonEncode(vehicle.toCacheJson()),
+        });
+      }
+    });
+  }
+
+  Future<void> saveVehicle(String userId, Vehicle vehicle) async {
+    await (await database).insert(_vehiclesTable, {
+      'user_id': userId,
+      'vehicle_id': vehicle.id,
+      'json': jsonEncode(vehicle.toCacheJson()),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteCachedVehicle(String userId, String vehicleId) async {
+    await (await database).delete(
+      _vehiclesTable,
+      where: 'user_id = ? AND vehicle_id = ?',
+      whereArgs: [userId, vehicleId],
+    );
+  }
+
+  Future<void> _createVehiclesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_vehiclesTable (
+        user_id TEXT NOT NULL,
+        vehicle_id TEXT NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (user_id, vehicle_id)
+      )
+    ''');
   }
 
   // --- the driver's offline GPS buffer -------------------------------------------------------

@@ -109,6 +109,35 @@ class Vehicle {
     'inspectionExpiryDate': _dateToJson(inspectionExpiryDate),
   };
 
+  Map<String, dynamic> toCacheJson() => {
+    'id': id,
+    'brand': brand,
+    'model': model,
+    'year': year,
+    'color': color,
+    'registrationNumber': registrationNumber,
+    'seatsNumber': seatsNumber,
+    'trunkSize': trunkSize,
+    'airConditioning': airConditioning,
+    'status': status,
+    'defaultVehicle': isDefault,
+    'photos': photos
+        .map(
+          (photo) => {
+            'id': photo.id,
+            'url': photo.url,
+            'mimeType': photo.mimeType,
+            'primary': photo.isPrimary,
+          },
+        )
+        .toList(growable: false),
+    'insuranceExpiryDate': _dateToJson(insuranceExpiryDate),
+    'inspectionExpiryDate': _dateToJson(inspectionExpiryDate),
+    'reviewStatus': reviewStatus,
+    'reviewReason': reviewReason,
+    'tripsCompleted': tripsCompleted,
+  };
+
   static DateTime? _dateFromJson(Object? value) =>
       value == null ? null : DateTime.parse(value as String);
 
