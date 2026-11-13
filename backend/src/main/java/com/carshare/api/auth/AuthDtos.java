@@ -68,9 +68,10 @@ public final class AuthDtos {
             java.time.LocalDate driverLicenseExpiry, String driverLicenseStatus,
             String driverLicenseReviewReason) {
         public static UserProfile from(AppUser user) {
+            Instant now = Instant.now();
             return new UserProfile(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(),
-                    user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(),
-                    user.getStatusUntil(), user.getProfilePhoto() != null,
+                    user.getRole().value(), user.getCreatedAt(), user.effectiveStatus(now).name(),
+                    user.effectiveStatusUntil(now), user.getProfilePhoto() != null,
                     user.getDriverLicenseExpiry(), user.getDriverLicenseStatus(), user.getDriverLicenseReviewReason());
         }
     }
@@ -79,9 +80,10 @@ public final class AuthDtos {
             boolean hasProfilePhoto, java.time.LocalDate driverLicenseExpiry,
             String driverLicenseStatus, String driverLicenseReviewReason) {
         public static AdminUser from(AppUser user) {
+            Instant now = Instant.now();
             return new AdminUser(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(),
-                    user.getRole().value(), user.getCreatedAt(), user.getAccountStatus().name(),
-                    user.getStatusUntil(), user.getStatusReason(), user.getProfilePhoto() != null,
+                    user.getRole().value(), user.getCreatedAt(), user.effectiveStatus(now).name(),
+                    user.effectiveStatusUntil(now), user.getStatusReason(), user.getProfilePhoto() != null,
                     user.getDriverLicenseExpiry(), user.getDriverLicenseStatus(),
                     user.getDriverLicenseReviewReason());
         }

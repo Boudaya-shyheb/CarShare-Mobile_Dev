@@ -4,3 +4,10 @@ services:
     ports:
       - "9998:9998"
     restart: unless-stopped
+    # `docker ps` shows (healthy) once the server answers. The image has wget but no curl.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9998/tika || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

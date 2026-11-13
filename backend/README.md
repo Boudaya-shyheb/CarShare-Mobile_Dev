@@ -96,4 +96,6 @@ Five failed sign-in attempts lock that account for 15 minutes. Phone numbers are
 
 The first admin account must be promoted manually in the database after the admin role migration has run. Admins can then manage user roles and account statuses in the app. The mobile sign-up flow never accepts the `ADMIN` role. Manual warnings and suspensions need an end date and reason; a ban has no automatic end date. When an admin restores an account to `ACTIVE`, the backend immediately recalculates its status from active sanctions. Expired manual warnings and suspensions return to the sanction-based status during the daily status job.
 
+Support evidence analysis uses Apache Tika. `run-local.ps1` starts it with `docker compose -f support-tika-compose.yml up -d` when Docker is running, and prints a yellow warning when it is not; the analysis is then saved as partial (file hash and type only). `docker ps` shows the container as `(healthy)` once it answers.
+
 Google login requires an Android OAuth client configured with the package name and SHA-1 fingerprint, plus a Web OAuth client. Set its ID as `GOOGLE_SERVER_CLIENT_ID` in the root `.env.local`; `run-local.ps1` loads it for the backend and `run-android-phone.ps1` passes it to Flutter.

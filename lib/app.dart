@@ -9,6 +9,7 @@ import 'pages/sign_up_page.dart';
 import 'pages/welcome_page.dart';
 import 'services/auth_service.dart';
 import 'theme.dart';
+import 'widgets/resume_refresh.dart';
 
 class CarShareApp extends StatelessWidget {
   const CarShareApp({super.key});
@@ -19,12 +20,26 @@ class CarShareApp extends StatelessWidget {
     title: 'CarShare',
     debugShowCheckedModeBanner: false,
     theme: carShareTheme,
-    home: const _AuthenticationGate(),
+    // Coming back to the app re-reads the profile, so a license review, a suspension that ended,
+    // or a role change shows at once instead of after the next restart.
+    home: ResumeRefresh(
+      onResume: _refreshProfileQuietly,
+      child: const _AuthenticationGate(),
+    ),
     routes: {
       SignInPage.routeName: (_) => const SignInPage(),
       SignUpPage.routeName: (_) => const SignUpPage(),
     },
   );
+}
+
+Future<void> _refreshProfileQuietly() async {
+  if (AuthService.instance.currentUser.value == null) return;
+  try {
+    await AuthService.instance.refreshProfile();
+  } catch (_) {
+    // Offline or signed out meanwhile: the screen keeps what it has.
+  }
 }
 
 class _AuthenticationGate extends StatelessWidget {

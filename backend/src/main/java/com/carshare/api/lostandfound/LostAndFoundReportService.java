@@ -179,18 +179,23 @@ public class LostAndFoundReportService {
             UUID id, String origin, String destination, Instant departureTime) {
     }
 
+    /**
+     * {@code originLabel}, {@code destinationLabel} and {@code departureTime} describe the trip;
+     * only the admin list fills them (a person's own lists already know their trips).
+     */
     public record ReportView(
             UUID id, UUID tripId, LostAndFoundReport.Type type,
             String title, String description, LostAndFoundReport.Status status,
-            Instant createdAt, boolean canResolve, UUID reporterId, String reporterName) {
+            Instant createdAt, boolean canResolve, UUID reporterId, String reporterName,
+            String originLabel, String destinationLabel, Instant departureTime) {
 
-        /** The shape before names were added; the admin list still builds its rows this way. */
+        /** Without the trip's route: what a person's own lists return. */
         public ReportView(
                 UUID id, UUID tripId, LostAndFoundReport.Type type,
                 String title, String description, LostAndFoundReport.Status status,
-                Instant createdAt, boolean canResolve, UUID reporterId) {
+                Instant createdAt, boolean canResolve, UUID reporterId, String reporterName) {
             this(id, tripId, type, title, description, status, createdAt, canResolve,
-                    reporterId, null);
+                    reporterId, reporterName, null, null, null);
         }
     }
 }

@@ -68,8 +68,23 @@ class SupportAccountRulesTest {
     }
 
     @Test
-    @DisplayName("a suspended user cannot contest a decision")
-    void cannotContest() {
-        refused(() -> service.contest(user.getId(), UUID.randomUUID(), "I disagree"));
+    @DisplayName("a suspended user may contest a decision: the account guard does not stop them")
+    void suspendedUserMayContest() {
+        // The guard is passed; what is left is the ticket lookup, which these mocks leave empty.
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.contest(user.getId(), UUID.randomUUID(), "I disagree"));
+
+        assertEquals("ticket_not_found", error.getCode());
+    }
+
+    @Test
+    @DisplayName("a banned user still cannot contest")
+    void bannedUserCannotContest() {
+        user.updateAccountStatus(UserStatus.BANNED, null);
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.contest(user.getId(), UUID.randomUUID(), "I disagree"));
+
+        assertEquals("account_banned", error.getCode());
     }
 }

@@ -438,7 +438,7 @@ public class SupportService {
 
     @Transactional
     public ContestationView contest(UUID userId, UUID ticketId, String reason) {
-        ActiveUserGuard.requireActive(users, userId);
+        ActiveUserGuard.requireNotBanned(users, userId);
         SupportTicket ticket = participantTicket(userId, ticketId);
         if (ticket.getStatus() != SupportTicket.Status.RESOLVED) {
             throw new ApiException(HttpStatus.CONFLICT, "ticket_not_resolved",

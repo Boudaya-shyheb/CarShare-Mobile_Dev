@@ -109,7 +109,9 @@ public class AdminOperationsService {
                 .map(report -> new com.carshare.api.lostandfound.LostAndFoundReportService.ReportView(
                         report.getId(), report.getTrip().getId(), report.getType(), report.getTitle(),
                         report.getDescription(), report.getStatus(), report.getCreatedAt(), false,
-                        report.getReporter().getId()))
+                        report.getReporter().getId(), report.getReporter().getFullName(),
+                        report.getTrip().getOriginLabel(), report.getTrip().getDestinationLabel(),
+                        report.getTrip().getDepartureTime()))
                 .toList();
     }
 

@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/admin_section_header.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/resume_refresh.dart';
 import '../widgets/route_title.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/trip_formats.dart';
@@ -105,7 +106,9 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
       AdminSection.support => Icons.support_agent_outlined,
       AdminSection.sanctions => Icons.gavel_outlined,
     };
-    return Scaffold(
+    return ResumeRefresh(
+      onResume: _refresh,
+      child: Scaffold(
       backgroundColor: carShareBackground,
       appBar: AppBar(
         title: const Text('CarShare Admin'),
@@ -194,6 +197,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
               label: const Text('Issue sanction'),
             )
           : null,
+    ),
     );
   }
 
@@ -497,7 +501,19 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
             ],
           ),
           const SizedBox(height: 6),
-          Text('${item['type']} · Trip ${item['tripId']}'),
+          Text(
+            item['originLabel'] == null
+                ? '${item['type']}'
+                : '${item['type']} · '
+                      '${RouteTitle.shortName('${item['originLabel']}')} → '
+                      '${RouteTitle.shortName('${item['destinationLabel']}')} · '
+                      '${_date(item['departureTime'])}',
+          ),
+          if (item['reporterName'] != null)
+            Text(
+              'Reported by ${item['reporterName']}',
+              style: const TextStyle(color: carShareMuted, fontSize: 12.5),
+            ),
           Text(item['description'] as String? ?? ''),
           if (item['status'] == 'OPEN')
             Align(

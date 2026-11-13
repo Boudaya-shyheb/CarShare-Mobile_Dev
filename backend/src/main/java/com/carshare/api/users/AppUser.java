@@ -57,6 +57,21 @@ public class AppUser {
     public byte[] getProfilePhoto() { return profilePhoto; }
     public String getProfilePhotoMimeType() { return profilePhotoMimeType; }
     public Instant getAnonymizedAt() { return anonymizedAt; }
+
+    /**
+     * The status to show: a warning or suspension whose end date has passed reads as ACTIVE
+     * straight away, without waiting for the nightly job that cleans the column up. A ban is a ban.
+     */
+    public UserStatus effectiveStatus(Instant now) {
+        boolean ended = (accountStatus == UserStatus.SUSPENDED || accountStatus == UserStatus.WARNING)
+                && statusUntil != null && !statusUntil.isAfter(now);
+        return ended ? UserStatus.ACTIVE : accountStatus;
+    }
+
+    /** The end date that goes with {@link #effectiveStatus}: none once the status has ended. */
+    public Instant effectiveStatusUntil(Instant now) {
+        return effectiveStatus(now) == accountStatus ? statusUntil : null;
+    }
     public LocalDate getDriverLicenseExpiry() { return driverLicenseExpiry; }
     public String getDriverLicenseStatus() { return driverLicenseStatus; }
     public String getDriverLicenseReviewReason() { return driverLicenseReviewReason; }

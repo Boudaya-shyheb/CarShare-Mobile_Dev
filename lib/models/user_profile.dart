@@ -25,6 +25,17 @@ class UserProfile {
   final bool hasProfilePhoto;
   final DateTime? driverLicenseExpiry;
   final String driverLicenseStatus;
+
+  /// The status to show: a suspension or warning whose end date has passed reads as ACTIVE at
+  /// once, even from a profile cached before it ended. The server applies the same rule.
+  String get effectiveStatus => _statusEnded ? 'ACTIVE' : status;
+
+  DateTime? get effectiveStatusUntil => _statusEnded ? null : statusUntil;
+
+  bool get _statusEnded =>
+      (status == 'SUSPENDED' || status == 'WARNING') &&
+      statusUntil != null &&
+      !statusUntil!.isAfter(DateTime.now());
   final String? driverLicenseReviewReason;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(

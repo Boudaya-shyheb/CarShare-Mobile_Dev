@@ -290,7 +290,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       children: [
                         const ProfileStatsCard(),
-                        _statusCard(user.status, user.statusUntil),
+                        _statusCard(user.effectiveStatus, user.effectiveStatusUntil),
                         const SizedBox(height: 12),
                         // Driver-license verification (drivers only), above the menu card.
                         if (user.role.toLowerCase() == 'driver') ...[

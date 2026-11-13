@@ -312,6 +312,10 @@ class TicketEvidenceAnalysisItem {
   final String? duplicateEvidenceId;
   final String? extractedText;
   final String? errorMessage;
+
+  bool get isComplete => status == 'COMPLETE';
+  bool get isPartial => status == 'PARTIAL';
+
   factory TicketEvidenceAnalysisItem.fromJson(Map<String, dynamic> json) =>
       TicketEvidenceAnalysisItem(
         evidenceId: json['evidenceId'] as String? ?? '',

@@ -66,8 +66,29 @@ foreach ($name in @(
     }
 }
 
+# Support analyses uploaded evidence with Apache Tika, which runs in Docker. Start it when Docker is
+# available (a no-op if it is already up); otherwise carry on: the analysis is then saved as partial.
+function Start-SupportTika {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        if (Get-Command docker -ErrorAction SilentlyContinue) {
+            & docker info *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host 'Starting Apache Tika for Support (docker compose)...'
+                & docker compose -f (Join-Path $PSScriptRoot 'support-tika-compose.yml') up -d *> $null
+                if ($LASTEXITCODE -eq 0) { return }
+            }
+        }
+    }
+    catch { }
+    finally { $ErrorActionPreference = $previousPreference }
+    Write-Host 'Docker is not available, so Apache Tika was not started: Support evidence analysis will be partial (file hash and type only).' -ForegroundColor Yellow
+}
+
 Push-Location -LiteralPath $PSScriptRoot
 try {
+    Start-SupportTika
     if ($env:OS -eq 'Windows_NT' -and $env:JAVA_TOOL_OPTIONS -notmatch 'javax\.net\.ssl\.trustStoreType') {
         $env:JAVA_TOOL_OPTIONS = (@($env:JAVA_TOOL_OPTIONS, '-Djavax.net.ssl.trustStoreType=Windows-ROOT') -join ' ').Trim()
     }

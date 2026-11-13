@@ -56,6 +56,34 @@ class _AdminSupportTicketDetailsPageState
     }
   }
 
+  /// Runs the analysis, then shows what it really found: complete, or partial with the reason
+  /// (Tika unreachable, for example), plus the hash and an excerpt of the extracted text.
+  Future<void> _analyze(TicketEvidenceItem evidence) async {
+    setState(() => _working = true);
+    try {
+      final result = await SupportService.instance.analyzeEvidence(
+        widget.ticketId,
+        evidence.id,
+      );
+      if (!mounted) return;
+      _refresh();
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) =>
+            _AnalysisSheet(fileName: evidence.fileName, result: result),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _changeStatus(String status, String title) async {
     final reason = await showDialog<String>(
       context: context,
@@ -232,15 +260,7 @@ class _AdminSupportTicketDetailsPageState
                     isThreeLine: true,
                     trailing: IconButton(
                       tooltip: 'Analyze evidence',
-                      onPressed: _working
-                          ? null
-                          : () => _run(
-                              () => SupportService.instance.analyzeEvidence(
-                                ticket.id,
-                                item.id,
-                              ),
-                              'Evidence analysis completed.',
-                            ),
+                      onPressed: _working ? null : () => _analyze(item),
                       icon: const Icon(Icons.analytics_outlined),
                     ),
                   ),
@@ -503,7 +523,8 @@ class _AdminSupportTicketDetailsPageState
             ),
             ...advanced.evidenceAnalyses.map(
               (item) => Text(
-                '${item.status}: ${item.detectedType ?? 'unknown type'} - '
+                '${item.isComplete ? 'Complete' : item.isPartial ? 'Partial' : item.status}: '
+                '${item.detectedType ?? 'unknown type'} - '
                 'SHA-256 ${item.sha256.length > 12 ? item.sha256.substring(0, 12) : item.sha256}...'
                 '${item.duplicateEvidenceId == null ? '' : ' - duplicate detected'}'
                 '${item.errorMessage == null ? '' : '\n${item.errorMessage}'}',
@@ -1076,5 +1097,128 @@ class _Panel extends StatelessWidget {
       border: Border.all(color: carShareBorder),
     ),
     child: child,
+  );
+}
+
+/// What an evidence analysis found: its status, the reason when it is only partial, the file's
+/// hash, whether the same file was uploaded elsewhere, and the start of the extracted text.
+class _AnalysisSheet extends StatelessWidget {
+  const _AnalysisSheet({required this.fileName, required this.result});
+
+  final String fileName;
+  final TicketEvidenceAnalysisItem result;
+
+  static const _excerptLength = 500;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = (result.extractedText ?? '').trim();
+    final excerpt = text.length > _excerptLength
+        ? '${text.substring(0, _excerptLength)}…'
+        : text;
+    final colour = result.isComplete ? carShareGreen : carShareWarning;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Evidence analysis',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colour.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    result.isComplete
+                        ? 'Complete'
+                        : result.isPartial
+                        ? 'Partial'
+                        : result.status,
+                    style: TextStyle(color: colour, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(fileName, style: const TextStyle(color: carShareMuted)),
+            if (result.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: carShareWarning.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(result.errorMessage!),
+              ),
+            ],
+            const SizedBox(height: 14),
+            _AnalysisRow('Detected type', result.detectedType ?? 'Unknown'),
+            _AnalysisRow(
+              'Duplicate',
+              result.duplicateEvidenceId == null
+                  ? 'No other upload has the same file'
+                  : 'The same file was uploaded elsewhere on the platform',
+            ),
+            _AnalysisRow('SHA-256', result.sha256, mono: true),
+            _AnalysisRow(
+              'Extracted text',
+              excerpt.isEmpty
+                  ? (result.isPartial
+                        ? 'None: the text could not be read this time.'
+                        : 'No text was found in this file.')
+                  : excerpt,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalysisRow extends StatelessWidget {
+  const _AnalysisRow(this.label, this.value, {this.mono = false});
+
+  final String label;
+  final String value;
+  final bool mono;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: carShareMuted,
+          ),
+        ),
+        const SizedBox(height: 2),
+        SelectableText(
+          value,
+          style: TextStyle(
+            fontSize: mono ? 12 : 14,
+            fontFamily: mono ? 'monospace' : null,
+          ),
+        ),
+      ],
+    ),
   );
 }

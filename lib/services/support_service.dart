@@ -152,12 +152,17 @@ class SupportService {
     );
   }
 
-  Future<void> analyzeEvidence(String ticketId, String evidenceId) async {
+  /// Runs the analysis and returns what it found, so the screen can show the real result
+  /// (complete, or partial with the reason) instead of a generic "done".
+  Future<TicketEvidenceAnalysisItem> analyzeEvidence(
+    String ticketId,
+    String evidenceId,
+  ) async => TicketEvidenceAnalysisItem.fromJson(
     await _api.post(
       '/admin/support/tickets/$ticketId/evidence/$evidenceId/analyze',
       const {},
-    );
-  }
+    ),
+  );
 
   Future<void> refreshWeather(String ticketId) async {
     await _api.post(

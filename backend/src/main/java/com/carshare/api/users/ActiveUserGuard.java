@@ -46,6 +46,17 @@ public final class ActiveUserGuard {
         return user;
     }
 
+    /**
+     * Loads the user and refuses only a banned one. For the one write a suspended user must keep:
+     * contesting a Support decision, which is how they dispute what was decided about them.
+     */
+    public static AppUser requireNotBanned(UserRepository users, UUID userId) {
+        AppUser user = users.findById(userId).orElseThrow(() -> new ApiException(
+                HttpStatus.UNAUTHORIZED, "account_not_found", "Your account could not be found."));
+        checkCanSignIn(user);
+        return user;
+    }
+
     /** Refuses a banned user, and a suspended one whose suspension has not ended. */
     public static void check(AppUser user, Instant now) {
         if (user.getAccountStatus() == UserStatus.BANNED) {

@@ -2,6 +2,7 @@ package com.carshare.api.users;
 
 import com.carshare.api.auth.AuthDtos;
 import com.carshare.api.common.ApiException;
+import com.carshare.api.reservation.ReservationQueries;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -14,8 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminUserService {
     private final UserRepository users;
     private final UserAccountService accounts;
+    private final ReservationQueries reservationQueries;
 
-    public AdminUserService(UserRepository users, UserAccountService accounts) {
+    public AdminUserService(UserRepository users, UserAccountService accounts,
+            ReservationQueries reservationQueries) {
+        this.reservationQueries = reservationQueries;
         this.users = users;
         this.accounts = accounts;
     }
@@ -58,6 +62,15 @@ public class AdminUserService {
                 throw new ApiException(HttpStatus.CONFLICT, "last_admin",
                         "The last administrator cannot be removed.");
             }
+        }
+
+        // The same rule as a driver switching their own account: nobody is left on a trip with a
+        // driver who is no longer one.
+        if (user.getRole() == UserRole.DRIVER && newRole == UserRole.PASSENGER
+                && reservationQueries.driverHasUnfinishedTrips(userId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "role_change_active_trips",
+                    "This driver has a trip that has not finished, so the account cannot become a "
+                            + "passenger yet. The trip has to be finished or cancelled first.");
         }
 
         String phoneToSave = phone.equals(normalizePhone(user.getPhone()))

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../widgets/resume_refresh.dart';
 import '../theme.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_chip.dart';
@@ -24,7 +25,10 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
       ApiClient.instance.getList('/admin/users');
 
   void _refresh() {
-    setState(() => _users = _loadUsers());
+    // A block body: an arrow that assigns the Future hands it back to setState, which throws.
+    setState(() {
+      _users = _loadUsers();
+    });
   }
 
   @override
@@ -325,7 +329,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _working = false);
@@ -333,7 +337,12 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => ResumeRefresh(
+    onResume: _refresh,
+    child: _buildScaffold(context),
+  );
+
+  Widget _buildScaffold(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
     appBar: AppBar(
       title: const Text('Admin · User accounts'),

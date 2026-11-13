@@ -813,14 +813,21 @@ class _GreetingCard extends StatelessWidget {
             color: carShareBackground,
             shape: BoxShape.circle,
           ),
-          child: IconButton(
-            icon: Badge(
-              isLabelVisible: unread > 0,
-              label: Text(unread > 99 ? '99+' : '$unread'),
-              child: const Icon(Icons.notifications_none, color: carShareText),
+          // The Badge would make a screen reader say only the number, so the whole button is
+          // described once: "Notifications, 2 unread".
+          child: Semantics(
+            button: true,
+            label: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
+            onTap: onBell,
+            excludeSemantics: true,
+            child: IconButton(
+              icon: Badge(
+                isLabelVisible: unread > 0,
+                label: Text(unread > 99 ? '99+' : '$unread'),
+                child: const Icon(Icons.notifications_none, color: carShareText),
+              ),
+              onPressed: onBell,
             ),
-            tooltip: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
-            onPressed: onBell,
           ),
         ),
       ],

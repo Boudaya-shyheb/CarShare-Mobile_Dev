@@ -1,3 +1,4 @@
+import '../widgets/resume_refresh.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/admin_stats_bar.dart';
@@ -14,12 +15,20 @@ class AdminDashboardPage extends StatefulWidget {
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
   int _selected = 0;
 
+  /// Bumped when the app returns to the foreground, so the counters reload with the lists.
+  int _resumes = 0;
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => ResumeRefresh(
+    onResume: () => setState(() => _resumes++),
+    child: _buildScaffold(),
+  );
+
+  Widget _buildScaffold() => Scaffold(
     body: Column(
       children: [
         // The counters sit above whichever tab is showing and reload when the tab changes.
-        SafeArea(bottom: false, child: AdminStatsBar(reloadKey: _selected)),
+        SafeArea(bottom: false, child: AdminStatsBar(reloadKey: _selected + _resumes * 10)),
         Expanded(
           // The strip already clears the status bar, so the tabs' own app bars must not pad again.
           child: MediaQuery.removePadding(
