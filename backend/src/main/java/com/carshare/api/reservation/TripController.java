@@ -1,10 +1,15 @@
 package com.carshare.api.reservation;
 
 import com.carshare.api.security.SessionPrincipal;
+import com.carshare.api.vehicles.VehicleDtos;
+import com.carshare.api.vehicles.VehicleService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -54,6 +59,21 @@ public class TripController {
     @GetMapping("/{tripId}")
     public TripDtos.TripDetail trip(@PathVariable UUID tripId) {
         return tripService.get(tripId);
+    }
+
+    /** The car on this trip: model, colour, seats, and the plate for the driver and seat holders. */
+    @GetMapping("/{tripId}/vehicle")
+    public VehicleDtos.TripVehicle vehicle(@AuthenticationPrincipal SessionPrincipal principal,
+            @PathVariable UUID tripId) {
+        return tripService.vehicleOf(principal.userId(), tripId);
+    }
+
+    @GetMapping("/{tripId}/vehicle/photo")
+    public ResponseEntity<byte[]> vehiclePhoto(@PathVariable UUID tripId) {
+        VehicleService.PhotoContent photo = tripService.vehiclePhotoOf(tripId);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(photo.mimeType()))
+                .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff")
+                .body(photo.bytes());
     }
 
     @PutMapping("/{tripId}")

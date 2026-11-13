@@ -5,6 +5,7 @@ import '../../models/trip_search_result.dart';
 import '../../services/auth_service.dart';
 import '../../services/reservation_service.dart';
 import '../../theme.dart';
+import '../../widgets/result_filters.dart';
 import '../../widgets/route_title.dart';
 import '../../widgets/trip_formats.dart';
 import '../../widgets/trip_result_card.dart';
@@ -45,6 +46,20 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
 
   String _sort = 'best';
   late Future<List<TripSearchResult>> _results = _search();
+
+  /// Client-side narrowing of the results on screen, and the last unfiltered list (which sets
+  /// the top of the price slider).
+  ResultFilters _filters = ResultFilters.none;
+  List<TripSearchResult> _lastResults = const [];
+
+  Future<void> _openFilters() async {
+    final picked = await showResultFiltersSheet(
+      context,
+      current: _filters,
+      results: _lastResults,
+    );
+    if (picked != null && mounted) setState(() => _filters = picked);
+  }
 
   Future<List<TripSearchResult>> _search() =>
       ReservationService.instance.searchTrips(
@@ -131,11 +146,15 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.tune, color: carShareText),
-          tooltip: 'Filters',
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Filters arrive in a later step.')),
+          icon: Badge(
+            isLabelVisible: _filters.isActive,
+            label: Text('${_filters.activeCount}'),
+            child: const Icon(Icons.tune, color: carShareText),
           ),
+          tooltip: _filters.isActive
+              ? 'Filters, ${_filters.activeCount} active'
+              : 'Filters',
+          onPressed: _openFilters,
         ),
       ],
     ),
@@ -174,7 +193,22 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
           action: FilledButton(onPressed: _retry, child: const Text('Retry')),
         );
       }
-      final results = snapshot.data ?? const <TripSearchResult>[];
+      final all = snapshot.data ?? const <TripSearchResult>[];
+      _lastResults = all;
+      final results = _filters.apply(all);
+      if (all.isNotEmpty && results.isEmpty) {
+        return _Message(
+          icon: Icons.filter_alt_off_outlined,
+          title: 'No trip matches your filters',
+          line:
+              '${all.length} ${all.length == 1 ? 'trip was' : 'trips were'} found '
+              'before filtering.',
+          action: FilledButton(
+            onPressed: () => setState(() => _filters = ResultFilters.none),
+            child: const Text('Reset filters'),
+          ),
+        );
+      }
       if (results.isEmpty) {
         return const _Message(
           icon: Icons.search_off,
@@ -191,7 +225,8 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Text(
-              '${results.length} '
+              '${results.length}'
+              '${_filters.isActive ? ' of ${all.length}' : ''} '
               '${results.length == 1 ? 'driver' : 'drivers'} found · '
               'sorted by ${_sortedBy[_sort]}',
               style: const TextStyle(fontSize: 14, color: carShareMuted),

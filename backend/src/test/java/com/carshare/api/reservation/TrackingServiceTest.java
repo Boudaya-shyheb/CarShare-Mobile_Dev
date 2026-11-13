@@ -64,7 +64,8 @@ class TrackingServiceTest {
         // A real TripService, so a geofence actually moves the trip through the state machine
         // and writes its event, rather than only recording that a mock was called.
         TripService tripService = new TripService(trips, tripEvents, users,
-                reservationService, reputationService);
+                reservationService, reputationService,
+                org.mockito.Mockito.mock(com.carshare.api.vehicles.VehicleService.class), java.time.Clock.systemUTC());
         lenient().when(reputationService.forUser(any()))
                 .thenReturn(ReputationService.Reputation.NONE);
         lenient().when(reputationService.forUsers(any())).thenReturn(java.util.Map.of());

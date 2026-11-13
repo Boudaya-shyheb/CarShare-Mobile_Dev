@@ -301,6 +301,23 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
                             'Status',
                             _titleCase(_vehicle.status),
                             Icons.info_outline,
+                          ),
+                          _detail(
+                            'Review',
+                            switch (_vehicle.reviewStatus) {
+                              'APPROVED' => 'Approved',
+                              'REJECTED' =>
+                                'Rejected${(_vehicle.reviewReason ?? '').isEmpty ? '' : ': ${_vehicle.reviewReason}'}',
+                              _ => 'Waiting for approval',
+                            },
+                            Icons.verified_outlined,
+                          ),
+                          _detail(
+                            'Used in',
+                            _vehicle.tripsCompleted == 1
+                                ? '1 trip'
+                                : '${_vehicle.tripsCompleted} trips',
+                            Icons.route_outlined,
                             last: true,
                           ),
                         ],

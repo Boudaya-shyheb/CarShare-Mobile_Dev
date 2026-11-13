@@ -10,10 +10,12 @@ import '../../models/user_profile.dart';
 import '../../services/geo_service.dart';
 import '../../services/location_service.dart';
 import '../../services/reservation_local_store.dart';
+import '../../services/support_service.dart';
 import '../../theme.dart';
 import '../../widgets/favorite_place_widgets.dart';
 import '../../widgets/route_title.dart';
 import 'my_places_page.dart';
+import '../support/support_notifications_page.dart';
 import 'place_search_page.dart';
 import 'search_results_page.dart';
 
@@ -59,11 +61,33 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
   List<RecentSearch> _recent = const [];
   List<FavoritePlace> _favorites = const [];
 
+  /// Unread Support notifications, the number on the bell.
+  int _unread = 0;
+
   @override
   void initState() {
     super.initState();
     _locate();
     _loadSaved();
+    _loadUnread();
+  }
+
+  /// A failed count only means no badge; the bell still opens the list.
+  Future<void> _loadUnread() async {
+    try {
+      final count = await SupportService.instance.unreadNotificationCount();
+      if (mounted) setState(() => _unread = count);
+    } catch (_) {
+      // leave the badge as it was
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const SupportNotificationsPage()),
+    );
+    // Whatever was read over there is no longer counted here.
+    if (mounted) await _loadUnread();
   }
 
   @override
@@ -455,6 +479,8 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
               initials: _initials,
               greeting: _greeting,
               name: widget.user.fullName,
+              unread: _unread,
+              onBell: _openNotifications,
             ),
           ),
         ),
@@ -720,11 +746,15 @@ class _GreetingCard extends StatelessWidget {
     required this.initials,
     required this.greeting,
     required this.name,
+    required this.unread,
+    required this.onBell,
   });
 
   final String initials;
   final String greeting;
   final String name;
+  final int unread;
+  final VoidCallback onBell;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -784,13 +814,13 @@ class _GreetingCard extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           child: IconButton(
-            icon: const Icon(Icons.notifications_none, color: carShareText),
-            tooltip: 'Notifications',
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Notifications arrive in a later step.'),
-              ),
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text(unread > 99 ? '99+' : '$unread'),
+              child: const Icon(Icons.notifications_none, color: carShareText),
             ),
+            tooltip: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
+            onPressed: onBell,
           ),
         ),
       ],

@@ -41,8 +41,17 @@ public final class VehicleDtos {
             Instant createdAt,
             LocalDate insuranceExpiryDate,
             LocalDate inspectionExpiryDate,
-            List<PhotoReference> photos) {
+            List<PhotoReference> photos,
+            Vehicle.ReviewStatus reviewStatus,
+            String reviewReason,
+            long tripsCompleted) {
+        /** Without a trip count to hand (a vehicle that was just created has none). */
         public static VehicleResponse from(Vehicle vehicle) {
+            return from(vehicle, 0L);
+        }
+
+        /** {@code tripsCompleted} is how many trips this vehicle has finished: "Used in N trips". */
+        public static VehicleResponse from(Vehicle vehicle, long tripsCompleted) {
             return new VehicleResponse(
                     vehicle.getId(),
                     vehicle.getBrand(),
@@ -58,9 +67,19 @@ public final class VehicleDtos {
                     vehicle.getCreatedAt(),
                     vehicle.getInsuranceExpiryDate(),
                     vehicle.getInspectionExpiryDate(),
-                    vehicle.getPhotos().stream().map(PhotoReference::from).toList());
+                    vehicle.getPhotos().stream().map(PhotoReference::from).toList(),
+                    vehicle.getReviewStatus(),
+                    vehicle.getReviewReason(),
+                    tripsCompleted);
         }
     }
+
+    /**
+     * What a passenger may see of the car on a trip. The plate is only filled for the driver and
+     * for people holding a seat on the trip; everybody else gets {@code null}.
+     */
+    public record TripVehicle(UUID id, String brand, String model, int year, String color,
+            String registrationNumber, int seatsNumber, boolean airConditioning, boolean hasPhoto) { }
 
     public record PhotoReference(UUID id, String url, String mimeType, boolean primary) {
         public static PhotoReference from(VehiclePhoto photo) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../models/reservation.dart';
 import '../../models/trip.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
@@ -11,6 +12,7 @@ import '../../theme.dart';
 import '../../widgets/star_rating.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/trip_formats.dart';
+import '../../widgets/trip_vehicle_card.dart';
 import '../main_shell.dart';
 
 /// Mockup 06 — one trip, its route on the map, and the booking form.
@@ -70,9 +72,34 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
         points = const [];
       }
     }
+
+    // Does this passenger already hold a seat? Then the screen shows that instead of "Book".
+    // The driver is never a passenger on their own trip. A failed lookup only costs the
+    // reservation panel: the server still refuses a double booking.
+    final userId = AuthService.instance.currentUser.value?.id;
+    final isOwn = userId != null && trip.driverId == userId;
+    Reservation? mine;
+    if (userId != null && !isOwn) {
+      try {
+        for (final reservation in await ReservationService.instance.myReservations()) {
+          final holdsOrHeld =
+              reservation.isActive ||
+              reservation.status == 'COMPLETED' ||
+              reservation.status == 'NO_SHOW';
+          if (reservation.trip.tripId == trip.id && holdsOrHeld) {
+            mine = reservation;
+            break;
+          }
+        }
+      } on ApiException {
+        mine = null;
+      }
+    }
     return _TripWithRoute(
       trip,
       points.map((p) => LatLng(p[0], p[1])).toList(growable: false),
+      reservation: mine,
+      isOwn: isOwn,
     );
   }
 
@@ -171,7 +198,6 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
   );
 
   Widget _buildTrip(_TripWithRoute loaded) {
-    final trip = loaded.trip;
     final mapHeight = MediaQuery.of(context).size.height * 0.40;
     // SizedBox.expand matters: a Stack takes its size from its non-positioned children, and
     // the tallest of those is the map. Without it the stack is only as tall as the map, so
@@ -184,7 +210,7 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
             width: double.infinity,
             child: _buildMap(loaded),
           ),
-          Positioned.fill(top: mapHeight - 28, child: _buildSheet(trip)),
+          Positioned.fill(top: mapHeight - 28, child: _buildSheet(loaded)),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(8),
@@ -267,9 +293,19 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
     );
   }
 
-  Widget _buildSheet(Trip trip) {
+  Widget _buildSheet(_TripWithRoute loaded) {
+    final trip = loaded.trip;
+    final reservation = loaded.reservation;
     final maxSeats = trip.seatsAvailable.clamp(1, 8);
-    final bookable = trip.status == 'SCHEDULED' && trip.seatsAvailable > 0;
+    final departed = !trip.departureTime.isAfter(DateTime.now());
+    // Book only when it can work: not the driver's own trip, no seat held already, still
+    // scheduled, not yet departed, and a seat left. Otherwise the reason is shown instead.
+    final bookable =
+        trip.status == 'SCHEDULED' &&
+        trip.seatsAvailable > 0 &&
+        !departed &&
+        !loaded.isOwn &&
+        reservation == null;
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -316,6 +352,17 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                     child: _buildStepper(maxSeats),
                   ),
+                if (!bookable)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: _buildWhyNotBookable(
+                      trip: trip,
+                      reservation: reservation,
+                      isOwn: loaded.isOwn,
+                      departed: departed,
+                    ),
+                  ),
+                if (bookable)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                   child: SizedBox(
@@ -400,32 +447,111 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
     );
   }
 
-  Widget _buildVehicleRow(Trip trip) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      color: carShareBackground,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.directions_car_outlined, color: carShareGreen),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            trip.vehicleId == null
-                ? 'Vehicle details coming soon'
-                : 'Vehicle ${trip.vehicleId}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: carShareText,
+  Widget _buildVehicleRow(Trip trip) => TripVehicleCard(
+    tripId: trip.id,
+    trailing: trip.instantBooking
+        ? const StatusChip(label: 'Instant', colour: carShareGreen)
+        : null,
+  );
+
+  /// What replaces the Book button when booking is not possible: the passenger's own
+  /// reservation (with the pickup code once confirmed), or the plain reason.
+  Widget _buildWhyNotBookable({
+    required Trip trip,
+    required Reservation? reservation,
+    required bool isOwn,
+    required bool departed,
+  }) {
+    if (reservation != null) {
+      final label = reservationStatusLabel(reservation.status);
+      final colour = reservationStatusColour(reservation.status);
+      final code = reservation.pickupCode;
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colour.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colour.withValues(alpha: .35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Your reservation · ${formatSeats(reservation.seats)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: carShareText,
+                    ),
+                  ),
+                ),
+                StatusChip(label: label, colour: colour),
+              ],
+            ),
+            if (reservation.status == 'PENDING') ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Waiting for the driver to answer your request.',
+                style: TextStyle(color: carShareMuted),
+              ),
+            ],
+            if (reservation.isConfirmed && code != null) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Show this code to the driver at pickup',
+                style: TextStyle(color: carShareMuted),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                code,
+                style: const TextStyle(
+                  fontSize: 28,
+                  letterSpacing: 6,
+                  fontWeight: FontWeight.w800,
+                  color: carShareGreen,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    final (IconData icon, String text) = isOwn
+        ? (Icons.drive_eta_outlined, 'This is your own trip. Manage it from My trips.')
+        : trip.status == 'CANCELLED'
+        ? (Icons.cancel_outlined, 'This trip was cancelled.')
+        : departed
+        ? (Icons.schedule, 'This trip has already left.')
+        : trip.seatsAvailable <= 0
+        ? (Icons.event_seat_outlined, 'No seats left on this trip.')
+        : (Icons.info_outline, 'This trip is not taking reservations.');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: carShareBackground,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: carShareMuted),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: carShareText,
+              ),
             ),
           ),
-        ),
-        if (trip.instantBooking)
-          const StatusChip(label: 'Instant', colour: carShareGreen),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   Widget _buildTimeline(Trip trip) {
     final arrival = trip.durationS == null
@@ -504,9 +630,20 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
 
 /// A trip and the route to draw for it, resolved together so the screen builds once.
 class _TripWithRoute {
-  const _TripWithRoute(this.trip, this.route);
+  const _TripWithRoute(
+    this.trip,
+    this.route, {
+    this.reservation,
+    this.isOwn = false,
+  });
   final Trip trip;
   final List<LatLng> route;
+
+  /// The signed-in passenger's own reservation on this trip, when they hold or held a seat.
+  final Reservation? reservation;
+
+  /// True when the signed-in user is this trip's driver.
+  final bool isOwn;
 }
 
 class _EndDot extends StatelessWidget {

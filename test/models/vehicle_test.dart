@@ -36,6 +36,58 @@ void main() {
     expect(vehicle.photos.single.url, '/vehicles/vehicle-1/photos/photo-1');
   });
 
+  test('reads the review state and the completed-trip count', () {
+    Map<String, dynamic> json(String review, String status) => {
+      'id': 'v',
+      'brand': 'Peugeot',
+      'model': '208',
+      'year': 2022,
+      'color': 'Black',
+      'registrationNumber': '123 TU 4567',
+      'seatsNumber': 4,
+      'trunkSize': 'MEDIUM',
+      'airConditioning': true,
+      'status': status,
+      'defaultVehicle': false,
+      'reviewStatus': review,
+      'reviewReason': review == 'REJECTED' ? 'plate unreadable' : null,
+      'tripsCompleted': 7,
+      'photos': <dynamic>[],
+    };
+
+    final approved = Vehicle.fromJson(json('APPROVED', 'ACTIVE'));
+    final pending = Vehicle.fromJson(json('PENDING', 'ACTIVE'));
+    final rejected = Vehicle.fromJson(json('REJECTED', 'ACTIVE'));
+    final reported = Vehicle.fromJson(json('APPROVED', 'REPORTED'));
+
+    expect(approved.tripsCompleted, 7);
+    expect(approved.canDriveTrips, isTrue);
+    expect(pending.canDriveTrips, isFalse);
+    expect(rejected.canDriveTrips, isFalse);
+    expect(rejected.reviewReason, 'plate unreadable');
+    expect(reported.canDriveTrips, isFalse, reason: 'approved but reported');
+  });
+
+  test('an older response without the new fields reads as pending, zero trips', () {
+    final vehicle = Vehicle.fromJson({
+      'id': 'v',
+      'brand': 'Toyota',
+      'model': 'Yaris',
+      'year': 2020,
+      'color': 'White',
+      'registrationNumber': '123 TU 4567',
+      'seatsNumber': 4,
+      'trunkSize': 'SMALL',
+      'airConditioning': false,
+      'status': 'ACTIVE',
+      'defaultVehicle': false,
+    });
+
+    expect(vehicle.reviewStatus, 'PENDING');
+    expect(vehicle.tripsCompleted, 0);
+    expect(vehicle.canDriveTrips, isFalse);
+  });
+
   test('serializes only fields accepted by vehicle create and update', () {
     final vehicle = Vehicle(
       id: '',

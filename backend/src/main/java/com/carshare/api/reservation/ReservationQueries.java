@@ -113,4 +113,18 @@ public class ReservationQueries {
     public boolean vehicleHasUpcomingTrips(UUID vehicleId) {
         return trips.existsByVehicleIdAndStatusIn(vehicleId, TripStatus.UNFINISHED);
     }
+
+    /**
+     * How many trips each vehicle has completed, for the vehicle card's "Used in N trips".
+     * A vehicle that never finished a trip is simply not in the map.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, Long> completedTripsByVehicle(java.util.Collection<UUID> vehicleIds) {
+        if (vehicleIds.isEmpty()) return java.util.Map.of();
+        java.util.Map<UUID, Long> counts = new java.util.HashMap<>();
+        for (Object[] row : trips.countCompletedByVehicle(vehicleIds)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        return counts;
+    }
 }

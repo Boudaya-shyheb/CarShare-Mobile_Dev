@@ -9,6 +9,7 @@ import '../../widgets/form_field.dart';
 import '../../widgets/route_title.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/trip_formats.dart';
+import '../../widgets/trip_vehicle_card.dart';
 
 /// One of the driver's own trips: who booked it, and the decisions only the driver can take.
 ///
@@ -179,6 +180,8 @@ class _DriverTripPageState extends State<DriverTripPage> {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        TripVehicleCard(tripId: widget.tripId),
         const SizedBox(height: 18),
         if (trip.status == 'SCHEDULED') ...[
           SizedBox(

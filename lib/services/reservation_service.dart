@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import '../models/live_view.dart';
 import '../models/rating.dart';
 import '../models/reservation.dart';
 import '../models/trip.dart';
 import '../models/trip_event.dart';
 import '../models/trip_search_result.dart';
+import '../models/trip_vehicle.dart';
 import '../models/user_trip_stats.dart';
 import 'api_client.dart';
 
@@ -25,6 +28,14 @@ class ReservationService {
       UserTripStats.fromJson(await _api.get('/users/me/stats'));
 
   // --- trips --------------------------------------------------------------------------------
+
+  /// The car on a trip. The plate is only present for the driver and for confirmed passengers.
+  Future<TripVehicle> tripVehicle(String tripId) async =>
+      TripVehicle.fromJson(await _api.get('/trips/$tripId/vehicle'));
+
+  /// The primary photo of the car on a trip (needs the bearer token, so it is fetched as bytes).
+  Future<Uint8List> tripVehiclePhoto(String tripId) =>
+      _api.getBytes('/trips/$tripId/vehicle/photo');
 
   /// Publishes a trip. Driver accounts only.
   Future<Trip> publishTrip(Trip draft) async =>

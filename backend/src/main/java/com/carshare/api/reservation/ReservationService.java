@@ -102,8 +102,8 @@ public class ReservationService {
                 ? "all" : scope.trim().toLowerCase(Locale.ROOT);
         List<Reservation> found = switch (wanted) {
             case "all" -> reservations.findByPassenger_IdOrderByCreatedAtDesc(passengerId);
-            case "upcoming" -> reservations
-                    .findByPassenger_IdAndStatusInOrderByCreatedAtDesc(passengerId, ACTIVE);
+            case "upcoming" -> withoutExpiredTrips(reservations
+                    .findByPassenger_IdAndStatusInOrderByCreatedAtDesc(passengerId, ACTIVE));
             case "past" -> reservations
                     .findByPassenger_IdAndStatusInOrderByCreatedAtDesc(passengerId, FINISHED);
             case "cancelled" -> reservations
@@ -112,6 +112,15 @@ public class ReservationService {
                     "Choose upcoming, past, or cancelled.");
         };
         return found.stream().map(ReservationDtos.ReservationDetail::forPassenger).toList();
+    }
+
+    /** A seat on a trip that is past its start window is not "upcoming", expiry job or not. */
+    private List<Reservation> withoutExpiredTrips(List<Reservation> found) {
+        Instant cutoff = clock.instant().minus(TripService.START_GRACE);
+        return found.stream()
+                .filter(reservation -> !(reservation.getTrip().getStatus() == TripStatus.SCHEDULED
+                        && reservation.getTrip().getDepartureTime().isBefore(cutoff)))
+                .toList();
     }
 
     @Transactional

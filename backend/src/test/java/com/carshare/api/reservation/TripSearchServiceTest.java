@@ -57,7 +57,7 @@ class TripSearchServiceTest {
     @BeforeEach
     void setUp() {
         service = new TripService(trips, tripEvents, users, reservationService,
-                reputationService);
+                reputationService, org.mockito.Mockito.mock(com.carshare.api.vehicles.VehicleService.class), java.time.Clock.systemUTC());
         otherDriver = new AppUser("Ahmed Driver", "+21611111111", "ahmed@carshare.tn", "hash", UserRole.DRIVER);
         searcherId = UUID.randomUUID();
         wantedDeparture = Instant.now().plus(5, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MINUTES);

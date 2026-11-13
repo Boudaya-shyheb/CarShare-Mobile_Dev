@@ -488,6 +488,25 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     spacing: 6,
     runSpacing: 6,
     children: [
+      // Only an approved vehicle can drive a trip, so the review state is always visible.
+      StatusChip(
+        label: switch (vehicle.reviewStatus) {
+          'APPROVED' => 'Approved',
+          'REJECTED' => 'Rejected',
+          _ => 'Waiting for approval',
+        },
+        colour: switch (vehicle.reviewStatus) {
+          'APPROVED' => carShareGreen,
+          'REJECTED' => carShareDanger,
+          _ => carShareWarning,
+        },
+      ),
+      _infoChip(
+        Icons.route_outlined,
+        vehicle.tripsCompleted == 1
+            ? 'Used in 1 trip'
+            : 'Used in ${vehicle.tripsCompleted} trips',
+      ),
       _infoChip(Icons.groups_outlined, '${vehicle.seatsNumber} seats'),
       _infoChip(
         Icons.luggage_outlined,

@@ -18,8 +18,8 @@ Package: `com.carshare.api.reservation`. Tables: `trips`, `reservations`, `trip_
 
 Columns beyond the obvious ones:
 
-- `vehicle_id UUID NULL` — the Vehicles module adds the foreign key later; until then it is a
-  plain nullable UUID with a SQL comment saying so.
+- `vehicle_id UUID NULL` — foreign key to `vehicles(id)`, `ON DELETE SET NULL` (migration V24).
+  Nullable only for trips published before V24; new trips must carry a vehicle.
 - `instant_booking BOOLEAN NOT NULL DEFAULT FALSE`
 - `cancel_reason` — set when the trip moves to `CANCELLED`.
 - `distance_m`, `duration_s` — nullable, filled from OSRM when a route is known.
@@ -47,12 +47,23 @@ status. An illegal transition is a `409` `invalid_trip_transition`.
 ### Publishing and editing
 
 - Only a user with role `DRIVER` whose account status is not `SUSPENDED` or `BANNED` can publish.
+- The driver licence must be `APPROVED` by an admin and must not expire before the departure
+  day (`license_not_verified`, `license_expired`).
+- The trip needs a vehicle (`vehicle_required`): the driver's own, `ACTIVE`, `APPROVED` by
+  support (`vehicle_not_approved`), with at least as many seats as the trip offers.
 - Departure time must be in the future; 1–8 seats; price per seat >= 0.
 - A trip may only be edited while `SCHEDULED`, and only by its driver.
 - Once the trip has a `CONFIRMED` reservation (`confirmed_seats > 0`) it is **locked**: time,
   route (labels and coordinates) and price can no longer change. Notes, instant booking and
   raising the seat count stay editable. Violations are `409` `trip_locked`.
 - Cancelling requires a reason and is only possible from `SCHEDULED` or `DRIVER_EN_ROUTE`.
+
+### Trips nobody started
+
+A trip still `SCHEDULED` 2 hours after its planned departure is cancelled by a job that runs every
+10 minutes, through the state machine (`SCHEDULED → CANCELLED`, the only terminal move it
+allows), with the reason "Expired" and a trip event with no actor. Seats are released and the
+reservations on it are cancelled. "Upcoming" never lists such a trip, even before the job runs.
 
 ## Search and matching
 
@@ -249,9 +260,20 @@ the business rules run. See "Using the Reservation module from another module" i
 ## Flutter screens (follow the Figma mockups)
 
 - Bottom navigation bar: **Home, Trips, Live, Profile**.
-- Home: map plus the "Where to today?" search sheet.
-- Results list showing the match percentage.
-- Trip details with a seat stepper.
+- Home: map plus the "Where to today?" search sheet; the bell opens the Support notifications
+  and shows the unread count.
+- Results list showing the match percentage, with client-side filters (max price, free seats,
+  instant booking only, driver rating) in a bottom sheet; the icon shows how many are active and
+  the sheet has Reset. Filters only narrow the list on screen.
+- Trip details with the vehicle (photo, model, colour, plate for seat holders) and a seat
+  stepper. A passenger who already holds a seat sees the reservation's status (and the pickup
+  code once confirmed) instead of "Book"; Book is also hidden when the trip is the user's own,
+  has left, is full, or is cancelled.
+- Publish a trip: a driver whose licence is not verified, or who has no approved vehicle, sees
+  a card per missing condition with the button that fixes it (scan the licence, add or manage
+  vehicles) instead of the form. The form has a vehicle picker preselecting the default vehicle,
+  and the seat stepper stops at the vehicle's seats. The driver trip page shows the vehicle too.
+- Vehicle card and details: review status and "Used in N trips" (completed trips).
 - My trips with **Upcoming / Past / Cancelled** tabs.
 - Live tracking screen with the status stepper.
 - Pickup check-in screen with QR code and the 4-digit code.

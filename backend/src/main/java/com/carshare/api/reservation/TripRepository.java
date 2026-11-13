@@ -22,6 +22,18 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     long countByStatus(TripStatus status);
 
+    /** Trips still waiting to start whose departure is before the cut-off: the expiry job's input. */
+    @EntityGraph(attributePaths = "driver")
+    List<Trip> findByStatusAndDepartureTimeBefore(TripStatus status, Instant cutoff);
+
+    /** Completed trips per vehicle, for "Used in N trips". Vehicles with none are absent. */
+    @Query("""
+            select t.vehicleId, count(t) from Trip t
+            where t.vehicleId in :vehicleIds and t.status = com.carshare.api.reservation.TripStatus.COMPLETED
+            group by t.vehicleId
+            """)
+    List<Object[]> countCompletedByVehicle(@Param("vehicleIds") Collection<UUID> vehicleIds);
+
     /** Trips a user drove to the end: the "Trips" figure on their profile. */
     long countByDriver_IdAndStatus(UUID driverId, TripStatus status);
 

@@ -35,6 +35,9 @@ class Vehicle {
     required this.photos,
     this.insuranceExpiryDate,
     this.inspectionExpiryDate,
+    this.reviewStatus = 'PENDING',
+    this.reviewReason,
+    this.tripsCompleted = 0,
   });
 
   final String id;
@@ -51,6 +54,18 @@ class Vehicle {
   final List<VehiclePhoto> photos;
   final DateTime? insuranceExpiryDate;
   final DateTime? inspectionExpiryDate;
+
+  /// PENDING until CarShare support has looked at it, then APPROVED or REJECTED.
+  final String reviewStatus;
+  final String? reviewReason;
+
+  /// How many trips this vehicle has finished: "Used in N trips".
+  final int tripsCompleted;
+
+  bool get isApproved => reviewStatus == 'APPROVED';
+
+  /// A vehicle can drive a trip only when support approved it and it is not reported or inactive.
+  bool get canDriveTrips => isApproved && status == 'ACTIVE';
 
   VehiclePhoto? get primaryPhoto {
     for (final photo in photos) {
@@ -76,6 +91,9 @@ class Vehicle {
         .toList(growable: false),
     insuranceExpiryDate: _dateFromJson(json['insuranceExpiryDate']),
     inspectionExpiryDate: _dateFromJson(json['inspectionExpiryDate']),
+    reviewStatus: json['reviewStatus'] as String? ?? 'PENDING',
+    reviewReason: json['reviewReason'] as String?,
+    tripsCompleted: (json['tripsCompleted'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toJson() => {

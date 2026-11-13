@@ -47,13 +47,21 @@ On the Flutter side `ApiClient` already turns this into
 | `wrong_pickup_code` | 400 | The code did not match; the detail names the tries left |
 | `own_trip` | 400 | You cannot book a seat on a trip you are driving |
 | `cancel_reason_required` | 400 | A cancellation needs a reason |
+| `vehicle_required` | 400 | A trip needs the vehicle it will be driven with |
+| `trip_seats_exceed_vehicle_capacity` | 400 | More seats offered than the vehicle has |
 | `invalid_trip_scope` | 400 | `scope` is not upcoming, past or cancelled |
 | `invalid_reservation_scope` | 400 | Same, for the reservation list |
 | `account_not_found` | 401 | The signed-in account no longer exists |
 | `driver_role_required` | 403 | Only a driver account can publish |
 | `account_restricted` | 403 | The account is SUSPENDED or BANNED |
+| `license_not_verified` | 403 | The driver licence is missing, waiting for review, or rejected; the message says which |
+| `license_expired` | 403 | The licence expires before the trip's departure day |
 | `trip_not_found` | 404 | No such trip — **also what a non-owner gets** |
+| `vehicle_not_found` | 404 | The vehicle is not yours (never a hint that it exists), or the trip has none on record |
 | `reservation_not_found` | 404 | No such reservation, or it is not yours |
+| `vehicle_not_approved` | 409 | CarShare support has not approved the vehicle (pending or rejected) |
+| `vehicle_not_available` | 409 | The vehicle is reported or inactive |
+| `vehicle_in_use` | 409 | Deleting a vehicle that is on a trip that has not finished |
 | `trip_not_editable` | 409 | The trip is no longer SCHEDULED |
 | `trip_locked` | 409 | A confirmed reservation froze the time, route and price |
 | `seats_below_reserved` | 409 | The new seat count is under the seats already confirmed |
@@ -110,11 +118,21 @@ booking.
 
 ### `POST /api/trips` — publish
 
-Driver accounts only, not `SUSPENDED` or `BANNED`. → **201**
+Allowed when **all** of these hold, checked in this order:
+
+1. the account is a `DRIVER` (`driver_role_required`) and not `SUSPENDED` or `BANNED`
+   (`account_restricted`);
+2. the driver licence is `APPROVED` (`license_not_verified`) and does not expire before the
+   departure day, Tunisian time (`license_expired`);
+3. `vehicleId` is present (`vehicle_required`), belongs to the caller (`vehicle_not_found`), is
+   `ACTIVE` (`vehicle_not_available`), is `APPROVED` (`vehicle_not_approved`), and has at least
+   `seatsTotal` seats (`trip_seats_exceed_vehicle_capacity`).
+
+→ **201**
 
 ```json
 {
-  "vehicleId": null,
+  "vehicleId": "0b7e2c1a-...",
   "originLabel": "Tunis Centre",
   "originLat": 36.8065,
   "originLng": 10.1815,
@@ -133,15 +151,15 @@ Driver accounts only, not `SUSPENDED` or `BANNED`. → **201**
 ```
 
 `departureTime` must be in the future, `seatsTotal` 1–8, `pricePerSeat` 0–9999.99, `notes` ≤ 500
-chars, `routePolyline` ≤ 20000 chars. `vehicleId`, `notes`, `distanceM`, `durationS` and
-`routePolyline` are optional. `routePolyline` is the Google encoded polyline of the planned route —
+chars, `routePolyline` ≤ 20000 chars. `vehicleId` is required for new trips. `notes`,
+`distanceM`, `durationS` and `routePolyline` are optional. `routePolyline` is the Google encoded polyline of the planned route —
 without it the deviation alert is skipped for the trip.
 
 Response — `TripDetail`, the shape every trip write returns:
 
 ```json
 {
-  "id": "4f1c8f2a-...", "driverId": "9ab2...", "driverName": "Ahmed Ben Salah", "vehicleId": null,
+  "id": "4f1c8f2a-...", "driverId": "9ab2...", "driverName": "Ahmed Ben Salah", "vehicleId": "0b7e2c1a-...",
   "originLabel": "Tunis Centre", "originLat": 36.8065, "originLng": 10.1815,
   "destinationLabel": "Sousse", "destinationLat": 35.8256, "destinationLng": 10.636,
   "departureTime": "2026-11-21T07:30:00Z",
@@ -154,10 +172,18 @@ Response — `TripDetail`, the shape every trip write returns:
 }
 ```
 
-Errors: `driver_role_required`, `account_restricted`, `invalid_coordinates`,
-`same_origin_and_destination`, `validation_error`.
+Errors: `driver_role_required`, `account_restricted`, `license_not_verified`, `license_expired`,
+`vehicle_required`, `vehicle_not_found`, `vehicle_not_available`, `vehicle_not_approved`,
+`trip_seats_exceed_vehicle_capacity`, `invalid_coordinates`, `same_origin_and_destination`,
+`validation_error`.
+
+`trips.vehicle_id` is a foreign key to `vehicles(id)` (`ON DELETE SET NULL`, migration V24), so a
+trip always points at a real vehicle. Trips published before V24 may have `null`.
 
 ### `GET /api/trips/mine` — the driver's own trips
+
+`scope=upcoming` never lists a trip that is still `SCHEDULED` more than two hours after its
+departure (see "Trips nobody started" below); a trip already under way stays.
 
 `?scope=upcoming|past|cancelled`
 
@@ -223,6 +249,25 @@ Errors: `invalid_search`, `invalid_coordinates`, `same_origin_and_destination`.
 Any signed-in account, so a passenger can open a search result. → `TripDetail`.
 Errors: `trip_not_found`.
 
+### `GET /api/trips/{tripId}/vehicle` — the car on a trip
+
+Any signed-in account, so a passenger sees the car before booking. → **200**
+
+```json
+{
+  "id": "0b7e2c1a-...", "brand": "Peugeot", "model": "208", "year": 2022, "color": "Black",
+  "registrationNumber": "123 TU 4567", "seatsNumber": 4, "airConditioning": true, "hasPhoto": true
+}
+```
+
+`registrationNumber` is filled only for the trip's driver and for passengers holding a confirmed
+seat; everybody else gets `null`. `404 vehicle_not_found` for a trip published before V24.
+
+### `GET /api/trips/{tripId}/vehicle/photo` — its photo
+
+The vehicle's primary photo (or its first one) as image bytes, `Cache-Control: no-store`.
+`404 vehicle_photo_not_found` when the vehicle has none.
+
 ### `PUT /api/trips/{tripId}` — edit
 
 Trip owner, while `SCHEDULED`. Same body as publish. Once the trip has a confirmed reservation it
@@ -277,6 +322,15 @@ Trip owner. Every status change, reservation decision and tracking alert, oldest
 `RESERVATION_CANCELLED`. `actorId` is null when nobody decided it — an auto-refusal, for instance.
 
 Errors: `trip_not_found`.
+
+### Trips nobody started
+
+A trip still `SCHEDULED` more than **2 hours after its departure time** will not happen. Every
+**10 minutes** a job (`TripExpiryJob` → `TripExpiryService`) moves each such trip to `CANCELLED`
+through the state machine, with `cancelReason` = `Expired: the driver never started this trip.`
+and a `CANCELLED` trip event with no actor. The seats are released and every active reservation
+on the trip is cancelled (`TRIP_CANCELLED`). The "upcoming" lists (`GET /trips/mine?scope=upcoming`
+and `GET /reservations/mine?scope=upcoming`) already hide such trips before the job has run.
 
 ## Reservations
 
@@ -695,6 +749,15 @@ Every counter of the dashboard in one call.
 `tripsInProgress` counts the trips the driver has set off on and not finished: `DRIVER_EN_ROUTE`,
 `DRIVER_ARRIVED`, `PICKED_UP` and `IN_PROGRESS`. `reservations` counts every reservation, whatever
 its status.
+
+## What the Vehicles module shows about trips
+
+`GET /api/vehicles` and `GET /api/vehicles/{id}` carry three fields the app needs to pick a car
+for a trip: `reviewStatus` (`PENDING`, `APPROVED`, `REJECTED`), `reviewReason`, and
+`tripsCompleted` — how many trips the vehicle has **completed** ("Used in N trips"). The count
+comes from `ReservationQueries.completedTripsByVehicle`. `DELETE /api/vehicles/{id}` answers
+`409 vehicle_in_use` while the vehicle is on a trip that has not finished
+(`ReservationQueries.vehicleHasUpcomingTrips`).
 
 ## Using the Reservation module from another module
 

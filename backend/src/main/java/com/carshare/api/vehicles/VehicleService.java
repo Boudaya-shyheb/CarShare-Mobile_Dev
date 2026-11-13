@@ -1,12 +1,14 @@
 package com.carshare.api.vehicles;
 
 import com.carshare.api.common.ApiException;
+import com.carshare.api.reservation.ReservationQueries;
 import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
 import java.time.Instant;
 import java.time.Year;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -21,12 +23,15 @@ public class VehicleService {
     private final VehiclePhotoRepository photos;
     private final UserRepository users;
     private final VehiclePhotoStorage photoStorage;
+    private final ReservationQueries reservationQueries;
 
     public VehicleService(
             VehicleRepository vehicles,
             VehiclePhotoRepository photos,
             UserRepository users,
-            VehiclePhotoStorage photoStorage) {
+            VehiclePhotoStorage photoStorage,
+            ReservationQueries reservationQueries) {
+        this.reservationQueries = reservationQueries;
         this.vehicles = vehicles;
         this.photos = photos;
         this.users = users;
@@ -36,14 +41,19 @@ public class VehicleService {
     @Transactional(readOnly = true)
     public List<VehicleDtos.VehicleResponse> getVehicles(UUID ownerId) {
         requireDriver(ownerId);
-        return vehicles.findByOwner_IdOrderByCreatedAtDesc(ownerId).stream()
-                .map(VehicleDtos.VehicleResponse::from).toList();
+        List<Vehicle> owned = vehicles.findByOwner_IdOrderByCreatedAtDesc(ownerId);
+        Map<UUID, Long> used = reservationQueries.completedTripsByVehicle(
+                owned.stream().map(Vehicle::getId).toList());
+        return owned.stream()
+                .map(vehicle -> VehicleDtos.VehicleResponse.from(vehicle,
+                        used.getOrDefault(vehicle.getId(), 0L)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public VehicleDtos.VehicleResponse getVehicle(UUID ownerId, UUID vehicleId) {
         requireDriver(ownerId);
-        return VehicleDtos.VehicleResponse.from(requireVehicle(ownerId, vehicleId));
+        return respond(requireVehicle(ownerId, vehicleId));
     }
 
     @Transactional
@@ -56,7 +66,7 @@ public class VehicleService {
         } catch (DataIntegrityViolationException exception) {
             throw registrationConflict(exception);
         }
-        return VehicleDtos.VehicleResponse.from(vehicle);
+        return respond(vehicle);
     }
 
     @Transactional
@@ -71,13 +81,17 @@ public class VehicleService {
         } catch (DataIntegrityViolationException exception) {
             throw registrationConflict(exception);
         }
-        return VehicleDtos.VehicleResponse.from(vehicle);
+        return respond(vehicle);
     }
 
     @Transactional
     public void deleteVehicle(UUID ownerId, UUID vehicleId) {
         requireDriverForUpdate(ownerId);
         Vehicle vehicle = requireVehicleForUpdate(ownerId, vehicleId);
+        if (reservationQueries.vehicleHasUpcomingTrips(vehicleId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "vehicle_in_use",
+                    "This vehicle is on a trip that has not finished. Cancel or finish the trip first.");
+        }
         List<String> fileNames = vehicle.getPhotos().stream()
                 .map(VehiclePhoto::getFileName).toList();
         boolean wasDefault = vehicle.isDefaultVehicle();
@@ -117,7 +131,7 @@ public class VehicleService {
                 });
         vehicle.setDefault(Instant.now());
         vehicles.flush();
-        return VehicleDtos.VehicleResponse.from(vehicle);
+        return respond(vehicle);
     }
 
     @Transactional
@@ -129,7 +143,7 @@ public class VehicleService {
                     "This vehicle cannot be used for a new trip.");
         }
         if (vehicle.getReviewStatus() != Vehicle.ReviewStatus.APPROVED) {
-            throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_reviewed",
+            throw new ApiException(HttpStatus.CONFLICT, "vehicle_not_approved",
                     "This vehicle must be approved by CarShare support before it can be used for a trip.");
         }
         if (proposedSeats < 1 || proposedSeats > vehicle.getSeatsNumber()) {
@@ -138,6 +152,40 @@ public class VehicleService {
         }
         vehicle.markUsed(Instant.now());
         return vehicle;
+    }
+
+    /**
+     * The car on a trip, as a passenger may see it. {@code showPlate} is decided by the caller:
+     * true for the driver and for people holding a seat.
+     */
+    @Transactional(readOnly = true)
+    public VehicleDtos.TripVehicle tripVehicle(UUID vehicleId, boolean showPlate) {
+        Vehicle vehicle = vehicles.findById(vehicleId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_not_found",
+                        "Vehicle not found."));
+        return new VehicleDtos.TripVehicle(vehicle.getId(), vehicle.getBrand(), vehicle.getModel(),
+                vehicle.getYear(), vehicle.getColor(),
+                showPlate ? vehicle.getRegistrationNumber() : null, vehicle.getSeatsNumber(),
+                vehicle.isAirConditioning(), !vehicle.getPhotos().isEmpty());
+    }
+
+    /** The vehicle's primary photo (or its first one), for the trip details screen. */
+    @Transactional(readOnly = true)
+    public PhotoContent primaryPhoto(UUID vehicleId) {
+        Vehicle vehicle = vehicles.findById(vehicleId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_not_found",
+                        "Vehicle not found."));
+        VehiclePhoto photo = vehicle.getPhotos().stream().filter(VehiclePhoto::isPrimaryPhoto)
+                .findFirst().or(() -> vehicle.getPhotos().stream().findFirst())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
+                        "This vehicle has no photo."));
+        return new PhotoContent(photoStorage.read(photo.getFileName()), photo.getMimeType());
+    }
+
+    private VehicleDtos.VehicleResponse respond(Vehicle vehicle) {
+        long used = reservationQueries.completedTripsByVehicle(List.of(vehicle.getId()))
+                .getOrDefault(vehicle.getId(), 0L);
+        return VehicleDtos.VehicleResponse.from(vehicle, used);
     }
 
     @Transactional
@@ -178,7 +226,7 @@ public class VehicleService {
             throw new ApiException(HttpStatus.CONFLICT, "vehicle_photo_conflict",
                     "The photo could not be added. Please try again.");
         }
-        return VehicleDtos.VehicleResponse.from(vehicle);
+        return respond(vehicle);
     }
 
     @Transactional(readOnly = true)
@@ -210,7 +258,7 @@ public class VehicleService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "vehicle_photo_not_found",
                         "Vehicle photo not found."));
         if (selected.isPrimaryPhoto()) {
-            return VehicleDtos.VehicleResponse.from(vehicle);
+            return respond(vehicle);
         }
 
         vehicle.getPhotos().stream()
@@ -219,7 +267,7 @@ public class VehicleService {
         vehicles.flush();
         selected.setPrimaryPhoto(true);
         vehicles.flush();
-        return VehicleDtos.VehicleResponse.from(vehicle);
+        return respond(vehicle);
     }
 
     @Transactional

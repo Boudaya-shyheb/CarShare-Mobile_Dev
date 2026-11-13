@@ -5,8 +5,13 @@ import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
 import com.carshare.api.users.UserStatus;
+import com.carshare.api.vehicles.VehicleDtos;
+import com.carshare.api.vehicles.VehicleService;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -32,14 +37,27 @@ public class TripService {
     private static final int MAX_SEARCH_RESULTS = 50;
     private static final int MAX_SEATS = 8;
 
+    /**
+     * How long after its planned departure a trip may still be started. Past this, the expiry job
+     * cancels it, and the "upcoming" lists stop showing it even before the job has run.
+     */
+    static final Duration START_GRACE = Duration.ofHours(2);
+    /** A licence is valid on the day of the trip if it expires on or after that day (Tunisian time). */
+    private static final ZoneId LOCAL_ZONE = ZoneId.of("Africa/Tunis");
+
     private final TripRepository trips;
     private final TripEventRepository tripEvents;
     private final UserRepository users;
     private final ReservationService reservationService;
     private final ReputationService reputationService;
+    private final VehicleService vehicleService;
+    private final Clock clock;
 
     public TripService(TripRepository trips, TripEventRepository tripEvents, UserRepository users,
-            ReservationService reservationService, ReputationService reputationService) {
+            ReservationService reservationService, ReputationService reputationService,
+            VehicleService vehicleService, Clock clock) {
+        this.vehicleService = vehicleService;
+        this.clock = clock;
         this.trips = trips;
         this.tripEvents = tripEvents;
         this.users = users;
@@ -49,9 +67,10 @@ public class TripService {
 
     @Transactional
     public TripDtos.TripDetail publish(UUID driverId, TripDtos.PublishTripRequest request) {
-        AppUser driver = requirePublishingDriver(driverId);
+        AppUser driver = requirePublishingDriver(driverId, request.departureTime());
         validateItinerary(request.originLat(), request.originLng(),
                 request.destinationLat(), request.destinationLng());
+        requireUsableVehicle(driverId, request.vehicleId(), request.seatsTotal());
         Trip trip = new Trip(driver, request.vehicleId(), request.originLabel().trim(),
                 request.originLat(), request.originLng(), request.destinationLabel().trim(),
                 request.destinationLat(), request.destinationLng(), request.departureTime(),
@@ -71,7 +90,8 @@ public class TripService {
         String wanted = scope == null || scope.isBlank() ? "all" : scope.trim().toLowerCase(Locale.ROOT);
         List<Trip> found = switch (wanted) {
             case "all" -> trips.findByDriver_IdOrderByDepartureTimeDesc(driverId);
-            case "upcoming" -> trips.findByDriver_IdAndStatusInOrderByDepartureTimeDesc(driverId, ACTIVE_STATUSES);
+            case "upcoming" -> withoutExpired(
+                    trips.findByDriver_IdAndStatusInOrderByDepartureTimeDesc(driverId, ACTIVE_STATUSES));
             case "past" -> trips.findByDriver_IdAndStatusInOrderByDepartureTimeDesc(driverId, Set.of(TripStatus.COMPLETED));
             case "cancelled" -> trips.findByDriver_IdAndStatusInOrderByDepartureTimeDesc(driverId, Set.of(TripStatus.CANCELLED));
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, "invalid_trip_scope",
@@ -123,6 +143,7 @@ public class TripService {
             throw new ApiException(HttpStatus.CONFLICT, "seats_below_reserved",
                     "Passengers already hold " + trip.getConfirmedSeats() + " seats on this trip.");
         }
+        requireUsableVehicle(driverId, request.vehicleId(), request.seatsTotal());
         trip.updateDetails(request.vehicleId(), request.originLabel().trim(), request.originLat(),
                 request.originLng(), request.destinationLabel().trim(), request.destinationLat(),
                 request.destinationLng(), request.departureTime(), request.seatsTotal(),
@@ -290,7 +311,55 @@ public class TripService {
         return new ApiException(HttpStatus.BAD_REQUEST, "invalid_search", message);
     }
 
-    private AppUser requirePublishingDriver(UUID userId) {
+    /** Scheduled trips that are past their start window are not "upcoming" any more. */
+    private List<Trip> withoutExpired(List<Trip> found) {
+        Instant cutoff = clock.instant().minus(START_GRACE);
+        return found.stream()
+                .filter(trip -> !(trip.getStatus() == TripStatus.SCHEDULED
+                        && trip.getDepartureTime().isBefore(cutoff)))
+                .toList();
+    }
+
+    /**
+     * The car a trip is driven with: required, the driver's own, active, approved by support, and
+     * big enough for the seats offered. {@link VehicleService#validateForTrip} answers the
+     * ownership, status and capacity questions with 404/409/400.
+     */
+    private void requireUsableVehicle(UUID driverId, UUID vehicleId, int seats) {
+        if (vehicleId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "vehicle_required",
+                    "Choose the vehicle you will drive for this trip.");
+        }
+        vehicleService.validateForTrip(driverId, vehicleId, seats);
+    }
+
+    /**
+     * The car on a trip, as the caller may see it: anybody signed in sees the model, colour and
+     * photo; the plate is shown to the driver and to people holding a confirmed seat.
+     */
+    @Transactional(readOnly = true)
+    public VehicleDtos.TripVehicle vehicleOf(UUID callerId, UUID tripId) {
+        Trip trip = trips.findById(tripId).orElseThrow(TripService::tripNotFound);
+        if (trip.getVehicleId() == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "vehicle_not_found",
+                    "This trip has no vehicle on record.");
+        }
+        boolean showPlate = trip.isDrivenBy(callerId)
+                || reservationService.wasPassengerOnTrip(tripId, callerId);
+        return vehicleService.tripVehicle(trip.getVehicleId(), showPlate);
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleService.PhotoContent vehiclePhotoOf(UUID tripId) {
+        Trip trip = trips.findById(tripId).orElseThrow(TripService::tripNotFound);
+        if (trip.getVehicleId() == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "vehicle_not_found",
+                    "This trip has no vehicle on record.");
+        }
+        return vehicleService.primaryPhoto(trip.getVehicleId());
+    }
+
+    private AppUser requirePublishingDriver(UUID userId, Instant departure) {
         AppUser user = users.findById(userId).orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
                 "account_not_found", "Your account could not be found."));
         if (user.getRole() != UserRole.DRIVER) {
@@ -300,6 +369,22 @@ public class TripService {
         if (user.getAccountStatus() == UserStatus.SUSPENDED || user.getAccountStatus() == UserStatus.BANNED) {
             throw new ApiException(HttpStatus.FORBIDDEN, "account_restricted",
                     "Your account is restricted, so you cannot publish a trip.");
+        }
+        // A driver is only as good as the verified licence behind the account.
+        String licence = user.getDriverLicenseStatus();
+        if (!"APPROVED".equals(licence)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "license_not_verified", switch (licence) {
+                case "PENDING_REVIEW" ->
+                        "Your driver license is waiting for review. You can publish once it is verified.";
+                case "REJECTED" ->
+                        "Your driver license was not accepted. Scan it again to publish a trip.";
+                default -> "Add your driver license and wait for CarShare to verify it before you publish a trip.";
+            });
+        }
+        LocalDate expiry = user.getDriverLicenseExpiry();
+        if (expiry == null || expiry.isBefore(departure.atZone(LOCAL_ZONE).toLocalDate())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "license_expired",
+                    "Your driver license expires before this trip. Renew it and scan the new one.");
         }
         return user;
     }

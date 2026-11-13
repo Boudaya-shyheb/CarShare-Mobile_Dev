@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,8 +20,12 @@ import com.carshare.api.users.AppUser;
 import com.carshare.api.users.UserRepository;
 import com.carshare.api.users.UserRole;
 import com.carshare.api.users.UserStatus;
+import com.carshare.api.vehicles.VehicleDtos;
+import com.carshare.api.vehicles.VehicleService;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +52,9 @@ class TripServiceTest {
     @Mock private UserRepository users;
     @Mock private ReservationService reservationService;
     @Mock private ReputationService reputationService;
+    @Mock private VehicleService vehicleService;
+
+    private static final UUID VEHICLE_ID = UUID.randomUUID();
 
     private TripService service;
     private AppUser driver;
@@ -53,7 +63,7 @@ class TripServiceTest {
     @BeforeEach
     void setUp() {
         service = new TripService(trips, tripEvents, users, reservationService,
-                reputationService);
+                reputationService, vehicleService, Clock.systemUTC());
         lenient().when(reputationService.forUser(any()))
                 .thenReturn(ReputationService.Reputation.NONE);
         lenient().when(reputationService.forUsers(any())).thenReturn(java.util.Map.of());
@@ -61,6 +71,194 @@ class TripServiceTest {
 
         driver = new AppUser("Yacine Jomni", "+21612345678", "driver@carshare.tn", "hash", UserRole.DRIVER);
         departure = Instant.now().plus(3, ChronoUnit.HOURS);
+        approveLicense(driver, LocalDate.now().plusYears(2));
+    }
+
+    // --- publishing rules: licence and vehicle ------------------------------------------------
+
+    private ApiException publishFailure(AppUser user) {
+        when(users.findById(user.getId())).thenReturn(Optional.of(user));
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.publish(user.getId(), publishRequest()));
+        verify(trips, never()).save(any(Trip.class));
+        return error;
+    }
+
+    @Test
+    @DisplayName("a driver who never submitted a licence gets license_not_verified")
+    void publishNeedsASubmittedLicense() {
+        AppUser fresh = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+
+        ApiException error = publishFailure(fresh);
+
+        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
+        assertEquals("license_not_verified", error.getCode());
+        verifyNoInteractions(vehicleService);
+    }
+
+    @Test
+    @DisplayName("a licence still waiting for review is not enough")
+    void publishNeedsAReviewedLicense() {
+        AppUser pending = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+        pending.submitDriverLicense(LocalDate.now().plusYears(2), new byte[] {1}, "image/png");
+
+        ApiException error = publishFailure(pending);
+
+        assertEquals("license_not_verified", error.getCode());
+        assertTrue(error.getMessage().contains("waiting for review"));
+    }
+
+    @Test
+    @DisplayName("a rejected licence tells the driver to scan it again")
+    void publishRejectsARejectedLicense() {
+        AppUser rejected = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+        rejected.submitDriverLicense(LocalDate.now().plusYears(2), new byte[] {1}, "image/png");
+        rejected.reviewDriverLicense("REJECTED", "blurry");
+
+        ApiException error = publishFailure(rejected);
+
+        assertEquals("license_not_verified", error.getCode());
+        assertTrue(error.getMessage().contains("Scan it again"));
+    }
+
+    @Test
+    @DisplayName("an approved licence that expires before the trip gives license_expired")
+    void publishRejectsALicenseThatExpiresBeforeTheTrip() {
+        AppUser expired = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+        approveLicense(expired, LocalDate.now().minusDays(1));
+
+        ApiException error = publishFailure(expired);
+
+        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
+        assertEquals("license_expired", error.getCode());
+    }
+
+    @Test
+    @DisplayName("a licence that expires after the departure day is accepted")
+    void publishAcceptsALicenseValidOnTheDay() {
+        AppUser lastDay = new AppUser("Nour", "+21622222222", "nour@carshare.tn", "hash", UserRole.DRIVER);
+        approveLicense(lastDay, LocalDate.now().plusDays(2));
+        when(users.findById(lastDay.getId())).thenReturn(Optional.of(lastDay));
+
+        assertEquals("SCHEDULED", service.publish(lastDay.getId(), publishRequest()).status());
+    }
+
+    @Test
+    @DisplayName("publishing without a vehicle gives vehicle_required")
+    void publishNeedsAVehicle() {
+        when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
+        TripDtos.PublishTripRequest noVehicle = new TripDtos.PublishTripRequest(null, "Tunis Centre",
+                TUNIS_LAT, TUNIS_LNG, "Sousse", SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false,
+                null, 140_000, 7_200, null);
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.publish(driver.getId(), noVehicle));
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatus());
+        assertEquals("vehicle_required", error.getCode());
+        verify(trips, never()).save(any(Trip.class));
+    }
+
+    @Test
+    @DisplayName("the vehicle module decides ownership, approval and capacity, and its answer is passed on")
+    void publishPassesTheVehicleModulesRefusalOn() {
+        when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
+        doThrow(new ApiException(HttpStatus.CONFLICT, "vehicle_not_approved", "Not approved."))
+                .when(vehicleService).validateForTrip(eq(driver.getId()), eq(VEHICLE_ID), anyInt());
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.publish(driver.getId(), publishRequest()));
+
+        assertEquals(HttpStatus.CONFLICT, error.getStatus());
+        assertEquals("vehicle_not_approved", error.getCode());
+        verify(trips, never()).save(any(Trip.class));
+    }
+
+    @Test
+    @DisplayName("a successful publish checks the vehicle with the seats offered and stores its id")
+    void publishStoresTheChosenVehicle() {
+        when(users.findById(driver.getId())).thenReturn(Optional.of(driver));
+
+        TripDtos.TripDetail detail = service.publish(driver.getId(), publishRequest());
+
+        verify(vehicleService).validateForTrip(driver.getId(), VEHICLE_ID, 3);
+        assertEquals(VEHICLE_ID, detail.vehicleId());
+    }
+
+    @Test
+    @DisplayName("editing a trip also needs a vehicle")
+    void updateNeedsAVehicle() {
+        Trip trip = scheduledTrip();
+        when(trips.findByIdAndDriver_Id(trip.getId(), driver.getId())).thenReturn(Optional.of(trip));
+        TripDtos.UpdateTripRequest noVehicle = new TripDtos.UpdateTripRequest(null, "Tunis Centre",
+                TUNIS_LAT, TUNIS_LNG, "Sousse", SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false,
+                null, null, null, null);
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.update(driver.getId(), trip.getId(), noVehicle));
+
+        assertEquals("vehicle_required", error.getCode());
+    }
+
+    // --- the car on a trip ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("the driver and a confirmed passenger see the plate; a stranger does not")
+    void vehiclePlateIsOnlyForTheDriverAndSeatHolders() {
+        Trip trip = new Trip(driver, VEHICLE_ID, "Tunis Centre", TUNIS_LAT, TUNIS_LNG, "Sousse",
+                SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, null, null, null);
+        UUID passenger = UUID.randomUUID();
+        UUID stranger = UUID.randomUUID();
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+        when(reservationService.wasPassengerOnTrip(trip.getId(), passenger)).thenReturn(true);
+        when(reservationService.wasPassengerOnTrip(trip.getId(), stranger)).thenReturn(false);
+        when(vehicleService.tripVehicle(any(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(new VehicleDtos.TripVehicle(VEHICLE_ID, "Peugeot", "208", 2022, "Black",
+                        null, 4, true, false));
+
+        service.vehicleOf(driver.getId(), trip.getId());
+        service.vehicleOf(passenger, trip.getId());
+        service.vehicleOf(stranger, trip.getId());
+
+        verify(vehicleService, org.mockito.Mockito.times(2)).tripVehicle(VEHICLE_ID, true);
+        verify(vehicleService).tripVehicle(VEHICLE_ID, false);
+    }
+
+    @Test
+    @DisplayName("an old trip without a vehicle answers 404 vehicle_not_found")
+    void vehicleOfATripWithoutOneIsNotFound() {
+        Trip trip = scheduledTrip();
+        when(trips.findById(trip.getId())).thenReturn(Optional.of(trip));
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.vehicleOf(driver.getId(), trip.getId()));
+
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatus());
+        assertEquals("vehicle_not_found", error.getCode());
+    }
+
+    // --- upcoming never shows past trips ----------------------------------------------------
+
+    @Test
+    @DisplayName("upcoming hides a scheduled trip past its start window but keeps one already under way")
+    void upcomingHidesExpiredScheduledTrips() {
+        Trip stale = tripAt(Instant.now().minus(3, ChronoUnit.HOURS));
+        Trip late = tripAt(Instant.now().minus(30, ChronoUnit.MINUTES));
+        Trip underWay = tripAt(Instant.now().minus(5, ChronoUnit.HOURS));
+        underWay.applyStatus(TripStatus.DRIVER_EN_ROUTE);
+        Trip future = tripAt(Instant.now().plus(1, ChronoUnit.HOURS));
+        when(trips.findByDriver_IdAndStatusInOrderByDepartureTimeDesc(any(), any()))
+                .thenReturn(List.of(future, late, underWay, stale));
+
+        List<TripDtos.TripSummary> upcoming = service.listMine(driver.getId(), "upcoming");
+
+        assertEquals(List.of(future.getId(), late.getId(), underWay.getId()),
+                upcoming.stream().map(TripDtos.TripSummary::id).toList());
+    }
+
+    private Trip tripAt(Instant when) {
+        return new Trip(driver, VEHICLE_ID, "Tunis Centre", TUNIS_LAT, TUNIS_LNG, "Sousse",
+                SOUSSE_LAT, SOUSSE_LNG, when, 3, PRICE, false, null, null, null, null);
     }
 
     // --- publishing -------------------------------------------------------------------------
@@ -682,15 +880,20 @@ class TripServiceTest {
 
     // --- helpers ----------------------------------------------------------------------------
 
+    private static void approveLicense(AppUser user, LocalDate expiry) {
+        user.submitDriverLicense(expiry, new byte[] {1}, "image/png");
+        user.reviewDriverLicense("APPROVED", null);
+    }
+
     private TripDtos.PublishTripRequest publishRequest() {
-        return new TripDtos.PublishTripRequest(null, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
+        return new TripDtos.PublishTripRequest(VEHICLE_ID, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
                 "Sousse", SOUSSE_LAT, SOUSSE_LNG, departure, 3, PRICE, false, null, 140_000,
                 7_200, null);
     }
 
     private TripDtos.UpdateTripRequest updateRequest(Instant departureTime, BigDecimal price,
             int seatsTotal, String notes) {
-        return new TripDtos.UpdateTripRequest(null, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
+        return new TripDtos.UpdateTripRequest(VEHICLE_ID, "Tunis Centre", TUNIS_LAT, TUNIS_LNG,
                 "Sousse", SOUSSE_LAT, SOUSSE_LNG, departureTime, seatsTotal, price, false, notes,
                 null, null, null);
     }
