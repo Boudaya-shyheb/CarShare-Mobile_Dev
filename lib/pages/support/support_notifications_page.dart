@@ -7,6 +7,7 @@ import '../../models/support_ticket.dart';
 import '../../services/auth_service.dart';
 import '../../services/support_service.dart';
 import '../../theme.dart';
+import '../../widgets/notification_filter_bar.dart';
 import 'ticket_details_page.dart';
 
 class SupportNotificationsPage extends StatefulWidget {
@@ -188,6 +189,7 @@ class _SupportNotificationsPageState extends State<SupportNotificationsPage> {
   }
 }
 
+/// "3 unread of 5" and the All / Unread switch: the same bar on both notification tabs.
 class _NotificationsHeader extends StatelessWidget {
   const _NotificationsHeader({
     required this.totalCount,
@@ -201,97 +203,12 @@ class _NotificationsHeader extends StatelessWidget {
   final ValueChanged<bool> onFilterChanged;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [supportDarkGreen, supportGreen],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: const [carShareCardShadow],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: const Icon(
-                Icons.notifications_active_outlined,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    unreadCount == 0
-                        ? 'You are all caught up'
-                        : '$unreadCount unread update${unreadCount == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '$totalCount support notification${totalCount == 1 ? '' : 's'}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.78),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(
-              value: false,
-              icon: Icon(Icons.inbox_outlined, size: 17),
-              label: Text('All'),
-            ),
-            ButtonSegment(
-              value: true,
-              icon: Icon(Icons.mark_email_unread_outlined, size: 17),
-              label: Text('Unread'),
-            ),
-          ],
-          selected: {showUnreadOnly},
-          onSelectionChanged: (values) => onFilterChanged(values.first),
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            backgroundColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.selected)
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.10),
-            ),
-            foregroundColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.selected)
-                  ? supportDarkGreen
-                  : Colors.white,
-            ),
-            side: WidgetStateProperty.all(
-              BorderSide(color: Colors.white.withValues(alpha: 0.28)),
-            ),
-          ),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => NotificationFilterBar(
+    summary: unreadCount == 0
+        ? 'You are all caught up'
+        : '$unreadCount unread of $totalCount',
+    showUnreadOnly: showUnreadOnly,
+    onChanged: onFilterChanged,
   );
 }
 
@@ -319,20 +236,10 @@ class _NotificationCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: item.read ? Colors.white : const Color(0xFFF0FDF8),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: item.read
-                  ? carShareBorder
-                  : supportGreen.withValues(alpha: 0.35),
-            ),
-            boxShadow: item.read
+            border: item.read
                 ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x12079B70),
-                      blurRadius: 16,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
+                : Border.all(color: supportGreen.withValues(alpha: 0.35)),
+            boxShadow: const [carShareCardShadow],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,7 +266,7 @@ class _NotificationCard extends StatelessWidget {
                             item.title,
                             style: TextStyle(
                               color: carShareText,
-                              fontSize: 14,
+                              fontSize: 15,
                               fontWeight: item.read
                                   ? FontWeight.w700
                                   : FontWeight.w800,
@@ -385,8 +292,8 @@ class _NotificationCard extends StatelessWidget {
                       item.message,
                       style: const TextStyle(
                         color: carShareMuted,
-                        height: 1.35,
-                        fontSize: 12.5,
+                        height: 1.4,
+                        fontSize: 13.5,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -405,7 +312,7 @@ class _NotificationCard extends StatelessWidget {
                             item.ticketReference,
                             style: const TextStyle(
                               color: supportDarkGreen,
-                              fontSize: 10.5,
+                              fontSize: 12,
                               fontWeight: FontWeight.w800,
                             ),
                           ),

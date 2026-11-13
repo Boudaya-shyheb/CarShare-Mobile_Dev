@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/admin_section_header.dart';
+import '../widgets/admin_ui.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/resume_refresh.dart';
 import '../widgets/route_title.dart';
@@ -109,95 +110,105 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     return ResumeRefresh(
       onResume: _refresh,
       child: Scaffold(
-      backgroundColor: carShareBackground,
-      appBar: AppBar(
-        title: const Text('CarShare Admin'),
-        actions: [
-          IconButton(
-            onPressed: _working ? null : _refresh,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _working ? null : _signOut,
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout_rounded),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          adminSectionHeader(context, title, subtitle, icon),
-          if (widget.section == AdminSection.vehicles ||
-              widget.section == AdminSection.trips ||
-              widget.section == AdminSection.support)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: SegmentedButton<bool>(
-                segments: widget.section == AdminSection.vehicles
-                    ? const [
-                        ButtonSegment(value: false, label: Text('Vehicles')),
-                        ButtonSegment(
-                          value: true,
-                          label: Text('Driver licenses'),
-                        ),
-                      ]
-                    : widget.section == AdminSection.trips
-                    ? const [
-                        ButtonSegment(value: false, label: Text('Trips')),
-                        ButtonSegment(value: true, label: Text('Reservations')),
-                      ]
-                    : const [
-                        ButtonSegment(
-                          value: false,
-                          label: Text('Support tickets'),
-                        ),
-                        ButtonSegment(value: true, label: Text('Lost & found')),
-                      ],
-                selected: {_showSecondary},
-                onSelectionChanged: (value) => setState(() {
-                  _showSecondary = value.first;
-                  _items = _load();
-                }),
+        backgroundColor: carShareBackground,
+        appBar: AppBar(
+          title: const Text('CarShare Admin'),
+          actions: [
+            IconButton(
+              onPressed: _working ? null : _refresh,
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+            ),
+            IconButton(
+              onPressed: _working ? null : _signOut,
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout_rounded),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            adminSectionHeader(context, title, subtitle, icon),
+            if (widget.section == AdminSection.vehicles ||
+                widget.section == AdminSection.trips ||
+                widget.section == AdminSection.support)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: SegmentedButton<bool>(
+                  expandedInsets: EdgeInsets.zero,
+                  showSelectedIcon: false,
+                  segments: widget.section == AdminSection.vehicles
+                      ? const [
+                          ButtonSegment(value: false, label: Text('Vehicles')),
+                          ButtonSegment(
+                            value: true,
+                            label: Text('Driver licenses'),
+                          ),
+                        ]
+                      : widget.section == AdminSection.trips
+                      ? const [
+                          ButtonSegment(value: false, label: Text('Trips')),
+                          ButtonSegment(
+                            value: true,
+                            label: Text('Reservations'),
+                          ),
+                        ]
+                      : const [
+                          ButtonSegment(
+                            value: false,
+                            label: Text('Support tickets'),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            label: Text('Lost & found'),
+                          ),
+                        ],
+                  selected: {_showSecondary},
+                  onSelectionChanged: (value) => setState(() {
+                    _showSecondary = value.first;
+                    _items = _load();
+                  }),
+                ),
+              ),
+            Expanded(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _items,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return _ErrorView(
+                      message: '${snapshot.error}',
+                      onRetry: _refresh,
+                    );
+                  }
+                  final items = snapshot.data ?? const [];
+                  if (items.isEmpty) {
+                    return _EmptyView(message: _emptyMessage());
+                  }
+                  return RefreshIndicator(
+                    onRefresh: () async => _refresh(),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) => _buildCard(items[index]),
+                    ),
+                  );
+                },
               ),
             ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _items,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return _ErrorView(
-                    message: '${snapshot.error}',
-                    onRetry: _refresh,
-                  );
-                }
-                final items = snapshot.data ?? const [];
-                if (items.isEmpty) return _EmptyView(message: _emptyMessage());
-                return RefreshIndicator(
-                  onRefresh: () async => _refresh(),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) => _buildCard(items[index]),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          ],
+        ),
+        floatingActionButton: widget.section == AdminSection.sanctions
+            ? FloatingActionButton.extended(
+                onPressed: _working ? null : _createSanction,
+                icon: const Icon(Icons.add),
+                label: const Text('Issue sanction'),
+              )
+            : null,
       ),
-      floatingActionButton: widget.section == AdminSection.sanctions
-          ? FloatingActionButton.extended(
-              onPressed: _working ? null : _createSanction,
-              icon: const Icon(Icons.add),
-              label: const Text('Issue sanction'),
-            )
-          : null,
-    ),
     );
   }
 
@@ -226,136 +237,145 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   Widget _vehicleCard(Map<String, dynamic> item) {
     final photos = (item['photos'] as List? ?? const [])
         .cast<Map<String, dynamic>>();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.directions_car, color: carShareGreen),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    '${item['brand']} ${item['model']} · ${item['year']}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                _status(item['reviewStatus']),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('${item['ownerName']} · ${item['ownerEmail']}'),
-            Text(
-              'Plate ${item['registrationNumber']} · ${item['color']} · ${item['seats']} seats',
-            ),
-            Text('Insurance expires: ${_date(item['insuranceExpiryDate'])}'),
-            Text('Inspection expires: ${_date(item['inspectionExpiryDate'])}'),
-            if ((item['reviewReason'] as String? ?? '').isNotEmpty)
-              Text('Review note: ${item['reviewReason']}'),
-            if (photos.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 72,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: photos.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (_, index) => _VehiclePhoto(
-                    vehicleId: '${item['id']}',
-                    photoId: '${photos[index]['id']}',
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _working
-                      ? null
-                      : () => _reviewVehicle(item, 'APPROVED'),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Approve'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _working
-                      ? null
-                      : () => _reviewVehicle(item, 'REJECTED'),
-                  icon: const Icon(Icons.close),
-                  label: const Text('Reject'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _driverLicenseCard(Map<String, dynamic> item) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(14),
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.badge_outlined, color: carShareGreen),
-              const SizedBox(width: 8),
+              const AdminIconBadge(Icons.directions_car_filled_outlined),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  item['fullName'] as String? ?? 'Driver',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item['brand']} ${item['model']} · ${item['year']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: carShareText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${item['ownerName']}',
+                      style: const TextStyle(color: carShareMuted),
+                    ),
+                  ],
                 ),
               ),
-              _status(item['status']),
+              const SizedBox(width: 8),
+              _status(item['reviewStatus']),
             ],
           ),
           const SizedBox(height: 6),
-          Text('${item['email']} · ${item['phone']}'),
-          Text('License expires: ${_date(item['expiryDate'])}'),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 240),
-              child: SizedBox(
-                width: double.infinity,
-                child: _DriverLicenseImage(userId: '${item['userId']}'),
+          AdminInfoLine(
+            Icons.mail_outline,
+            '${item['ownerEmail']}',
+            maxLines: 1,
+          ),
+          AdminInfoLine(
+            Icons.pin_outlined,
+            'Plate ${item['registrationNumber']} · ${item['color']} · ${item['seats']} seats',
+          ),
+          AdminInfoLine(
+            Icons.shield_outlined,
+            'Insurance expires ${_date(item['insuranceExpiryDate'])}',
+          ),
+          AdminInfoLine(
+            Icons.build_circle_outlined,
+            'Inspection expires ${_date(item['inspectionExpiryDate'])}',
+          ),
+          if ((item['reviewReason'] as String? ?? '').isNotEmpty)
+            AdminInfoLine(
+              Icons.notes_outlined,
+              'Review note: ${item['reviewReason']}',
+            ),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: photos.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (_, index) => _VehiclePhoto(
+                  vehicleId: '${item['id']}',
+                  photoId: '${photos[index]['id']}',
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _working
-                    ? null
-                    : () => _reviewDriverLicense(item, 'APPROVED'),
-                icon: const Icon(Icons.check),
-                label: const Text('Approve'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _working
-                    ? null
-                    : () => _reviewDriverLicense(item, 'REJECTED'),
-                icon: const Icon(Icons.close),
-                label: const Text('Reject'),
-              ),
-            ],
+          ],
+          const SizedBox(height: 14),
+          AdminDecisionBar(
+            onApprove: _working ? null : () => _reviewVehicle(item, 'APPROVED'),
+            onReject: _working ? null : () => _reviewVehicle(item, 'REJECTED'),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _driverLicenseCard(Map<String, dynamic> item) => AdminCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const AdminIconBadge(Icons.badge_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item['fullName'] as String? ?? 'Driver',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: carShareText,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'License expires ${_date(item['expiryDate'])}',
+                    style: const TextStyle(color: carShareMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _status(item['status']),
+          ],
+        ),
+        const SizedBox(height: 6),
+        AdminInfoLine(Icons.mail_outline, '${item['email']}', maxLines: 1),
+        AdminInfoLine(Icons.phone_outlined, '${item['phone']}', maxLines: 1),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: Container(
+              width: double.infinity,
+              color: carShareBackground,
+              child: _DriverLicenseImage(userId: '${item['userId']}'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        AdminDecisionBar(
+          onApprove: _working
+              ? null
+              : () => _reviewDriverLicense(item, 'APPROVED'),
+          onReject: _working
+              ? null
+              : () => _reviewDriverLicense(item, 'REJECTED'),
+        ),
+      ],
     ),
   );
 
@@ -390,89 +410,188 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     );
   }
 
-  Widget _tripCard(Map<String, dynamic> item) => Card(
-    child: ListTile(
+  Widget _tripCard(Map<String, dynamic> item) {
+    final incident = item['incidentReported'] == true;
+    final cancelReason = item['cancelReason'] as String?;
+    return AdminCard(
       onTap: () => _openTrip(item),
-      leading: Icon(
-        item['incidentReported'] == true
-            ? Icons.warning_amber_rounded
-            : Icons.route,
-        color: item['incidentReported'] == true
-            ? carShareWarning
-            : carShareGreen,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AdminIconBadge(
+            incident ? Icons.warning_amber_rounded : Icons.route_outlined,
+            colour: incident ? carShareWarning : carShareGreen,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: carShareText,
+                  ),
+                ),
+                AdminInfoLine(
+                  Icons.person_outline,
+                  '${item['driverName']}',
+                  maxLines: 1,
+                ),
+                AdminInfoLine(
+                  Icons.schedule,
+                  adminDateTime(item['departureTime']),
+                  maxLines: 1,
+                ),
+                if (incident)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: AdminPill(
+                      'Reported deviation',
+                      colour: carShareWarning,
+                      icon: Icons.warning_amber_rounded,
+                    ),
+                  ),
+                if (cancelReason != null && cancelReason.isNotEmpty)
+                  AdminInfoLine(Icons.info_outline, cancelReason),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _tripChip('${item['status']}'),
+        ],
       ),
-      title: Text(
-        '${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        '${item['driverName']} · ${_date(item['departureTime'])}${item['incidentReported'] == true ? '\nReported deviation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}',
-      ),
-      isThreeLine:
-          item['incidentReported'] == true || item['cancelReason'] != null,
-      trailing: _tripChip('${item['status']}'),
-    ),
-  );
+    );
+  }
 
-  Widget _reservationCard(Map<String, dynamic> item) => Card(
-    child: ListTile(
-      leading: const Icon(Icons.event_seat_outlined, color: carShareGreen),
-      title: Text(
-        '${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+  Widget _reservationCard(Map<String, dynamic> item) {
+    final cancelReason = item['cancelReason'] as String?;
+    return AdminCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AdminIconBadge(Icons.event_seat_outlined),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${RouteTitle.shortName('${item['origin']}')} → ${RouteTitle.shortName('${item['destination']}')}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: carShareText,
+                  ),
+                ),
+                AdminInfoLine(
+                  Icons.person_outline,
+                  'Passenger ${item['passengerName']}',
+                  maxLines: 1,
+                ),
+                AdminInfoLine(
+                  Icons.directions_car_outlined,
+                  'Driver ${item['driverName']}',
+                  maxLines: 1,
+                ),
+                AdminInfoLine(
+                  Icons.event_seat_outlined,
+                  '${item['seats']} ${item['seats'] == 1 ? 'seat' : 'seats'}',
+                  maxLines: 1,
+                ),
+                if (item['lateCancellation'] == true)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: AdminPill(
+                      'Late cancellation',
+                      colour: carShareWarning,
+                      icon: Icons.timer_outlined,
+                    ),
+                  ),
+                if (cancelReason != null && cancelReason.isNotEmpty)
+                  AdminInfoLine(Icons.info_outline, cancelReason),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          StatusChip(
+            label: reservationStatusLabel('${item['status']}'),
+            colour: reservationStatusColour('${item['status']}'),
+          ),
+        ],
       ),
-      subtitle: Text(
-        'Passenger: ${item['passengerName']} · Driver: ${item['driverName']}\n${item['seats']} seat(s) · ${item['status']}${item['lateCancellation'] == true ? ' · Late cancellation' : ''}${item['cancelReason'] == null ? '' : '\n${item['cancelReason']}'}',
-      ),
-      isThreeLine: true,
-      trailing: StatusChip(
-        label: reservationStatusLabel('${item['status']}'),
-        colour: reservationStatusColour('${item['status']}'),
-      ),
-    ),
-  );
+    );
+  }
 
-  Widget _ticketCard(Map<String, dynamic> item) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(14),
+  Widget _ticketCard(Map<String, dynamic> item) {
+    final sla = slaState(item['deadline']);
+    final resolution = item['resolution'] as String? ?? '';
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Text(
+            item['title'] as String? ?? 'Support request',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: carShareText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: Text(
-                  item['title'] as String? ?? 'Support request',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
               _priorityBadge(item['priorityScore']),
-              const SizedBox(width: 7),
               _status(item['status']),
+              AdminPill(
+                sla.label,
+                colour: sla.colour,
+                icon: Icons.timer_outlined,
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            '${item['userName']} · ${item['userEmail']} · ${item['category']}',
+          AdminInfoLine(
+            Icons.person_outline,
+            '${item['userName']} · ${item['userEmail']}',
+            maxLines: 1,
           ),
-          const SizedBox(height: 5),
-          Text(
-            'SLA deadline: ${_date(item['deadline'])}',
-            style: const TextStyle(color: carShareMuted, fontSize: 12),
+          AdminInfoLine(
+            Icons.sell_outlined,
+            humanize(item['category']),
+            maxLines: 1,
           ),
-          const SizedBox(height: 7),
-          Text(item['description'] as String? ?? ''),
-          if ((item['resolution'] as String? ?? '').isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('Resolution: ${item['resolution']}'),
+          const SizedBox(height: 10),
+          Text(
+            item['description'] as String? ?? '',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: carShareText, height: 1.4),
+          ),
+          if (resolution.isNotEmpty)
+            AdminInfoLine(
+              Icons.check_circle_outline,
+              'Resolution: $resolution',
             ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                backgroundColor: carShareTint,
+                foregroundColor: carShareGreenDark,
+              ),
               onPressed: _working ? null : () => _openSupportTicket(item),
               icon: const Icon(Icons.folder_open_outlined),
               label: const Text('Review full case'),
@@ -480,45 +599,80 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _lostCard(Map<String, dynamic> item) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(14),
+  Widget _lostCard(Map<String, dynamic> item) {
+    final isLost = '${item['type']}'.toUpperCase() == 'LOST';
+    final route = item['originLabel'] == null
+        ? null
+        : '${RouteTitle.shortName('${item['originLabel']}')} → '
+              '${RouteTitle.shortName('${item['destinationLabel']}')}';
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              AdminIconBadge(
+                isLost ? Icons.search_rounded : Icons.inventory_2_outlined,
+                colour: isLost ? carShareWarning : carShareGreen,
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  item['title'] as String? ?? 'Lost-and-found report',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['title'] as String? ?? 'Lost-and-found report',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: carShareText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isLost ? 'Lost item' : 'Found item',
+                      style: const TextStyle(color: carShareMuted),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
               _status(item['status']),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            item['originLabel'] == null
-                ? '${item['type']}'
-                : '${item['type']} · '
-                      '${RouteTitle.shortName('${item['originLabel']}')} → '
-                      '${RouteTitle.shortName('${item['destinationLabel']}')} · '
-                      '${_date(item['departureTime'])}',
-          ),
-          if (item['reporterName'] != null)
-            Text(
-              'Reported by ${item['reporterName']}',
-              style: const TextStyle(color: carShareMuted, fontSize: 12.5),
+          if (route != null)
+            AdminInfoLine(Icons.route_outlined, route, maxLines: 1),
+          if (item['departureTime'] != null)
+            AdminInfoLine(
+              Icons.schedule,
+              adminDateTime(item['departureTime']),
+              maxLines: 1,
             ),
-          Text(item['description'] as String? ?? ''),
-          if (item['status'] == 'OPEN')
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
+          if (item['reporterName'] != null)
+            AdminInfoLine(
+              Icons.person_outline,
+              'Reported by ${item['reporterName']}',
+              maxLines: 1,
+            ),
+          if ((item['description'] as String? ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              item['description'] as String,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: carShareText, height: 1.4),
+            ),
+          ],
+          if (item['status'] == 'OPEN') ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
                 onPressed: _working
                     ? null
                     : () => _act(() async {
@@ -527,32 +681,73 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
                           {},
                         );
                       }, 'Report marked resolved.'),
-                icon: const Icon(Icons.done),
+                icon: const Icon(Icons.done_rounded),
                 label: const Text('Mark resolved'),
               ),
             ),
+          ],
         ],
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _sanctionCard(Map<String, dynamic> item) => Card(
-    child: ListTile(
-      leading: const CircleAvatar(
-        backgroundColor: Color(0xFFFEF3C7),
-        child: Icon(Icons.gavel, color: carShareWarning),
+  Widget _sanctionCard(Map<String, dynamic> item) {
+    final points = item['points'];
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AdminIconBadge(
+                Icons.gavel_outlined,
+                colour: carShareWarning,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item['userName']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: carShareText,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    AdminPill(
+                      '$points ${points == 1 ? 'point' : 'points'}',
+                      colour: carShareWarning,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _status(item['active'] == true ? 'ACTIVE' : 'EXPIRED'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${item['reason']}',
+            style: const TextStyle(color: carShareText, height: 1.4),
+          ),
+          AdminInfoLine(
+            Icons.event_outlined,
+            'Issued ${_date(item['issuedAt'])} · expires ${_date(item['expiresAt'])}',
+            maxLines: 1,
+          ),
+          AdminInfoLine(
+            Icons.person_outline,
+            'Account: ${humanize(item['accountStatus'])}',
+            maxLines: 1,
+          ),
+        ],
       ),
-      title: Text(
-        '${item['userName']} · ${item['points']} point(s)',
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        '${item['reason']}\nIssued ${_date(item['issuedAt'])} · Expires ${_date(item['expiresAt'])} · ${item['accountStatus']}',
-      ),
-      isThreeLine: true,
-      trailing: _status(item['active'] == true ? 'ACTIVE' : 'EXPIRED'),
-    ),
-  );
+    );
+  }
 
   Future<void> _reviewVehicle(Map<String, dynamic> item, String status) async {
     final reason = await _askText(
@@ -705,26 +900,11 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
     final score = value is num
         ? value.toDouble()
         : double.tryParse('$value') ?? 0;
-    final (label, color) = switch (score) {
-      >= 60 => ('URGENT', carShareDanger),
-      >= 40 => ('HIGH', Colors.deepOrange),
-      >= 25 => ('MEDIUM', carShareWarning),
-      _ => ('NORMAL', carShareGreen),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(
-        '$label ${score.toStringAsFixed(0)}',
-        style: TextStyle(
-          color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+    final state = priorityState(score);
+    return AdminPill(
+      '${state.label} · ${score.toStringAsFixed(0)}',
+      colour: state.colour,
+      icon: Icons.flag_outlined,
     );
   }
 
@@ -755,13 +935,7 @@ class _AdminOperationsPageState extends State<AdminOperationsPage> {
   Widget _tripChip(String status) =>
       StatusChip(label: prettyStatus(status), colour: tripStatusColour(status));
 
-  String _date(Object? value) {
-    if (value == null) return 'Not provided';
-    final parsed = DateTime.tryParse('$value')?.toLocal();
-    return parsed == null
-        ? '$value'
-        : '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
-  }
+  String _date(Object? value) => adminDate(value);
 }
 
 class _VehiclePhoto extends StatefulWidget {

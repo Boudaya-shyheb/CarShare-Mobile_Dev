@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 enum TicketStatus {
   open,
   awaitingResponse,
@@ -99,6 +101,6 @@ class SupportTicket {
   static String _formatDate(Object? value) {
     final date = DateTime.tryParse('$value')?.toLocal();
     if (date == null) return 'Recently';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return DateFormat('d MMM yyyy').format(date);
   }
 }

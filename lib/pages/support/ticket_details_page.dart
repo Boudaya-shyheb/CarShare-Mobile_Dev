@@ -7,6 +7,10 @@ import '../../models/support_ticket_detail.dart';
 import '../../services/auth_service.dart';
 import '../../services/support_service.dart';
 import '../../theme.dart';
+import '../../widgets/admin_ui.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/round_back_button.dart';
+import '../../widgets/status_chip.dart';
 import '../../widgets/support_status_badge.dart';
 import '../../widgets/support_evidence_section.dart';
 
@@ -112,16 +116,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
-    appBar: AppBar(
-      backgroundColor: carShareBackground,
-      surfaceTintColor: carShareBackground,
-      title: Text(
-        ticket.reference,
-        style: const TextStyle(
-          fontWeight: FontWeight.w800,
-          color: carShareText,
-        ),
-      ),
+    appBar: roundBackAppBar(
+      context,
+      title: 'Support ticket',
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 16),
@@ -137,9 +134,19 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         }
         if (snapshot.hasError) {
           return Center(
-            child: OutlinedButton(
-              onPressed: _refresh,
-              child: Text('Try again: ${snapshot.error}'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                EmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Could not load this ticket',
+                  line: authErrorMessage(snapshot.error!),
+                ),
+                OutlinedButton(
+                  onPressed: _refresh,
+                  child: const Text('Try again'),
+                ),
+              ],
             ),
           );
         }
@@ -150,307 +157,239 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   Widget _body(SupportTicketDetails details) {
     final currentUserId = AuthService.instance.currentUser.value?.id;
+    final mine = ticket.userId == currentUserId;
     return SafeArea(
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${ticket.trip} · ${ticket.createdLabel}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: carShareMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  if (ticket.deadline != null)
-                    _DeadlineBadge(deadline: ticket.deadline!),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                ticket.title,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: carShareText,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                ticket.category,
-                style: const TextStyle(
-                  color: supportDarkGreen,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (ticket.trip != 'General request') ...[
-                _Panel(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.route_outlined, color: supportDarkGreen),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Trip data · read only',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              ticket.trip,
-                              style: const TextStyle(
-                                color: carShareMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              if (ticket.reportedUserName != null) ...[
-                _Panel(
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.person_search_outlined,
-                        color: supportDarkGreen,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Person concerned',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              '${ticket.reportedUserName} · ${ticket.reportedUserRoleLabel}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Text(
-                              'This ticket was filed against this person.',
-                              style: TextStyle(
-                                color: carShareMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              _Panel(
-                child: Row(
+              // The ticket itself.
+              AdminCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      ticket.userId == currentUserId
-                          ? Icons.outgoing_mail
-                          : Icons.record_voice_over_outlined,
-                      color: supportDarkGreen,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        AdminPill(ticket.reference, colour: carShareMuted),
+                        AdminPill(
+                          humanize(ticket.category),
+                          colour: supportDarkGreen,
+                        ),
+                        if (ticket.deadline != null)
+                          _DeadlineBadge(deadline: ticket.deadline!),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        ticket.userId == currentUserId
-                            ? 'You opened this ticket. The other participant can respond with a statement and evidence.'
-                            : 'You are involved in this ticket. Add your statement and evidence before review starts.',
-                        style: const TextStyle(fontSize: 12),
+                    const SizedBox(height: 12),
+                    Text(
+                      ticket.title,
+                      style: const TextStyle(
+                        color: carShareText,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        height: 1.25,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      ticket.description,
+                      style: const TextStyle(
+                        color: carShareText,
+                        height: 1.45,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const Divider(height: 28),
+                    AdminInfoLine(
+                      Icons.schedule,
+                      'Opened ${ticket.createdLabel}',
+                      maxLines: 1,
+                    ),
+                    if (ticket.trip != 'General request')
+                      AdminInfoLine(
+                        Icons.route_outlined,
+                        '${ticket.trip} (trip data, read only)',
+                      ),
+                    if (ticket.reportedUserName != null)
+                      AdminInfoLine(
+                        Icons.person_search_outlined,
+                        'Person concerned: ${ticket.reportedUserName} · ${ticket.reportedUserRoleLabel}',
+                        colour: supportDarkGreen,
+                      ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              _Panel(
+              const SizedBox(height: 12),
+              _Notice(
+                icon: mine
+                    ? Icons.outgoing_mail
+                    : Icons.record_voice_over_outlined,
+                text: mine
+                    ? 'You opened this ticket. The other participant can respond with a statement and evidence.'
+                    : 'You are involved in this ticket. Add your statement and evidence before review starts.',
+              ),
+              const SizedBox(height: 18),
+              AdminBlock(
+                title: 'Progress',
+                icon: Icons.timeline_rounded,
+                trailing: Text(
+                  '${details.history.length} ${details.history.length == 1 ? 'update' : 'updates'}',
+                  style: const TextStyle(color: carShareMuted, fontSize: 13),
+                ),
                 child: _StatusTimeline(
                   status: ticket.status,
                   historyCount: details.history.length,
                 ),
               ),
-              const SizedBox(height: 14),
-              _Panel(child: Text(ticket.description)),
               const SizedBox(height: 18),
-              _SectionTitle('Status history'),
-              ...details.history.map(
-                (item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: const Icon(
-                    Icons.check_circle,
-                    size: 18,
-                    color: supportGreen,
-                  ),
-                  title: Text(
-                    item.toStatus.replaceAll('_', ' '),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${item.reason ?? 'Status updated'} · ${_date(item.createdAt)}',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SectionTitle(
-                      'Evidence (${details.evidence.length})',
-                    ),
-                  ),
-                  if (_canContribute)
-                    TextButton.icon(
-                      onPressed: _working ? null : _addPhoto,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Add photo'),
-                    ),
-                  if (_canContribute)
-                    TextButton.icon(
-                      onPressed: _working ? null : _addDocument,
-                      icon: const Icon(Icons.attach_file_rounded),
-                      label: const Text('Add PDF'),
-                    ),
-                ],
-              ),
-              if (details.evidence.isEmpty)
-                const Text(
-                  'No evidence.',
-                  style: TextStyle(color: carShareMuted),
-                ),
-              ...details.evidence.map(
-                (item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: item.contentType.startsWith('image/')
-                      ? _EvidenceThumbnail(ticketId: ticket.id, evidence: item)
-                      : const Icon(
-                          Icons.description_outlined,
-                          color: supportGreen,
-                        ),
-                  title: Text(item.fileName),
-                  subtitle: Text(
-                    '${item.type} · ${_fileSize(item.fileSize)}\n'
-                    'Added by ${item.uploadedByName ?? 'Unknown user'}',
-                  ),
-                  isThreeLine: true,
-                  trailing:
-                      _canContribute && item.uploadedByUserId == currentUserId
-                      ? IconButton(
-                          onPressed: _working
-                              ? null
-                              : () => _deleteEvidence(item.id),
-                          icon: const Icon(Icons.delete_outline),
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SectionTitle(
-                      'Statements (${details.statements.length})',
-                    ),
-                  ),
-                  if (_canContribute &&
-                      !details.statements.any(
-                        (item) => item.authorId == currentUserId,
-                      ))
-                    TextButton.icon(
-                      onPressed: _working ? null : _addStatement,
-                      icon: const Icon(Icons.add_comment_outlined),
-                      label: const Text('Respond'),
-                    ),
-                ],
-              ),
-              if (details.statements.isEmpty)
-                const Text(
-                  'No statements.',
-                  style: TextStyle(color: carShareMuted),
-                ),
-              ...details.statements.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _Panel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.authorName,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(item.text),
-                      ],
-                    ),
-                  ),
+              AdminBlock(
+                title: 'Status history',
+                icon: Icons.history_rounded,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < details.history.length; i++)
+                      _historyRow(
+                        details.history[i],
+                        i == details.history.length - 1,
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
-              _SectionTitle('Decisions (${details.decisions.length})'),
-              if (details.decisions.isEmpty)
-                const Text(
-                  'No decision yet.',
-                  style: TextStyle(color: carShareMuted),
+              AdminBlock(
+                title: 'Evidence (${details.evidence.length})',
+                icon: Icons.attach_file_rounded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (details.evidence.isEmpty)
+                      const Text(
+                        'No evidence yet.',
+                        style: TextStyle(color: carShareMuted),
+                      ),
+                    for (var i = 0; i < details.evidence.length; i++) ...[
+                      if (i > 0) const Divider(height: 22),
+                      _evidenceRow(details.evidence[i], currentUserId),
+                    ],
+                    if (_canContribute) ...[
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                              onPressed: _working ? null : _addPhoto,
+                              icon: const Icon(
+                                Icons.add_photo_alternate_outlined,
+                              ),
+                              label: const Text('Add photo'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                              onPressed: _working ? null : _addDocument,
+                              icon: const Icon(Icons.attach_file_rounded),
+                              label: const Text('Add PDF'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              ...details.decisions.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _Panel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Decision ${item.decisionNumber}: ${item.result}',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 18),
+              AdminBlock(
+                title: 'Statements (${details.statements.length})',
+                icon: Icons.chat_bubble_outline_rounded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (details.statements.isEmpty)
+                      const Text(
+                        'No statements yet.',
+                        style: TextStyle(color: carShareMuted),
+                      ),
+                    for (var i = 0; i < details.statements.length; i++) ...[
+                      if (i > 0) const Divider(height: 22),
+                      Text(
+                        details.statements[i].authorName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: carShareText,
                         ),
-                        const SizedBox(height: 4),
-                        Text(item.reason),
-                        Text(
-                          'Penalty points: ${item.penaltyPoints}${item.finalDecision ? ' · Final' : ''}',
-                          style: const TextStyle(color: carShareMuted),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        details.statements[i].text,
+                        style: const TextStyle(height: 1.4),
+                      ),
+                    ],
+                    if (_canContribute &&
+                        !details.statements.any(
+                          (item) => item.authorId == currentUserId,
+                        )) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          onPressed: _working ? null : _addStatement,
+                          icon: const Icon(Icons.add_comment_outlined),
+                          label: const Text('Add your response'),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
+              const SizedBox(height: 18),
+              AdminBlock(
+                title: 'Decisions (${details.decisions.length})',
+                icon: Icons.gavel_outlined,
+                child: details.decisions.isEmpty
+                    ? const Text(
+                        'No decision yet.',
+                        style: TextStyle(color: carShareMuted),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (
+                            var i = 0;
+                            i < details.decisions.length;
+                            i++
+                          ) ...[
+                            if (i > 0) const Divider(height: 22),
+                            _decisionRow(details.decisions[i]),
+                          ],
+                        ],
+                      ),
               ),
               if (ticket.status == TicketStatus.resolved &&
                   details.decisions.isNotEmpty &&
                   !details.decisions.last.finalDecision) ...[
                 const SizedBox(height: 18),
                 OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 52),
+                    foregroundColor: carShareDanger,
+                    side: const BorderSide(
+                      color: carShareDangerTint,
+                      width: 1.5,
+                    ),
+                  ),
                   onPressed: _working ? null : _contest,
                   icon: const Icon(Icons.gavel_outlined),
                   label: const Text('Contest this decision'),
@@ -463,32 +402,133 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     );
   }
 
-  String _date(DateTime? value) {
-    if (value == null) return 'Recently';
-    return '${value.year}-${value.month.toString().padLeft(2, '0')}-'
-        '${value.day.toString().padLeft(2, '0')} '
-        '${value.hour.toString().padLeft(2, '0')}:'
-        '${value.minute.toString().padLeft(2, '0')}';
+  Widget _historyRow(dynamic item, bool last) => IntrinsicHeight(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Icon(Icons.circle, size: 10, color: supportGreen),
+            ),
+            if (!last)
+              Expanded(child: Container(width: 2, color: carShareTint)),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  humanize(item.toStatus),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: carShareText,
+                  ),
+                ),
+                Text(
+                  '${item.reason ?? 'Status updated'}',
+                  style: const TextStyle(color: carShareMuted, fontSize: 13),
+                ),
+                Text(
+                  _date(item.createdAt),
+                  style: const TextStyle(color: carShareMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _evidenceRow(TicketEvidenceItem item, String? currentUserId) => Row(
+    children: [
+      item.contentType.startsWith('image/')
+          ? _EvidenceThumbnail(ticketId: ticket.id, evidence: item)
+          : const AdminIconBadge(Icons.description_outlined, size: 48),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: carShareText,
+              ),
+            ),
+            Text(
+              '${humanize(item.type)} · ${_fileSize(item.fileSize)}',
+              style: const TextStyle(color: carShareMuted, fontSize: 13),
+            ),
+            Text(
+              'Added by ${item.uploadedByName ?? 'Unknown user'}',
+              style: const TextStyle(color: carShareMuted, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+      if (_canContribute && item.uploadedByUserId == currentUserId)
+        IconButton(
+          tooltip: 'Delete evidence',
+          onPressed: _working ? null : () => _deleteEvidence(item.id),
+          icon: const Icon(Icons.delete_outline),
+          color: carShareDanger,
+        ),
+    ],
+  );
+
+  Widget _decisionRow(dynamic item) {
+    final result = '${item.result}'.toUpperCase();
+    final colour = result == 'REJECTED'
+        ? carShareMuted
+        : result == 'PARTIAL'
+        ? carShareWarning
+        : carShareGreen;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Decision ${item.decisionNumber}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: carShareText,
+              ),
+            ),
+            const SizedBox(width: 8),
+            StatusChip(label: humanize(item.result), colour: colour),
+            if (item.finalDecision) ...[
+              const SizedBox(width: 6),
+              const AdminPill('Final', colour: carShareMuted),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text('${item.reason}', style: const TextStyle(height: 1.4)),
+        AdminInfoLine(
+          Icons.warning_amber_outlined,
+          'Penalty: ${item.penaltyPoints} ${item.penaltyPoints == 1 ? 'point' : 'points'}',
+          maxLines: 1,
+        ),
+      ],
+    );
   }
+
+  String _date(DateTime? value) => adminDateTime(value, fallback: 'Recently');
 
   String _fileSize(int bytes) => bytes < 1024 * 1024
       ? '${(bytes / 1024).toStringAsFixed(1)} KB'
       : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      color: carShareText,
-      fontSize: 14,
-      fontWeight: FontWeight.w800,
-    ),
-  );
 }
 
 class _StatusTimeline extends StatelessWidget {
@@ -499,7 +539,7 @@ class _StatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const steps = ['Open', 'Awaiting\nreply', 'Under\nreview', 'Resolved'];
+    const steps = ['Open', 'Awaiting reply', 'Under review', 'Resolved'];
     final currentStep = switch (status) {
       TicketStatus.open => 0,
       TicketStatus.awaitingResponse => 1,
@@ -511,25 +551,10 @@ class _StatusTimeline extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Ticket progress',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-              ),
-            ),
-            Text(
-              '$historyCount updates',
-              style: const TextStyle(color: carShareMuted, fontSize: 11),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
         if (status == TicketStatus.withdrawn)
           const Text(
             'This ticket was withdrawn.',
-            style: TextStyle(color: carShareMuted, fontSize: 12),
+            style: TextStyle(color: carShareMuted),
           )
         else
           Row(
@@ -544,14 +569,14 @@ class _StatusTimeline extends StatelessWidget {
                         if (index > 0)
                           Expanded(
                             child: Container(
-                              height: 2,
+                              height: 3,
                               color: index <= currentStep
                                   ? supportGreen
                                   : carShareBorder,
                             ),
                           ),
                         CircleAvatar(
-                          radius: 8,
+                          radius: 12,
                           backgroundColor: reached
                               ? supportGreen
                               : carShareBorder,
@@ -559,14 +584,14 @@ class _StatusTimeline extends StatelessWidget {
                               ? const Icon(
                                   Icons.check,
                                   color: Colors.white,
-                                  size: 10,
+                                  size: 14,
                                 )
                               : null,
                         ),
                         if (index < steps.length - 1)
                           Expanded(
                             child: Container(
-                              height: 2,
+                              height: 3,
                               color: index < currentStep
                                   ? supportGreen
                                   : carShareBorder,
@@ -574,14 +599,14 @@ class _StatusTimeline extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Text(
                       steps[index],
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: reached ? supportDarkGreen : carShareMuted,
-                        fontSize: 9,
-                        height: 1.15,
+                        fontSize: 12,
+                        height: 1.2,
                         fontWeight: reached ? FontWeight.w700 : FontWeight.w500,
                       ),
                     ),
@@ -591,14 +616,11 @@ class _StatusTimeline extends StatelessWidget {
             }),
           ),
         if (status == TicketStatus.contested) ...[
-          const SizedBox(height: 8),
-          const Text(
+          const SizedBox(height: 12),
+          const AdminPill(
             'Decision contested · under a second review',
-            style: TextStyle(
-              color: supportWarningText,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+            colour: supportWarningText,
+            icon: Icons.gavel_outlined,
           ),
         ],
       ],
@@ -612,20 +634,10 @@ class _DeadlineBadge extends StatelessWidget {
   final DateTime deadline;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: BoxDecoration(
-      color: supportWarningBackground,
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: Text(
-      'Due ${deadline.month}/${deadline.day}',
-      style: const TextStyle(
-        color: supportWarningText,
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
+  Widget build(BuildContext context) => AdminPill(
+    'Reply by ${adminDate(deadline)}',
+    colour: supportWarningText,
+    icon: Icons.timer_outlined,
   );
 }
 
@@ -748,19 +760,37 @@ class _SupportTextDialogState extends State<_SupportTextDialog> {
   );
 }
 
-class _Panel extends StatelessWidget {
-  const _Panel({required this.child});
-  final Widget child;
+/// A soft tinted note: who may do what on this ticket.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
 
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: carShareBorder),
+      color: carShareTint.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(16),
     ),
-    child: child,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: supportDarkGreen, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: supportDarkGreen,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    ),
   );
 }

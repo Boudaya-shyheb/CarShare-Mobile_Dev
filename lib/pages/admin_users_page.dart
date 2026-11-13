@@ -4,6 +4,7 @@ import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../widgets/resume_refresh.dart';
 import '../theme.dart';
+import '../widgets/admin_ui.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_chip.dart';
 
@@ -41,60 +42,93 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     await AuthService.instance.signOut();
   }
 
-  List<Map<String, dynamic>> _filterUsers(
-    List<Map<String, dynamic>> users,
-  ) {
+  List<Map<String, dynamic>> _filterUsers(List<Map<String, dynamic>> users) {
     final query = _search.text.trim().toLowerCase();
-    return users.where((user) {
-      final matchesSearch = query.isEmpty ||
-          [user['fullName'], user['email'], user['phone']]
-              .any((value) => '$value'.toLowerCase().contains(query));
-      final matchesRole =
-          _roleFilter == 'all' || user['role'] == _roleFilter;
-      final matchesStatus = _statusFilter == 'all' ||
-          user['status'] == _statusFilter.toUpperCase();
-      return matchesSearch && matchesRole && matchesStatus;
-    }).toList(growable: false);
+    return users
+        .where((user) {
+          final matchesSearch =
+              query.isEmpty ||
+              [
+                user['fullName'],
+                user['email'],
+                user['phone'],
+              ].any((value) => '$value'.toLowerCase().contains(query));
+          final matchesRole =
+              _roleFilter == 'all' || user['role'] == _roleFilter;
+          final matchesStatus =
+              _statusFilter == 'all' ||
+              user['status'] == _statusFilter.toUpperCase();
+          return matchesSearch && matchesRole && matchesStatus;
+        })
+        .toList(growable: false);
   }
 
   Future<void> _showDetails(Map<String, dynamic> user) async {
+    final name = user['fullName'] as String? ?? 'User account';
+    final status = user['status'] as String? ?? 'ACTIVE';
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         scrollable: true,
-        title: Text(user['fullName'] as String? ?? 'User account'),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+        title: Row(
+          children: [
+            InitialsAvatar(initials: _initial(name), size: 48),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      StatusChip(
+                        label: _label(status),
+                        colour: _statusColour(status),
+                      ),
+                      AdminPill(_label(user['role']), colour: carShareMuted),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _detail('Email', user['email']),
-            _detail('Phone', user['phone']),
-            _detail('Role', _label(user['role'])),
-            _detail('Status', _label(user['status'])),
-            _detail('Created', _date(user['createdAt'])),
+            AdminFact('Email', '${user['email'] ?? '—'}'),
+            AdminFact('Phone', '${user['phone'] ?? '—'}'),
+            AdminFact('Created', _date(user['createdAt'])),
             if (user['statusUntil'] != null)
-              _detail('Status ends', _date(user['statusUntil'])),
+              AdminFact('Status ends', _date(user['statusUntil'])),
             if ((user['statusReason'] as String? ?? '').isNotEmpty)
-              _detail('Status reason', user['statusReason']),
-            _detail(
+              AdminFact('Status reason', '${user['statusReason']}'),
+            AdminFact(
               'Profile photo',
               user['hasProfilePhoto'] == true ? 'Added' : 'Not added',
             ),
           ],
         ),
+        actionsAlignment: MainAxisAlignment.end,
+        actionsOverflowButtonSpacing: 8,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
           ),
-          TextButton(
+          OutlinedButton(
             onPressed: () {
               Navigator.pop(dialogContext);
               _editUser(user);
             },
             child: const Text('Edit account'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
               _changeStatus(user);
@@ -127,8 +161,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 TextFormField(
                   initialValue: fullName,
                   decoration: const InputDecoration(labelText: 'Full name'),
-                  validator: (value) =>
-                      value == null || value.trim().isEmpty
+                  validator: (value) => value == null || value.trim().isEmpty
                       ? 'Name is required.'
                       : null,
                   onSaved: (value) => fullName = value!.trim(),
@@ -137,7 +170,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   initialValue: phone,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(labelText: 'Phone'),
-                  validator: (value) => value == null ||
+                  validator: (value) =>
+                      value == null ||
                           !RegExp(r'^\+?[0-9][0-9\s().-]{5,19}$')
                               .hasMatch(value.trim())
                       ? 'Enter a valid phone number.'
@@ -148,7 +182,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   initialValue: email,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (value) => value == null ||
+                  validator: (value) =>
+                      value == null ||
                           !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
                               .hasMatch(value.trim())
                       ? 'Enter a valid email address.'
@@ -223,10 +258,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                    DropdownMenuItem(
-                      value: 'WARNING',
-                      child: Text('Warning'),
-                    ),
+                    DropdownMenuItem(value: 'WARNING', child: Text('Warning')),
                     DropdownMenuItem(
                       value: 'SUSPENDED',
                       child: Text('Suspended'),
@@ -241,9 +273,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
                     initialValue: durationDays,
-                    decoration: const InputDecoration(
-                      labelText: 'Duration',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Duration'),
                     items: const [
                       DropdownMenuItem(value: 7, child: Text('7 days')),
                       DropdownMenuItem(value: 30, child: Text('30 days')),
@@ -294,8 +324,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
     if (result == null) return;
 
-    final needsExpiry = result['status'] == 'WARNING' ||
-        result['status'] == 'SUSPENDED';
+    final needsExpiry =
+        result['status'] == 'WARNING' || result['status'] == 'SUSPENDED';
     final expiresAt = needsExpiry
         ? DateTime.now()
               .toUtc()
@@ -320,16 +350,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     try {
       await action();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(successMessage)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(successMessage)));
         _refresh();
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(authErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _working = false);
@@ -337,15 +365,13 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   }
 
   @override
-  Widget build(BuildContext context) => ResumeRefresh(
-    onResume: _refresh,
-    child: _buildScaffold(context),
-  );
+  Widget build(BuildContext context) =>
+      ResumeRefresh(onResume: _refresh, child: _buildScaffold(context));
 
   Widget _buildScaffold(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
     appBar: AppBar(
-      title: const Text('Admin · User accounts'),
+      title: const Text('CarShare Admin'),
       actions: [
         IconButton(
           onPressed: _working ? null : _refresh,
@@ -401,71 +427,31 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                       prefixIcon: Icon(Icons.search),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _roleFilter,
-                          decoration: const InputDecoration(labelText: 'Role'),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('All roles'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'passenger',
-                              child: Text('Passenger'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'driver',
-                              child: Text('Driver'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'admin',
-                              child: Text('Admin'),
-                            ),
-                          ],
-                          onChanged: (value) => setState(
-                            () => _roleFilter = value ?? 'all',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _statusFilter,
-                          decoration: const InputDecoration(
-                            labelText: 'Status',
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('All statuses'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'ACTIVE',
-                              child: Text('Active'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'WARNING',
-                              child: Text('Warning'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'SUSPENDED',
-                              child: Text('Suspended'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'BANNED',
-                              child: Text('Banned'),
-                            ),
-                          ],
-                          onChanged: (value) => setState(
-                            () => _statusFilter = value ?? 'all',
-                          ),
-                        ),
-                      ),
+                  const SizedBox(height: 12),
+                  _FilterRow(
+                    label: 'Role',
+                    selected: _roleFilter,
+                    options: const [
+                      ('all', 'All'),
+                      ('passenger', 'Passengers'),
+                      ('driver', 'Drivers'),
+                      ('admin', 'Admins'),
                     ],
+                    onSelected: (value) => setState(() => _roleFilter = value),
+                  ),
+                  const SizedBox(height: 8),
+                  _FilterRow(
+                    label: 'Status',
+                    selected: _statusFilter,
+                    options: const [
+                      ('all', 'All'),
+                      ('ACTIVE', 'Active'),
+                      ('WARNING', 'Warning'),
+                      ('SUSPENDED', 'Suspended'),
+                      ('BANNED', 'Banned'),
+                    ],
+                    onSelected: (value) =>
+                        setState(() => _statusFilter = value),
                   ),
                 ],
               ),
@@ -492,7 +478,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                         itemCount: users.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) => _userCard(users[index]),
+                        itemBuilder: (context, index) =>
+                            _userCard(users[index]),
                       ),
               ),
             ),
@@ -505,46 +492,56 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   Widget _userCard(Map<String, dynamic> user) {
     final name = user['fullName'] as String? ?? 'Unknown';
     final status = user['status'] as String? ?? 'ACTIVE';
-    return Card(
-      child: ListTile(
-        onTap: _working ? null : () => _showDetails(user),
-        leading: CircleAvatar(
-          backgroundColor: carShareTint,
-          child: Text(
-            name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
-            style: const TextStyle(color: carShareGreen),
+    return AdminCard(
+      onTap: _working ? null : () => _showDetails(user),
+      child: Row(
+        children: [
+          InitialsAvatar(initials: _initial(name), size: 48),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: carShareText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${user['email'] ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: carShareMuted, fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${user['phone'] ?? ''} · ${_label(user['role'])}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: carShareMuted, fontSize: 13),
+                ),
+              ],
+            ),
           ),
-        ),
-        title: Text(name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${user['email'] ?? ''}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              '${user['phone'] ?? ''} · ${_label(user['role'])}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: StatusChip(
-          label: _label(status),
-          colour: status == 'ACTIVE'
-              ? carShareGreen
-              : (status == 'BANNED' ? carShareDanger : carShareWarning),
-        ),
+          const SizedBox(width: 8),
+          StatusChip(label: _label(status), colour: _statusColour(status)),
+        ],
       ),
     );
   }
 
-  Widget _detail(String label, Object? value) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text('$label: ${value ?? '—'}'),
-  );
+  Color _statusColour(String status) => status == 'ACTIVE'
+      ? carShareGreen
+      : (status == 'BANNED' ? carShareDanger : carShareWarning);
+
+  String _initial(String name) =>
+      name.trim().isEmpty ? '?' : name.trim().substring(0, 1).toUpperCase();
 
   String _label(Object? value) {
     final text = '$value'.toLowerCase();
@@ -552,11 +549,65 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     return text[0].toUpperCase() + text.substring(1);
   }
 
-  String _date(Object? value) {
-    if (value == null) return '—';
-    final date = DateTime.tryParse('$value')?.toLocal();
-    if (date == null) return '$value';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
+  String _date(Object? value) => adminDate(value, fallback: '—');
+}
+
+/// A labelled row of choice chips: the filter of a list (one option selected at a time).
+class _FilterRow extends StatelessWidget {
+  const _FilterRow({
+    required this.label,
+    required this.selected,
+    required this.options,
+    required this.onSelected,
+  });
+
+  final String label;
+  final String selected;
+  final List<(String, String)> options;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 52,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: carShareMuted,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      Expanded(
+        child: SizedBox(
+          height: 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: options.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final (value, text) = options[index];
+              final on = value == selected;
+              return ChoiceChip(
+                label: Text(text),
+                selected: on,
+                showCheckmark: false,
+                onSelected: (_) => onSelected(value),
+                backgroundColor: Colors.white,
+                selectedColor: carShareGreen,
+                side: BorderSide(color: on ? carShareGreen : carShareBorder),
+                shape: const StadiumBorder(),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: on ? Colors.white : carShareMuted,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    ],
+  );
 }

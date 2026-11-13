@@ -9,7 +9,10 @@ import '../../models/support_ticket_detail.dart';
 import '../../services/support_service.dart';
 import '../../services/geo_service.dart';
 import '../../theme.dart';
+import '../../widgets/admin_ui.dart';
 import '../../widgets/form_field.dart';
+import '../../widgets/round_back_button.dart';
+import '../../widgets/status_chip.dart';
 import '../../widgets/support_status_badge.dart';
 import '../../services/auth_service.dart' show authErrorMessage;
 
@@ -120,14 +123,16 @@ class _AdminSupportTicketDetailsPageState
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
-    appBar: AppBar(
-      title: const Text('Support case'),
+    appBar: roundBackAppBar(
+      context,
+      title: 'Support case',
       actions: [
         IconButton(
           tooltip: 'Refresh',
           onPressed: _working ? null : _refresh,
           icon: const Icon(Icons.refresh_rounded),
         ),
+        const SizedBox(width: 12),
       ],
     ),
     body: FutureBuilder<AdminSupportTicketDetails>(
@@ -151,181 +156,246 @@ class _AdminSupportTicketDetailsPageState
 
   Widget _body(AdminSupportTicketDetails details) {
     final ticket = details.ticket;
+    final analysis = details.advanced?.analysis;
+    final sla = analysis == null ? null : _slaFromAnalysis(analysis);
+    final priority = priorityState(
+      analysis?.score ?? details.priorityScore ?? 0,
+    );
     return SafeArea(
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 620),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      ticket.reference,
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  SupportStatusBadge(status: ticket.status),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${details.openedByName} · ${details.openedByEmail}',
-                style: const TextStyle(color: carShareMuted),
-              ),
-              const SizedBox(height: 14),
-              _Panel(
+              // 1. The case itself: who, what, how urgent.
+              AdminCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      ticket.category,
-                      style: const TextStyle(
-                        color: supportDarkGreen,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            ticket.reference,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: carShareText,
+                            ),
+                          ),
+                        ),
+                        SupportStatusBadge(status: ticket.status),
+                      ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        AdminPill(
+                          '${priority.label} · ${analysis?.score ?? details.priorityScore ?? 0}',
+                          colour: priority.colour,
+                          icon: Icons.flag_outlined,
+                        ),
+                        if (sla != null)
+                          AdminPill(
+                            sla.label,
+                            colour: sla.colour,
+                            icon: Icons.timer_outlined,
+                          ),
+                        AdminPill(
+                          humanize(ticket.category),
+                          colour: supportDarkGreen,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
                     Text(
                       ticket.title,
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
+                        color: carShareText,
+                        height: 1.3,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(ticket.description),
-                    const SizedBox(height: 10),
                     Text(
-                      'Priority: ${details.priorityScore ?? 0} · Created ${ticket.createdLabel}',
-                      style: const TextStyle(
-                        color: carShareMuted,
-                        fontSize: 12,
-                      ),
+                      ticket.description,
+                      style: const TextStyle(color: carShareText, height: 1.45),
+                    ),
+                    const Divider(height: 28),
+                    AdminInfoLine(
+                      Icons.person_outline,
+                      '${details.openedByName} · ${details.openedByEmail}',
+                      maxLines: 2,
+                    ),
+                    AdminInfoLine(
+                      Icons.schedule,
+                      'Created ${ticket.createdLabel}',
+                      maxLines: 1,
                     ),
                     if (details.tripId != null)
-                      Text(
-                        'Trip: ${ticket.trip}${details.reservationId == null ? '' : '\nReservation reference: ${details.reservationId}'}',
-                        style: const TextStyle(
-                          color: carShareMuted,
-                          fontSize: 12,
-                        ),
+                      AdminInfoLine(
+                        Icons.route_outlined,
+                        'Trip: ${ticket.trip}',
                       ),
-                    if (ticket.reportedUserName != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
+                    if (ticket.reportedUserName != null)
+                      AdminInfoLine(
+                        Icons.report_outlined,
                         'Person concerned: ${ticket.reportedUserName} · ${ticket.reportedUserRoleLabel}',
-                        style: const TextStyle(
-                          color: supportDarkGreen,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
+                        colour: supportDarkGreen,
                       ),
-                    ],
-                    if (details.reportedUserId != null)
-                      Text(
-                        'Reported user: ${details.reportedUserId}',
-                        style: const TextStyle(
-                          color: carShareMuted,
-                          fontSize: 12,
-                        ),
+                    if (details.reservationId != null ||
+                        details.reportedUserId != null)
+                      AdminCollapsible(
+                        title: 'Show details',
+                        children: [
+                          if (details.reservationId != null)
+                            AdminFact(
+                              'Reservation',
+                              '${details.reservationId}',
+                            ),
+                          if (details.reportedUserId != null)
+                            AdminFact(
+                              'Reported user id',
+                              '${details.reportedUserId}',
+                            ),
+                        ],
                       ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              _advancedPanel(details),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              // 2. What the admin can do now.
               _actionButtons(ticket.status),
-              const SizedBox(height: 20),
-              _SectionTitle('Evidence', details.evidence.length),
-              if (details.evidence.isEmpty)
-                const _EmptyLine('No evidence was submitted.'),
-              ...details.evidence.map(
-                (item) => Card(
-                  child: ListTile(
-                    leading: item.contentType.startsWith('image/')
-                        ? _AdminEvidenceThumbnail(
-                            ticketId: ticket.id,
-                            evidence: item,
-                          )
-                        : const Icon(Icons.description_outlined),
-                    title: Text(item.fileName),
-                    subtitle: Text(
-                      '${item.type} · ${_fileSize(item.fileSize)}\n'
-                      'Added by ${item.uploadedByName ?? 'Unknown user'}',
-                    ),
-                    isThreeLine: true,
-                    trailing: IconButton(
-                      tooltip: 'Analyze evidence',
-                      onPressed: _working ? null : () => _analyze(item),
-                      icon: const Icon(Icons.analytics_outlined),
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 18),
-              _SectionTitle('Statements', details.statements.length),
-              if (details.statements.isEmpty)
-                const _EmptyLine('No statement was submitted.'),
-              ...details.statements.map(
-                (item) => _Panel(
-                  margin: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.authorName,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+              // 3. The advanced engine: priority, SLA, risk, analysis.
+              _advancedPanel(details),
+              const SizedBox(height: 18),
+              // 4. The file.
+              AdminBlock(
+                title: 'Evidence (${details.evidence.length})',
+                icon: Icons.attach_file_rounded,
+                child: details.evidence.isEmpty
+                    ? const Text(
+                        'No evidence was submitted.',
+                        style: TextStyle(color: carShareMuted),
+                      )
+                    : Column(
+                        children: [
+                          for (var i = 0; i < details.evidence.length; i++) ...[
+                            if (i > 0) const Divider(height: 22),
+                            _evidenceRow(ticket.id, details.evidence[i]),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 5),
-                      Text(item.text),
-                    ],
-                  ),
+              ),
+              const SizedBox(height: 18),
+              AdminBlock(
+                title: 'Statements (${details.statements.length})',
+                icon: Icons.chat_bubble_outline_rounded,
+                child: details.statements.isEmpty
+                    ? const Text(
+                        'No statement was submitted.',
+                        style: TextStyle(color: carShareMuted),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (
+                            var i = 0;
+                            i < details.statements.length;
+                            i++
+                          ) ...[
+                            if (i > 0) const Divider(height: 22),
+                            Text(
+                              details.statements[i].authorName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: carShareText,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              details.statements[i].text,
+                              style: const TextStyle(height: 1.4),
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 18),
+              AdminBlock(
+                title: 'Status history (${details.history.length})',
+                icon: Icons.history_rounded,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < details.history.length; i++)
+                      _historyRow(
+                        details.history[i],
+                        i == details.history.length - 1,
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
-              _SectionTitle('Status history', details.history.length),
-              ...details.history.map(
-                (item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
-                    Icons.check_circle_outline,
-                    color: supportGreen,
-                  ),
-                  title: Text(item.toStatus.replaceAll('_', ' ')),
-                  subtitle: Text(
-                    '${item.reason ?? 'Status updated'} · ${_date(item.createdAt)}',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _SectionTitle('Decisions', details.decisions.length),
-              if (details.decisions.isEmpty)
-                const _EmptyLine('No decision has been recorded.'),
-              ...details.decisions.map(
-                (item) => _Panel(
-                  margin: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Decision ${item.decisionNumber}: ${item.result}\n'
-                    '${item.reason}\nPenalty points: ${item.penaltyPoints}'
-                    '${item.finalDecision ? ' · Final' : ''}',
-                  ),
-                ),
+              AdminBlock(
+                title: 'Decisions (${details.decisions.length})',
+                icon: Icons.gavel_outlined,
+                child: details.decisions.isEmpty
+                    ? const Text(
+                        'No decision has been recorded.',
+                        style: TextStyle(color: carShareMuted),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (
+                            var i = 0;
+                            i < details.decisions.length;
+                            i++
+                          ) ...[
+                            if (i > 0) const Divider(height: 22),
+                            _decisionRow(details.decisions[i]),
+                          ],
+                        ],
+                      ),
               ),
               const SizedBox(height: 18),
-              _SectionTitle('Contestations', details.contestations.length),
-              if (details.contestations.isEmpty)
-                const _EmptyLine('No contestation was submitted.'),
-              ...details.contestations.map(
-                (item) => _Panel(
-                  margin: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '${item.userName} · ${_date(item.createdAt)}\n${item.reason}',
-                  ),
-                ),
+              AdminBlock(
+                title: 'Contestations (${details.contestations.length})',
+                icon: Icons.record_voice_over_outlined,
+                child: details.contestations.isEmpty
+                    ? const Text(
+                        'No contestation was submitted.',
+                        style: TextStyle(color: carShareMuted),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (
+                            var i = 0;
+                            i < details.contestations.length;
+                            i++
+                          ) ...[
+                            if (i > 0) const Divider(height: 22),
+                            Text(
+                              '${details.contestations[i].userName} · ${_date(details.contestations[i].createdAt)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: carShareText,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              details.contestations[i].reason,
+                              style: const TextStyle(height: 1.4),
+                            ),
+                          ],
+                        ],
+                      ),
               ),
             ],
           ),
@@ -334,63 +404,233 @@ class _AdminSupportTicketDetailsPageState
     );
   }
 
+  /// SLA label and colour from the engine's own numbers (remaining minutes, state).
+  ({String label, Color colour}) _slaFromAnalysis(dynamic analysis) {
+    final minutes = analysis.remainingMinutes as int;
+    final hours = minutes.abs() ~/ 60;
+    final days = hours ~/ 24;
+    final amount = days >= 2 ? '$days days' : '$hours h';
+    if (minutes < 0) {
+      return (label: 'SLA: overdue by $amount', colour: carShareDanger);
+    }
+    return (
+      label: 'SLA: $amount left',
+      colour: hours < 24 ? carShareWarning : carShareGreen,
+    );
+  }
+
+  Widget _evidenceRow(String ticketId, TicketEvidenceItem item) => Row(
+    children: [
+      item.contentType.startsWith('image/')
+          ? _AdminEvidenceThumbnail(ticketId: ticketId, evidence: item)
+          : const AdminIconBadge(Icons.description_outlined, size: 48),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: carShareText,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${humanize(item.type)} · ${_fileSize(item.fileSize)}',
+              style: const TextStyle(color: carShareMuted, fontSize: 13),
+            ),
+            Text(
+              'Added by ${item.uploadedByName ?? 'Unknown user'}',
+              style: const TextStyle(color: carShareMuted, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+      IconButton.filledTonal(
+        tooltip: 'Analyze evidence',
+        style: IconButton.styleFrom(
+          backgroundColor: carShareTint,
+          foregroundColor: carShareGreenDark,
+          minimumSize: const Size(44, 44),
+        ),
+        onPressed: _working ? null : () => _analyze(item),
+        icon: const Icon(Icons.analytics_outlined),
+      ),
+    ],
+  );
+
+  Widget _historyRow(dynamic item, bool last) => IntrinsicHeight(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Icon(Icons.circle, size: 10, color: carShareGreen),
+            ),
+            if (!last)
+              Expanded(child: Container(width: 2, color: carShareTint)),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  humanize(item.toStatus),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: carShareText,
+                  ),
+                ),
+                Text(
+                  '${item.reason ?? 'Status updated'}',
+                  style: const TextStyle(color: carShareMuted, fontSize: 13),
+                ),
+                Text(
+                  _date(item.createdAt),
+                  style: const TextStyle(color: carShareMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _decisionRow(dynamic item) {
+    final result = '${item.result}'.toUpperCase();
+    final colour = result == 'REJECTED'
+        ? carShareMuted
+        : result == 'PARTIAL'
+        ? carShareWarning
+        : carShareGreen;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Decision ${item.decisionNumber}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: carShareText,
+              ),
+            ),
+            const SizedBox(width: 8),
+            StatusChip(label: humanize(item.result), colour: colour),
+            if (item.finalDecision) ...[
+              const SizedBox(width: 6),
+              const AdminPill('Final', colour: carShareMuted),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text('${item.reason}', style: const TextStyle(height: 1.4)),
+        AdminInfoLine(
+          Icons.warning_amber_outlined,
+          'Penalty: ${item.penaltyPoints} ${item.penaltyPoints == 1 ? 'point' : 'points'}',
+          maxLines: 1,
+        ),
+      ],
+    );
+  }
+
   Widget _actionButtons(TicketStatus status) {
     final buttons = <Widget>[];
-    if (status == TicketStatus.open) {
-      buttons.add(
+    Widget secondary(String label, IconData icon, VoidCallback onTap) =>
         OutlinedButton.icon(
-          onPressed: _working
-              ? null
-              : () => _changeStatus('AWAITING_RESPONSE', 'Request a response'),
-          icon: const Icon(Icons.question_answer_outlined),
-          label: const Text('Request response'),
-        ),
-      );
-    }
-    if (status == TicketStatus.open ||
-        status == TicketStatus.awaitingResponse ||
-        status == TicketStatus.contested) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: _working
-              ? null
-              : () => _changeStatus('UNDER_REVIEW', 'Start review'),
-          icon: const Icon(Icons.manage_search_outlined),
-          label: const Text('Start review'),
-        ),
-      );
-    }
+          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: _working ? null : onTap,
+          icon: Icon(icon),
+          label: Text(label),
+        );
     if (status == TicketStatus.open ||
         status == TicketStatus.awaitingResponse ||
         status == TicketStatus.underReview ||
         status == TicketStatus.contested) {
       buttons.add(
         FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
           onPressed: _working ? null : _recordDecision,
           icon: const Icon(Icons.gavel_outlined),
           label: const Text('Record decision'),
         ),
       );
     }
-    if (status == TicketStatus.resolved) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: _working
-              ? null
-              : () => _changeStatus('CLOSED', 'Close ticket'),
-          icon: const Icon(Icons.lock_outline),
-          label: const Text('Close ticket'),
+    final others = <Widget>[];
+    if (status == TicketStatus.open) {
+      others.add(
+        secondary(
+          'Request response',
+          Icons.question_answer_outlined,
+          () => _changeStatus('AWAITING_RESPONSE', 'Request a response'),
         ),
       );
     }
-    return Wrap(spacing: 8, runSpacing: 8, children: buttons);
+    if (status == TicketStatus.open ||
+        status == TicketStatus.awaitingResponse ||
+        status == TicketStatus.contested) {
+      others.add(
+        secondary(
+          'Start review',
+          Icons.manage_search_outlined,
+          () => _changeStatus('UNDER_REVIEW', 'Start review'),
+        ),
+      );
+    }
+    if (status == TicketStatus.resolved) {
+      others.add(
+        secondary(
+          'Close ticket',
+          Icons.lock_outline,
+          () => _changeStatus('CLOSED', 'Close ticket'),
+        ),
+      );
+    }
+    if (others.isNotEmpty) {
+      buttons.add(
+        Row(
+          children: [
+            for (var i = 0; i < others.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: others[i]),
+            ],
+          ],
+        ),
+      );
+    }
+    if (buttons.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < buttons.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          buttons[i],
+        ],
+      ],
+    );
   }
 
   Widget _advancedPanel(AdminSupportTicketDetails details) {
     final advanced = details.advanced;
     if (advanced == null) {
-      return const _Panel(
-        child: Text('Advanced Support analysis is unavailable.'),
+      return const AdminBlock(
+        title: 'Analysis',
+        icon: Icons.auto_awesome_outlined,
+        child: Text(
+          'Advanced Support analysis is unavailable.',
+          style: TextStyle(color: carShareMuted),
+        ),
       );
     }
     final analysis = advanced.analysis;
@@ -405,77 +645,107 @@ class _AdminSupportTicketDetailsPageState
     final positiveSignals = analysis.riskSignals
         .where((item) => !item.negated)
         .toList(growable: false);
-    return _Panel(
+    final sla = _slaFromAnalysis(analysis);
+    final priority = priorityState(analysis.score);
+    return AdminBlock(
+      title: 'Priority and analysis',
+      icon: Icons.auto_awesome_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.auto_awesome_outlined, color: supportGreen),
-              SizedBox(width: 8),
-              Text(
-                'Advanced Support engine',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _InfoChip(label: 'Priority ${analysis.score}'),
-              _InfoChip(label: 'SLA ${analysis.slaState.replaceAll('_', ' ')}'),
-              _InfoChip(label: _remainingLabel(analysis.remainingMinutes)),
+              AdminPill(
+                'Priority ${priority.label} · ${analysis.score}',
+                colour: priority.colour,
+                icon: Icons.flag_outlined,
+              ),
+              AdminPill(
+                sla.label,
+                colour: sla.colour,
+                icon: Icons.timer_outlined,
+              ),
+              AdminPill(
+                'SLA ${humanize(analysis.slaState).toLowerCase()}',
+                colour: carShareMuted,
+              ),
             ],
           ),
-          const SizedBox(height: 9),
-          Text(
-            'Score: severity ${analysis.severity} x10 + reports '
-            '${analysis.reportCount} x5 + infractions '
-            '${analysis.previousInfractions} x3 + waiting '
-            '${analysis.waitingHours} h x0.5',
-            style: const TextStyle(color: carShareMuted, fontSize: 12),
-          ),
           if (positiveSignals.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Human review recommended: '
-              '${positiveSignals.map((item) => item.term).join(', ')}',
-              style: const TextStyle(
-                color: Colors.deepOrange,
-                fontWeight: FontWeight.w700,
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: carShareWarningTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.visibility_outlined,
+                    size: 18,
+                    color: supportWarningText,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Human review recommended: '
+                      '${positiveSignals.map((item) => item.term).join(', ')}',
+                      style: const TextStyle(
+                        color: supportWarningText,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
           if (advanced.escalations.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             ...advanced.escalations.map(
-              (item) => Text(
-                '- ${item.type.replaceAll('_', ' ')}: ${item.message}',
-                style: const TextStyle(fontSize: 12),
+              (item) => AdminInfoLine(
+                Icons.trending_up_rounded,
+                '${humanize(item.type)}: ${item.message}',
+                colour: carShareDanger,
               ),
             ),
           ],
-          const Divider(height: 24),
+          const Divider(height: 28),
+          const Text(
+            'Assignment',
+            style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
+          ),
+          const SizedBox(height: 6),
           Text(
             advanced.assignedAgentName == null
-                ? 'Assigned agent: none'
-                : 'Assigned agent: ${advanced.assignedAgentName}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+                ? 'No agent assigned yet'
+                : 'Assigned to ${advanced.assignedAgentName}',
+            style: TextStyle(
+              color: advanced.assignedAgentName == null
+                  ? carShareMuted
+                  : carShareText,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           if (pendingProposal != null)
-            Text(
-              'Proposal: ${pendingProposal.agentName} '
-              '(${pendingProposal.algorithm})\n${pendingProposal.explanation}',
-              style: const TextStyle(color: carShareMuted, fontSize: 12),
+            AdminInfoLine(
+              Icons.person_search_outlined,
+              'Proposal: ${pendingProposal.agentName} (${pendingProposal.algorithm}). ${pendingProposal.explanation}',
+              maxLines: 6,
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Wrap(
-            spacing: 7,
-            runSpacing: 7,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
                 onPressed: _working
                     ? null
                     : () => _run(
@@ -488,6 +758,7 @@ class _AdminSupportTicketDetailsPageState
                 label: const Text('Recalculate'),
               ),
               OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
                 onPressed: _working
                     ? null
                     : () => _run(
@@ -501,6 +772,7 @@ class _AdminSupportTicketDetailsPageState
               ),
               if (pendingProposal != null)
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
                   onPressed: _working
                       ? null
                       : () => _run(
@@ -515,88 +787,144 @@ class _AdminSupportTicketDetailsPageState
                 ),
             ],
           ),
-          if (advanced.evidenceAnalyses.isNotEmpty) ...[
-            const Divider(height: 24),
-            const Text(
-              'Evidence analysis',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            ...advanced.evidenceAnalyses.map(
-              (item) => Text(
-                '${item.isComplete ? 'Complete' : item.isPartial ? 'Partial' : item.status}: '
-                '${item.detectedType ?? 'unknown type'} - '
-                'SHA-256 ${item.sha256.length > 12 ? item.sha256.substring(0, 12) : item.sha256}...'
-                '${item.duplicateEvidenceId == null ? '' : ' - duplicate detected'}'
-                '${item.errorMessage == null ? '' : '\n${item.errorMessage}'}',
-                style: const TextStyle(fontSize: 12),
+          const Divider(height: 28),
+          // The technical detail stays one tap away, not in the way.
+          AdminCollapsible(
+            title: 'Show details',
+            children: [
+              const Text(
+                'How the score is made',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: carShareText,
+                ),
               ),
-            ),
-          ],
-          if (details.tripId != null) ...[
-            const Divider(height: 24),
-            const Text(
-              'Trip context',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            if (advanced.weather != null)
+              const SizedBox(height: 4),
               Text(
-                _weatherLabel(advanced.weather!),
-                style: const TextStyle(fontSize: 12),
+                'Severity ${analysis.severity} x10 + reports ${analysis.reportCount} x5 + '
+                'infractions ${analysis.previousInfractions} x3 + waiting '
+                '${analysis.waitingHours} h x0.5 = ${analysis.score}',
+                style: const TextStyle(color: carShareMuted, height: 1.4),
               ),
-            if (advanced.geo != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _geoLabel(advanced.geo!),
-                style: const TextStyle(fontSize: 12),
+              AdminInfoLine(
+                Icons.timer_outlined,
+                _remainingLabel(analysis.remainingMinutes),
+                maxLines: 1,
               ),
-              const SizedBox(height: 8),
-              Text(
-                _routeLabel(advanced.geo!),
-                style: const TextStyle(fontSize: 12),
-              ),
-              if (advanced.geo!.routePolyline?.isNotEmpty == true) ...[
-                const SizedBox(height: 9),
-                _SupportRouteMap(geo: advanced.geo!),
+              if (advanced.evidenceAnalyses.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Evidence analysis',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: carShareText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...advanced.evidenceAnalyses.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '${item.isComplete
+                          ? 'Complete'
+                          : item.isPartial
+                          ? 'Partial'
+                          : item.status}: '
+                      '${item.detectedType ?? 'unknown type'} - '
+                      'SHA-256 ${item.sha256.length > 12 ? item.sha256.substring(0, 12) : item.sha256}...'
+                      '${item.duplicateEvidenceId == null ? '' : ' - duplicate detected'}'
+                      '${item.errorMessage == null ? '' : '\n${item.errorMessage}'}',
+                      style: const TextStyle(
+                        color: carShareMuted,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (details.tripId != null) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Trip context',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: carShareText,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (advanced.weather != null)
+                  Text(
+                    _weatherLabel(advanced.weather!),
+                    style: const TextStyle(
+                      color: carShareMuted,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                if (advanced.geo != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _geoLabel(advanced.geo!),
+                    style: const TextStyle(
+                      color: carShareMuted,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _routeLabel(advanced.geo!),
+                    style: const TextStyle(
+                      color: carShareMuted,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (advanced.geo!.routePolyline?.isNotEmpty == true) ...[
+                    const SizedBox(height: 10),
+                    _SupportRouteMap(geo: advanced.geo!),
+                  ],
+                ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _working
+                          ? null
+                          : () => _run(
+                              () => SupportService.instance.refreshWeather(
+                                widget.ticketId,
+                              ),
+                              'Historical weather refreshed.',
+                            ),
+                      icon: const Icon(Icons.cloud_outlined),
+                      label: const Text('Weather'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _working
+                          ? null
+                          : () => _run(
+                              () => SupportService.instance.refreshGeo(
+                                widget.ticketId,
+                              ),
+                              'Geographic context refreshed.',
+                            ),
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('Places & route'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'External context helps investigation; it is not automatic proof.',
+                  style: TextStyle(color: carShareMuted, fontSize: 12),
+                ),
               ],
             ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _working
-                      ? null
-                      : () => _run(
-                          () => SupportService.instance.refreshWeather(
-                            widget.ticketId,
-                          ),
-                          'Historical weather refreshed.',
-                        ),
-                  icon: const Icon(Icons.cloud_outlined),
-                  label: const Text('Weather'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _working
-                      ? null
-                      : () => _run(
-                          () => SupportService.instance.refreshGeo(
-                            widget.ticketId,
-                          ),
-                          'Geographic context refreshed.',
-                        ),
-                  icon: const Icon(Icons.map_outlined),
-                  label: const Text('Places & route'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              'External context helps investigation; it is not automatic proof.',
-              style: TextStyle(color: carShareMuted, fontSize: 11),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -684,13 +1012,8 @@ class _AdminSupportTicketDetailsPageState
         'Conclusion: $verdict';
   }
 
-  static String _date(DateTime? value) {
-    if (value == null) return 'Recently';
-    return '${value.year}-${value.month.toString().padLeft(2, '0')}-'
-        '${value.day.toString().padLeft(2, '0')} '
-        '${value.hour.toString().padLeft(2, '0')}:'
-        '${value.minute.toString().padLeft(2, '0')}';
-  }
+  static String _date(DateTime? value) =>
+      adminDateTime(value, fallback: 'Recently');
 
   static String _fileSize(int bytes) => bytes < 1024 * 1024
       ? '${(bytes / 1024).toStringAsFixed(1)} KB'
@@ -1035,71 +1358,6 @@ class _DecisionInput {
   final int penaltyPoints;
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label, this.count);
-  final String label;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    '$label ($count)',
-    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-  );
-}
-
-class _EmptyLine extends StatelessWidget {
-  const _EmptyLine(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: Text(text, style: const TextStyle(color: carShareMuted)),
-  );
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-    decoration: BoxDecoration(
-      color: carShareTint,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: supportDarkGreen,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({required this.child, this.margin});
-  final Widget child;
-  final EdgeInsetsGeometry? margin;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    margin: margin,
-    padding: const EdgeInsets.all(13),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: carShareBorder),
-    ),
-    child: child,
-  );
-}
-
 /// What an evidence analysis found: its status, the reason when it is only partial, the file's
 /// hash, whether the same file was uploaded elsewhere, and the start of the extracted text.
 class _AnalysisSheet extends StatelessWidget {
@@ -1146,7 +1404,10 @@ class _AnalysisSheet extends StatelessWidget {
                         : result.isPartial
                         ? 'Partial'
                         : result.status,
-                    style: TextStyle(color: colour, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      color: colour,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],

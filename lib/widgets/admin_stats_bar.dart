@@ -36,7 +36,7 @@ class _AdminStatsBarState extends State<AdminStatsBar> {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 66,
+    height: 70,
     decoration: const BoxDecoration(
       color: Colors.white,
       border: Border(bottom: BorderSide(color: carShareBorder)),
@@ -83,7 +83,7 @@ class _AdminStatsBarState extends State<AdminStatsBar> {
         // the AppBar refresh below reloads the list.
         return ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           itemCount: counters.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) =>
@@ -102,7 +102,8 @@ class _Counter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14),
+    width: 96,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
       color: carShareTint,
       borderRadius: BorderRadius.circular(14),
@@ -114,13 +115,18 @@ class _Counter extends StatelessWidget {
         Text(
           '$value',
           style: const TextStyle(
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
             color: carShareText,
             height: 1.1,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 11, color: carShareMuted)),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12, color: carShareMuted),
+        ),
       ],
     ),
   );

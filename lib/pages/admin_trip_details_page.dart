@@ -7,8 +7,10 @@ import '../models/trip_event.dart';
 import '../services/admin_service.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/admin_ui.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/form_field.dart';
+import '../widgets/round_back_button.dart';
 import '../widgets/route_title.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/trip_formats.dart';
@@ -63,7 +65,7 @@ class _AdminTripDetailsPageState extends State<AdminTripDetailsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
-    appBar: AppBar(title: const Text('Trip details')),
+    appBar: roundBackAppBar(context, title: 'Trip details'),
     body: FutureBuilder<AdminTripDetail>(
       future: _detail,
       builder: (context, snapshot) {
@@ -105,8 +107,18 @@ class _AdminTripDetailsPageState extends State<AdminTripDetailsPage> {
       if (detail.events.isEmpty)
         const _EmptyLine('Nothing has happened yet.')
       else
-        for (final event in detail.events)
-          _EventRow(event: event, who: _actorName(detail, event)),
+        AdminCard(
+          child: Column(
+            children: [
+              for (var i = 0; i < detail.events.length; i++)
+                _EventRow(
+                  event: detail.events[i],
+                  who: _actorName(detail, detail.events[i]),
+                  last: i == detail.events.length - 1,
+                ),
+            ],
+          ),
+        ),
       if (_canCancel(trip)) ...[
         const SizedBox(height: 22),
         OutlinedButton.icon(
@@ -162,13 +174,7 @@ class _InfoCard extends StatelessWidget {
   final Trip trip;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(carShareCardRadius),
-      border: Border.all(color: carShareBorder),
-    ),
+  Widget build(BuildContext context) => AdminCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -195,56 +201,19 @@ class _InfoCard extends StatelessWidget {
           fontSize: 19,
         ),
         const SizedBox(height: 10),
-        _Fact(label: 'From', value: trip.originLabel),
-        _Fact(label: 'To', value: trip.destinationLabel),
-        _Fact(label: 'Driver', value: trip.driverName ?? 'Unknown'),
-        _Fact(
-          label: 'Seats',
-          value:
-              '${trip.seatsTotal - trip.seatsAvailable} taken of ${trip.seatsTotal}',
+        const Divider(height: 24),
+        AdminFact('From', trip.originLabel),
+        AdminFact('To', trip.destinationLabel),
+        AdminFact('Driver', trip.driverName ?? 'Unknown'),
+        AdminFact(
+          'Seats',
+          '${trip.seatsTotal - trip.seatsAvailable} taken of ${trip.seatsTotal}',
         ),
-        _Fact(
-          label: 'Price',
-          value: '${formatPrice(trip.pricePerSeat)} per seat',
-        ),
+        AdminFact('Price', '${formatPrice(trip.pricePerSeat)} per seat'),
         if (trip.cancelReason != null)
-          _Fact(label: 'Cancel reason', value: trip.cancelReason!),
+          AdminFact('Cancel reason', trip.cancelReason!),
         if (trip.notes != null && trip.notes!.isNotEmpty)
-          _Fact(label: 'Notes', value: trip.notes!),
-      ],
-    ),
-  );
-}
-
-class _Fact extends StatelessWidget {
-  const _Fact({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 6),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 104,
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 13, color: carShareMuted),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: carShareText,
-            ),
-          ),
-        ),
+          AdminFact('Notes', trip.notes!),
       ],
     ),
   );
@@ -287,87 +256,92 @@ class _PassengerRow extends StatelessWidget {
   final PassengerView passenger;
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: carShareBorder),
-    ),
-    child: Row(
-      children: [
-        InitialsAvatar(initials: initialsOf(passenger.passengerName)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                passenger.passengerName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: carShareText,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: AdminCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          InitialsAvatar(initials: initialsOf(passenger.passengerName)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  passenger.passengerName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: carShareText,
+                  ),
                 ),
-              ),
-              Text(
-                [
-                  formatSeats(passenger.seats),
-                  if (passenger.cancelReason != null) passenger.cancelReason!,
-                ].join(' · '),
-                style: const TextStyle(fontSize: 13, color: carShareMuted),
-              ),
-            ],
+                Text(
+                  [
+                    formatSeats(passenger.seats),
+                    if (passenger.cancelReason != null) passenger.cancelReason!,
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 13, color: carShareMuted),
+                ),
+              ],
+            ),
           ),
-        ),
-        StatusChip(
-          label: reservationStatusLabel(passenger.status),
-          colour: reservationStatusColour(passenger.status),
-        ),
-      ],
+          StatusChip(
+            label: reservationStatusLabel(passenger.status),
+            colour: reservationStatusColour(passenger.status),
+          ),
+        ],
+      ),
     ),
   );
 }
 
 class _EventRow extends StatelessWidget {
-  const _EventRow({required this.event, required this.who});
+  const _EventRow({required this.event, required this.who, this.last = false});
 
   final TripEvent event;
   final String who;
+  final bool last;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
+  Widget build(BuildContext context) => IntrinsicHeight(
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          width: 92,
-          child: Text(
-            formatWhen(event.createdAt),
-            style: const TextStyle(fontSize: 12, color: carShareMuted),
-          ),
+        Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 5),
+              child: Icon(Icons.circle, size: 10, color: carShareGreen),
+            ),
+            if (!last)
+              Expanded(child: Container(width: 2, color: carShareTint)),
+          ],
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 4, right: 10),
-          child: Icon(Icons.circle, size: 9, color: carShareGreen),
-        ),
+        const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                prettyStatus(event.type),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: carShareText,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  prettyStatus(event.type),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: carShareText,
+                  ),
                 ),
-              ),
-              Text(
-                [who, if (event.detail != null) event.detail!].join(' · '),
-                style: const TextStyle(fontSize: 13, color: carShareMuted),
-              ),
-            ],
+                Text(
+                  [who, if (event.detail != null) event.detail!].join(' · '),
+                  style: const TextStyle(fontSize: 13, color: carShareMuted),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  formatWhen(event.createdAt),
+                  style: const TextStyle(fontSize: 12, color: carShareMuted),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -439,12 +413,13 @@ class _CancelDialogState extends State<_CancelDialog> {
         onPressed: () => Navigator.of(context).pop(),
         child: const Text('Keep trip'),
       ),
-      TextButton(
-        onPressed: _confirm,
-        child: const Text(
-          'Cancel trip',
-          style: TextStyle(color: carShareDanger),
+      FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: carShareDanger,
+          minimumSize: const Size(64, 44),
         ),
+        onPressed: _confirm,
+        child: const Text('Cancel trip'),
       ),
     ],
   );

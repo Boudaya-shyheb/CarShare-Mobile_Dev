@@ -246,11 +246,11 @@ class _EvidenceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(9),
+    padding: const EdgeInsets.all(10),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: carShareBorder),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [carShareCardShadow],
     ),
     child: Row(
       children: [
@@ -280,7 +280,7 @@ class _EvidenceTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: carShareText,
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),

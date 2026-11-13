@@ -6,6 +6,8 @@ import '../../models/support_ticket.dart';
 import '../../services/auth_service.dart';
 import '../../services/support_service.dart';
 import '../../theme.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/round_back_button.dart';
 import '../../widgets/support_ticket_card.dart';
 import 'report_problem_page.dart';
 import 'support_notifications_page.dart';
@@ -98,20 +100,12 @@ class _SupportPageState extends State<SupportPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
-    appBar: AppBar(
-      backgroundColor: carShareBackground,
-      surfaceTintColor: carShareBackground,
-      leading: widget.onNavigateToTab == null
+    appBar: roundBackAppBar(
+      context,
+      onBack: widget.onNavigateToTab == null
           ? null
-          : IconButton(
-              tooltip: 'Back to profile',
-              onPressed: () => widget.onNavigateToTab!(3),
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-      title: const Text(
-        'Support',
-        style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
-      ),
+          : () => widget.onNavigateToTab!(3),
+      title: 'Support',
       actions: [
         IconButton(
           tooltip: 'Support notifications',
@@ -135,6 +129,7 @@ class _SupportPageState extends State<SupportPage> {
           onPressed: _refresh,
           icon: const Icon(Icons.refresh_rounded),
         ),
+        const SizedBox(width: 12),
       ],
     ),
     body: FutureBuilder<List<SupportTicket>>(
@@ -145,13 +140,15 @@ class _SupportPageState extends State<SupportPage> {
         }
         if (snapshot.hasError) {
           return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('${snapshot.error}', textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
+                  EmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Could not load your tickets',
+                    line: authErrorMessage(snapshot.error!),
+                  ),
                   OutlinedButton(
                     onPressed: _refresh,
                     child: const Text('Try again'),
@@ -271,8 +268,8 @@ class _TicketTabs extends StatelessWidget {
     padding: const EdgeInsets.all(4),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: carShareBorder),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [carShareCardShadow],
     ),
     child: Row(
       children: [
@@ -295,35 +292,10 @@ class _EmptyTickets extends StatelessWidget {
   const _EmptyTickets({required this.showOpen});
   final bool showOpen;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.support_agent_outlined,
-            color: supportGreen,
-            size: 38,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            showOpen ? 'No open tickets' : 'No resolved tickets',
-            style: const TextStyle(
-              color: carShareText,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 5),
-          const Text(
-            'Your support requests will appear here.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: carShareMuted, fontSize: 13),
-          ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => EmptyState(
+    icon: Icons.support_agent_outlined,
+    title: showOpen ? 'No open tickets' : 'No resolved tickets',
+    line: 'Your support requests will appear here.',
   );
 }
 
@@ -340,19 +312,19 @@ class _TabButton extends StatelessWidget {
   Widget build(BuildContext context) => Expanded(
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
           color: selected ? supportGreen : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: selected ? Colors.white : carShareMuted,
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
         ),

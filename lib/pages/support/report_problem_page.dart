@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/support_service.dart';
 import '../../theme.dart';
 import '../../widgets/form_field.dart';
+import '../../widgets/round_back_button.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/route_title.dart';
 import '../../widgets/support_evidence_section.dart';
@@ -302,14 +303,7 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: carShareBackground,
-    appBar: AppBar(
-      backgroundColor: carShareBackground,
-      surfaceTintColor: carShareBackground,
-      title: const Text(
-        'Report a problem',
-        style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
-      ),
-    ),
+    appBar: roundBackAppBar(context, title: 'Report a problem'),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -426,8 +420,8 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                   controller: _description,
                   label: 'Description',
                   icon: Icons.notes_rounded,
-                  minLines: 4,
-                  maxLines: 5,
+                  minLines: 5,
+                  maxLines: 6,
                   hintText:
                       'Describe what happened and include any useful details.',
                   validator: (value) => value == null || value.trim().isEmpty
@@ -442,12 +436,12 @@ class _ReportProblemPageState extends State<ReportProblemPage> {
                       '${_evidenceFiles.length}/3',
                       style: const TextStyle(
                         color: carShareMuted,
-                        fontSize: 12,
+                        fontSize: 13,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -518,11 +512,11 @@ class _AttachedTripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.only(bottom: 18),
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: carShareBorder),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [carShareCardShadow],
     ),
     child: Row(
       children: [
@@ -593,13 +587,16 @@ class _CategoryOption extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 8),
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: selected ? carShareTint : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? supportGreen : carShareBorder),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? supportGreen : carShareBorder,
+            width: selected ? 1.5 : 1,
+          ),
         ),
         child: Row(
           children: [
@@ -611,7 +608,11 @@ class _CategoryOption extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               label,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: carShareText,
+              ),
             ),
           ],
         ),
@@ -630,7 +631,7 @@ class _SectionTitle extends StatelessWidget {
     label,
     style: const TextStyle(
       color: carShareText,
-      fontSize: 13,
+      fontSize: 16,
       fontWeight: FontWeight.w800,
     ),
   );

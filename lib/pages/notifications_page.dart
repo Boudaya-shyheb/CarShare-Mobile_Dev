@@ -8,7 +8,10 @@ import '../services/auth_service.dart';
 import '../services/lost_and_found_notification_service.dart';
 import '../services/support_service.dart';
 import '../theme.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/notification_filter_bar.dart';
 import '../widgets/resume_refresh.dart';
+import '../widgets/round_back_button.dart';
 import 'lost_and_found_page.dart';
 import 'support/support_notifications_page.dart';
 
@@ -32,6 +35,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   int _supportUnread = 0;
   int _lostAndFoundUnread = 0;
   bool _marking = false;
+  bool _lfUnreadOnly = false;
   late Future<List<LostAndFoundNotification>> _lostAndFound =
       _loadLostAndFound();
   Timer? _timer;
@@ -141,13 +145,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
     onResume: _refreshAll,
     child: Scaffold(
       backgroundColor: carShareBackground,
-      appBar: AppBar(
-        backgroundColor: carShareBackground,
-        surfaceTintColor: carShareBackground,
-        title: const Text(
-          'Notifications',
-          style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
-        ),
+      appBar: roundBackAppBar(
+        context,
+        title: 'Notifications',
         actions: [
           IconButton(
             tooltip: 'Mark all as read',
@@ -159,6 +159,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             onPressed: _refreshAll,
             icon: const Icon(Icons.refresh_rounded),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: Column(
@@ -214,69 +215,60 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  Text(
-                    authErrorMessage(snapshot.error!),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: carShareMuted),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _refreshAll,
-                    child: const Text('Try again'),
-                  ),
-                ],
+            EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load the updates',
+              line: authErrorMessage(snapshot.error!),
+            ),
+            Center(
+              child: OutlinedButton(
+                onPressed: _refreshAll,
+                child: const Text('Try again'),
               ),
             ),
           ],
         );
       }
-      final rows = snapshot.data ?? const <LostAndFoundNotification>[];
+      final all = snapshot.data ?? const <LostAndFoundNotification>[];
+      final unread = all.where((item) => !item.read).length;
+      final rows = _lfUnreadOnly
+          ? all.where((item) => !item.read).toList(growable: false)
+          : all;
       return RefreshIndicator(
         onRefresh: _refreshAll,
-        child: rows.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 90),
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    size: 44,
-                    color: carShareMuted,
-                  ),
-                  SizedBox(height: 10),
-                  Center(
-                    child: Text(
-                      'No Lost & Found updates yet',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: carShareText,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Text(
-                      'You will hear about matches, meetings and returns here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: carShareMuted),
-                    ),
-                  ),
-                ],
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: [
+            NotificationFilterBar(
+              summary: unread == 0
+                  ? 'You are all caught up'
+                  : '$unread unread of ${all.length}',
+              showUnreadOnly: _lfUnreadOnly,
+              onChanged: (value) => setState(() => _lfUnreadOnly = value),
+            ),
+            const SizedBox(height: 14),
+            if (rows.isEmpty)
+              EmptyState(
+                icon: Icons.notifications_none_rounded,
+                title: all.isEmpty
+                    ? 'No Lost & Found updates yet'
+                    : 'Nothing unread',
+                line: all.isEmpty
+                    ? 'You will hear about matches, meetings and returns here.'
+                    : 'Switch to All to see earlier updates.',
               )
-            : ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                itemCount: rows.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) => _NotificationCard(
-                  item: rows[index],
-                  onTap: () => _open(rows[index]),
+            else
+              for (final item in rows)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _NotificationCard(
+                    item: item,
+                    onTap: () => _open(item),
+                  ),
                 ),
-              ),
+          ],
+        ),
       );
     },
   );
@@ -366,11 +358,10 @@ class _NotificationCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: item.read ? Colors.white : const Color(0xFFF0FDF8),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: item.read
-                ? carShareBorder
-                : carShareGreen.withValues(alpha: 0.35),
-          ),
+          border: item.read
+              ? null
+              : Border.all(color: carShareGreen.withValues(alpha: 0.35)),
+          boxShadow: const [carShareCardShadow],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -379,10 +370,10 @@ class _NotificationCard extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: carShareTint,
+                color: carShareGreen.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(_icon(item.type), color: carShareGreen),
+              child: Icon(_icon(item.type), color: carShareGreen, size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -390,35 +381,78 @@ class _NotificationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
                           item.title,
                           style: TextStyle(
                             fontWeight: item.read
-                                ? FontWeight.w600
+                                ? FontWeight.w700
                                 : FontWeight.w800,
+                            fontSize: 15,
                             color: carShareText,
                           ),
                         ),
                       ),
                       if (!item.read)
-                        const Icon(
-                          Icons.circle,
-                          size: 10,
-                          color: carShareGreen,
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(top: 5, left: 8),
+                          decoration: const BoxDecoration(
+                            color: carShareGreen,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.body,
-                    style: const TextStyle(color: carShareMuted, height: 1.35),
-                  ),
                   const SizedBox(height: 6),
                   Text(
-                    DateFormat('d MMM, HH:mm').format(item.createdAt.toLocal()),
-                    style: const TextStyle(fontSize: 12, color: carShareMuted),
+                    item.body,
+                    style: const TextStyle(
+                      color: carShareMuted,
+                      height: 1.4,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: carShareTint,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Lost & Found',
+                          style: TextStyle(
+                            color: carShareGreenDark,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        DateFormat('d MMM, HH:mm')
+                            .format(item.createdAt.toLocal()),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: carShareMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: carShareMuted,
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -39,7 +39,18 @@ class CarShareTextField extends StatelessWidget {
       labelText: label,
       hintText: hintText,
       alignLabelWithHint: maxLines != 1,
-      prefixIcon: Icon(icon),
+      // A tall field keeps its icon at the first line, not floating in the middle.
+      prefixIcon: maxLines == 1
+          ? Icon(icon)
+          : Align(
+              alignment: Alignment.topCenter,
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Icon(icon),
+              ),
+            ),
     ),
   );
 }
