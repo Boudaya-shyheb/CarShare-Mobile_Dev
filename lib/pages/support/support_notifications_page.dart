@@ -10,7 +10,10 @@ import '../../theme.dart';
 import 'ticket_details_page.dart';
 
 class SupportNotificationsPage extends StatefulWidget {
-  const SupportNotificationsPage({super.key});
+  const SupportNotificationsPage({super.key, this.embedded = false});
+
+  /// True inside the unified notifications page: just the list, no Scaffold or app bar.
+  final bool embedded;
 
   @override
   State<SupportNotificationsPage> createState() =>
@@ -97,87 +100,92 @@ class _SupportNotificationsPageState extends State<SupportNotificationsPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: carShareBackground,
-    appBar: AppBar(
-      backgroundColor: carShareBackground,
-      surfaceTintColor: carShareBackground,
-      title: const Text(
-        'Support notifications',
-        style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
-      ),
-      actions: [
-        IconButton(
-          tooltip: 'Refresh',
-          onPressed: _refresh,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-      ],
-    ),
-    body: FutureBuilder<List<SupportNotificationItem>>(
-      future: _notifications,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(color: supportGreen),
-          );
-        }
-        if (snapshot.hasError) {
-          return _ErrorState(error: snapshot.error, onRetry: _refresh);
-        }
-        final rows = snapshot.data ?? const <SupportNotificationItem>[];
-        final unreadCount = rows.where((item) => !item.read).length;
-        final visibleRows = _showUnreadOnly
-            ? rows.where((item) => !item.read).toList(growable: false)
-            : rows;
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          color: supportGreen,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                sliver: SliverToBoxAdapter(
-                  child: _NotificationsHeader(
-                    totalCount: rows.length,
-                    unreadCount: unreadCount,
-                    showUnreadOnly: _showUnreadOnly,
-                    onFilterChanged: (value) => setState(() {
-                      _showUnreadOnly = value;
-                    }),
-                  ),
+  Widget _buildList() => FutureBuilder<List<SupportNotificationItem>>(
+    future: _notifications,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting &&
+          !snapshot.hasData) {
+        return const Center(
+          child: CircularProgressIndicator(color: supportGreen),
+        );
+      }
+      if (snapshot.hasError) {
+        return _ErrorState(error: snapshot.error, onRetry: _refresh);
+      }
+      final rows = snapshot.data ?? const <SupportNotificationItem>[];
+      final unreadCount = rows.where((item) => !item.read).length;
+      final visibleRows = _showUnreadOnly
+          ? rows.where((item) => !item.read).toList(growable: false)
+          : rows;
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        color: supportGreen,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              sliver: SliverToBoxAdapter(
+                child: _NotificationsHeader(
+                  totalCount: rows.length,
+                  unreadCount: unreadCount,
+                  showUnreadOnly: _showUnreadOnly,
+                  onFilterChanged: (value) => setState(() {
+                    _showUnreadOnly = value;
+                  }),
                 ),
               ),
-              if (visibleRows.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyState(filtered: _showUnreadOnly),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  sliver: SliverList.separated(
-                    itemCount: visibleRows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = visibleRows[index];
-                      return _NotificationCard(
-                        item: item,
-                        markingRead: _readingIds.contains(item.id),
-                        onTap: () => _openTicket(item),
-                      );
-                    },
-                  ),
+            ),
+            if (visibleRows.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(filtered: _showUnreadOnly),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                sliver: SliverList.separated(
+                  itemCount: visibleRows.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final item = visibleRows[index];
+                    return _NotificationCard(
+                      item: item,
+                      markingRead: _readingIds.contains(item.id),
+                      onTap: () => _openTicket(item),
+                    );
+                  },
                 ),
-            ],
-          ),
-        );
-      },
-    ),
+              ),
+          ],
+        ),
+      );
+    },
   );
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.embedded) return _buildList();
+    return Scaffold(
+      backgroundColor: carShareBackground,
+      appBar: AppBar(
+        backgroundColor: carShareBackground,
+        surfaceTintColor: carShareBackground,
+        title: const Text(
+          'Support notifications',
+          style: TextStyle(fontWeight: FontWeight.w800, color: carShareText),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _buildList(),
+    );
+  }
 }
 
 class _NotificationsHeader extends StatelessWidget {

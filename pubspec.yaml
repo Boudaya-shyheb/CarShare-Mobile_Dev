@@ -51,6 +51,7 @@ dependencies:
   qr_flutter: ^4.1.0           # the pickup code as a QR for the driver to scan
   mobile_scanner: ^7.1.4       # the driver scanning that QR
   wakelock_plus: ^1.4.1        # keep the screen on while driving
+  google_mlkit_image_labeling: ^1.0.3
 
 dev_dependencies:
   flutter_test:

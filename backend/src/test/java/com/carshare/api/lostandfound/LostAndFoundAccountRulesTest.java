@@ -34,9 +34,11 @@ class LostAndFoundAccountRulesTest {
 
     @BeforeEach
     void setUp() {
-        handoverService = new LostAndFoundHandoverService(handoverRows, reports, users);
+        handoverService = new LostAndFoundHandoverService(handoverRows, reports, users,
+                mock(LostAndFoundNotificationService.class));
         reportService = new LostAndFoundReportService(reports, mock(TripRepository.class),
-                mock(ReservationRepository.class), users, handoverService, handoverRows);
+                mock(ReservationRepository.class), users, handoverService, handoverRows,
+                mock(LostAndFoundNotificationService.class), mock(LostAndFoundPhotoStorage.class));
         user = new AppUser("Mariem", "+21622222222", "m@carshare.tn", "hash", UserRole.PASSENGER);
         when(users.findById(user.getId())).thenReturn(Optional.of(user));
     }

@@ -111,7 +111,7 @@ public class AdminOperationsService {
                         report.getDescription(), report.getStatus(), report.getCreatedAt(), false,
                         report.getReporter().getId(), report.getReporter().getFullName(),
                         report.getTrip().getOriginLabel(), report.getTrip().getDestinationLabel(),
-                        report.getTrip().getDepartureTime()))
+                        report.getTrip().getDepartureTime(), report.hasPhoto()))
                 .toList();
     }
 

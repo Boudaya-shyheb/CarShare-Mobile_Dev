@@ -54,6 +54,13 @@ public class LostAndFoundReport {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** The optional photo, kept on disk; the report only remembers its name and type. */
+    @Column(name = "photo_file_name", length = 60)
+    private String photoFileName;
+
+    @Column(name = "photo_content_type", length = 30)
+    private String photoContentType;
+
     protected LostAndFoundReport() {
     }
 
@@ -69,6 +76,15 @@ public class LostAndFoundReport {
         this.status = Status.OPEN;
         this.createdAt = Instant.now();
     }
+
+    public void attachPhoto(String fileName, String contentType) {
+        this.photoFileName = fileName;
+        this.photoContentType = contentType;
+    }
+
+    public boolean hasPhoto() { return photoFileName != null; }
+    public String getPhotoFileName() { return photoFileName; }
+    public String getPhotoContentType() { return photoContentType; }
 
     public UUID getId() { return id; }
     public Trip getTrip() { return trip; }

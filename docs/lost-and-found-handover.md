@@ -63,3 +63,58 @@ With the code on the server, the owner is the only one who is ever sent it, so t
 read it from the API or the screen and has to get it from the owner in person. The server checks
 it, counts wrong tries (and keeps counting after the error is returned), locks after five, and
 closes both reports together. The two people see one status, one meeting point, and one end.
+
+## Notifications (migration V26)
+
+Every step of a match tells the other person, in the app (no email). Rows live in
+`lost_and_found_notifications` (user, type, report, handover, title, body, `read_at`, `created_at`).
+
+| Type | When | Who is told |
+| --- | --- | --- |
+| `MATCH_FOUND` | A new report meets an open report of the opposite type on the same trip, from another person, in the same category (and the same colour when both gave one; "Other" never matches) | both reporters |
+| `MATCH_CONFIRMED` | someone presses "Confirm match" (the handover is created) | the other reporter |
+| `MEETING_ARRANGED` | the meeting point and time are saved | the other reporter, with the place and time |
+| `ITEM_RETURNED` | the finder enters the right code | both |
+| `NOT_MY_ITEM` | someone calls the match off | the other reporter |
+
+Endpoints (all under `/api/lost-and-found/notifications`, caller only): `GET` the list (newest first),
+`GET /unread-count`, `POST /{id}/read`, `POST /read-all`. Reading them is not blocked for a suspended
+account; creating reports and handovers still is.
+
+In the app the Home bell opens one **Notifications** page with a chip per source, *Support* (the
+existing page, unchanged) and *Lost & Found*. The bell's badge is the sum of both unread counts. Tapping a
+Lost & Found notification marks it read and opens that report, on its match or handover screen. "Mark all
+as read" clears both sources. The page refreshes when it opens, on pull-to-refresh, when the app returns
+to the foreground and every 15 seconds while it is open.
+
+## Photos and on-device labelling
+
+**Labelling.** In the report form, "Add photo" offers the camera or the gallery. The picture is labelled on
+the phone with ML Kit image labelling (the model ships inside the app: no network, nothing leaves the
+phone). The best matching label is shown as a chip, "Looks like: Phone (87%)"; tapping it selects that
+category. The person can always pick another one, or ignore the chip. Only labels at 50% or more count.
+The mapping is one small file, `lib/services/photo_category_mapper.dart`:
+
+| Category | ML Kit labels that select it |
+| --- | --- |
+| Phone | mobile phone, phone, smartphone, cell phone, telephone, communication device |
+| Bag | bag, backpack, handbag, luggage, suitcase, briefcase, tote, satchel, purse, duffel |
+| Wallet | wallet, coin purse, billfold |
+| Keys | key, keys, keychain, key ring |
+| Glasses | glasses, sunglasses, eyewear, spectacles, goggles |
+| Clothing | clothing, shirt, jacket, coat, dress, sweater, hoodie, scarf, hat, cap, glove, jeans, shoe, outerwear |
+| Documents | document, paper, passport, book, card, notebook, envelope, receipt |
+
+A label counts when it is one of those words or contains one as a whole word (so "Keyboard" is not Keys).
+Labels that name no item ("Gadget", "Room") are ignored, and "Other" is never suggested: no chip is better
+than a wrong one.
+
+**Upload and storage.** The photo goes with the report as `multipart/form-data`
+(`POST /api/lost-and-found/trips/{tripId}/reports`, parts `type`, `title`, `description`, `photo`).
+JPG, PNG or WebP by content (not by name), 2 MB at most; the file is stored under a random name in
+`backend/public/uploads/lost-and-found/` (git-ignored, `LOST_AND_FOUND_UPLOAD_DIRECTORY` to move it) and
+the report keeps only its name and type (`photo_file_name`, `photo_content_type`). Reports expose
+`hasPhoto`. `GET /api/lost-and-found/reports/{id}/photo` returns it to the report's own reporter, to the
+reporter of a matching report (so the owner can recognise the item), to the participants of a handover on
+it, and to admins. Anyone else gets 404, never a hint that a photo exists. It shows on the report card and
+on both sides of the match page.

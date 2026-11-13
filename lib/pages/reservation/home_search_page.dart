@@ -10,12 +10,13 @@ import '../../models/user_profile.dart';
 import '../../services/geo_service.dart';
 import '../../services/location_service.dart';
 import '../../services/reservation_local_store.dart';
+import '../../services/lost_and_found_notification_service.dart';
 import '../../services/support_service.dart';
 import '../../theme.dart';
 import '../../widgets/favorite_place_widgets.dart';
 import '../../widgets/route_title.dart';
 import 'my_places_page.dart';
-import '../support/support_notifications_page.dart';
+import '../notifications_page.dart';
 import 'place_search_page.dart';
 import 'search_results_page.dart';
 
@@ -29,7 +30,8 @@ class HomeSearchPage extends StatefulWidget {
   State<HomeSearchPage> createState() => _HomeSearchPageState();
 }
 
-class _HomeSearchPageState extends State<HomeSearchPage> {
+class _HomeSearchPageState extends State<HomeSearchPage>
+    with WidgetsBindingObserver {
   final MapController _map = MapController();
 
   /// Measures the sheet so the map can lift its centre clear of it.
@@ -61,12 +63,13 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
   List<RecentSearch> _recent = const [];
   List<FavoritePlace> _favorites = const [];
 
-  /// Unread Support notifications, the number on the bell.
+  /// Unread Support + Lost & Found notifications, the number on the bell.
   int _unread = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _locate();
     _loadSaved();
     _loadUnread();
@@ -74,17 +77,31 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
 
   /// A failed count only means no badge; the bell still opens the list.
   Future<void> _loadUnread() async {
+    var total = 0;
+    var reached = false;
     try {
-      final count = await SupportService.instance.unreadNotificationCount();
-      if (mounted) setState(() => _unread = count);
+      total += await SupportService.instance.unreadNotificationCount();
+      reached = true;
     } catch (_) {
-      // leave the badge as it was
+      // that source simply adds nothing
     }
+    try {
+      total += await LostAndFoundNotificationService.instance.unreadCount();
+      reached = true;
+    } catch (_) {}
+    if (reached && mounted) setState(() => _unread = total);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadUnread();
   }
 
   Future<void> _openNotifications() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => const SupportNotificationsPage()),
+      MaterialPageRoute(
+        builder: (_) => NotificationsPage(userId: widget.user.id),
+      ),
     );
     // Whatever was read over there is no longer counted here.
     if (mounted) await _loadUnread();
@@ -92,6 +109,7 @@ class _HomeSearchPageState extends State<HomeSearchPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _map.dispose();
     super.dispose();
   }
@@ -817,14 +835,19 @@ class _GreetingCard extends StatelessWidget {
           // described once: "Notifications, 2 unread".
           child: Semantics(
             button: true,
-            label: unread > 0 ? 'Notifications, $unread unread' : 'Notifications',
+            label: unread > 0
+                ? 'Notifications, $unread unread'
+                : 'Notifications',
             onTap: onBell,
             excludeSemantics: true,
             child: IconButton(
               icon: Badge(
                 isLabelVisible: unread > 0,
                 label: Text(unread > 99 ? '99+' : '$unread'),
-                child: const Icon(Icons.notifications_none, color: carShareText),
+                child: const Icon(
+                  Icons.notifications_none,
+                  color: carShareText,
+                ),
               ),
               onPressed: onBell,
             ),

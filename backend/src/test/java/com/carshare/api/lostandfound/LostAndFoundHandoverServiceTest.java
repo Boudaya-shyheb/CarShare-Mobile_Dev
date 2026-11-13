@@ -44,6 +44,7 @@ class LostAndFoundHandoverServiceTest {
     @Mock private LostAndFoundHandoverRepository handovers;
     @Mock private LostAndFoundReportRepository reports;
     @Mock private UserRepository users;
+    @Mock private LostAndFoundNotificationService notifications;
 
     private LostAndFoundHandoverService service;
     private AppUser owner;
@@ -55,7 +56,7 @@ class LostAndFoundHandoverServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LostAndFoundHandoverService(handovers, reports, users);
+        service = new LostAndFoundHandoverService(handovers, reports, users, notifications);
         owner = new AppUser("Ines Trabelsi", "+21698765432", "ines@carshare.tn", "h", UserRole.PASSENGER);
         finder = new AppUser("Yacine Jomni", "+21612345678", "yacine@carshare.tn", "h", UserRole.DRIVER);
         stranger = new AppUser("Sami Ben Ali", "+21655111222", "sami@carshare.tn", "h", UserRole.PASSENGER);
@@ -449,5 +450,56 @@ class LostAndFoundHandoverServiceTest {
 
     private static String otherThan(String code) {
         return code.equals("0000") ? "0001" : "0000";
+    }
+
+    // --- notifications: each step tells the other person ---------------------------------------
+
+    @Test
+    @DisplayName("starting a handover tells the other person, but asking again for a live pair does not")
+    void proposeNotifiesOnlyWhenItCreatesTheHandover() {
+        service.propose(owner.getId(), lost.getId(), found.getId());
+        verify(notifications).matchConfirmed(any(LostAndFoundHandover.class), org.mockito.ArgumentMatchers.eq(owner.getId()));
+
+        LostAndFoundHandover live = proposed();
+        when(handovers.findByLostReport_IdAndFoundReport_IdAndStatusIn(any(), any(), any())).thenReturn(Optional.of(live));
+        org.mockito.Mockito.clearInvocations(notifications);
+
+        service.propose(finder.getId(), lost.getId(), found.getId());
+
+        verify(notifications, never()).matchConfirmed(any(), any());
+    }
+
+    @Test
+    @DisplayName("arranging the meeting tells the other person")
+    void arrangeNotifies() {
+        LostAndFoundHandover handover = proposed();
+
+        service.arrange(finder.getId(), handover.getId(), "Ennasr metro", "Today 18:00");
+
+        verify(notifications).meetingArranged(handover, finder.getId());
+    }
+
+    @Test
+    @DisplayName("the right code tells both people the item is back; a wrong one tells nobody")
+    void verifyNotifiesBothOnlyOnSuccess() {
+        LostAndFoundHandover handover = arranged();
+
+        assertThrows(ApiException.class,
+                () -> service.verify(finder.getId(), handover.getId(), otherThan(handover.getCode())));
+        verify(notifications, never()).itemReturned(any());
+
+        service.verify(finder.getId(), handover.getId(), handover.getCode());
+
+        verify(notifications).itemReturned(handover);
+    }
+
+    @Test
+    @DisplayName("'Not my item' tells the other person")
+    void rejectNotifies() {
+        LostAndFoundHandover handover = proposed();
+
+        service.reject(owner.getId(), handover.getId());
+
+        verify(notifications).handoverRejected(handover, owner.getId());
     }
 }

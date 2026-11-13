@@ -34,13 +34,15 @@ public class LostAndFoundHandoverService {
 
     private final LostAndFoundHandoverRepository handovers;
     private final LostAndFoundReportRepository reports;
+    private final LostAndFoundNotificationService notifications;
     private final UserRepository users;
     private final SecureRandom random = new SecureRandom();
 
     public LostAndFoundHandoverService(
             LostAndFoundHandoverRepository handovers,
             LostAndFoundReportRepository reports,
-            UserRepository users) {
+            UserRepository users, LostAndFoundNotificationService notifications) {
+        this.notifications = notifications;
         this.handovers = handovers;
         this.reports = reports;
         this.users = users;
@@ -99,6 +101,7 @@ public class LostAndFoundHandoverService {
                         "account_not_found", "Your account could not be found."));
         LostAndFoundHandover handover = handovers.save(
                 new LostAndFoundHandover(lost.getTrip(), lost, found, creator));
+        notifications.matchConfirmed(handover, userId);
         return view(handover, userId);
     }
 
@@ -113,6 +116,7 @@ public class LostAndFoundHandoverService {
         String point = requireText(meetingPoint, MAX_MEETING_POINT, "Meeting point");
         String time = requireText(meetingTime, MAX_MEETING_TIME, "Date and time");
         handover.arrange(point, time, newCode());
+        notifications.meetingArranged(handover, userId);
         return view(handover, userId);
     }
 
@@ -172,6 +176,7 @@ public class LostAndFoundHandoverService {
         handover.complete();
         handover.getLostReport().resolve();
         handover.getFoundReport().resolve();
+        notifications.itemReturned(handover);
         return view(handover, userId);
     }
 
@@ -181,6 +186,7 @@ public class LostAndFoundHandoverService {
         LostAndFoundHandover handover = requireParticipantHandover(userId, handoverId);
         requireActive(handover);
         handover.cancel();
+        notifications.handoverRejected(handover, userId);
         return view(handover, userId);
     }
 

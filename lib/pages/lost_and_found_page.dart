@@ -10,6 +10,8 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart' show authErrorMessage;
 import '../services/local_database.dart';
+import '../services/photo_category_mapper.dart';
+import '../services/photo_labeling_service.dart';
 import '../theme.dart';
 
 const _module = '/lost-and-found';
@@ -37,6 +39,8 @@ enum _Category {
   keys('Keys', Icons.key_outlined),
   wallet('Wallet', Icons.account_balance_wallet_outlined),
   bag('Bag', Icons.backpack_outlined),
+  glasses('Glasses', Icons.visibility_outlined),
+  clothing('Clothing', Icons.checkroom_outlined),
   documents('Documents', Icons.description_outlined),
   other('Other', Icons.inventory_2_outlined);
 
@@ -115,7 +119,8 @@ class _Report {
       title = _text(json, ['title']) ?? 'Item',
       details = _text(json, ['description']) ?? '',
       resolved = json['status'] == 'RESOLVED',
-      created = DateTime.tryParse(_text(json, ['createdAt']) ?? '');
+      created = DateTime.tryParse(_text(json, ['createdAt']) ?? ''),
+      hasPhoto = json['hasPhoto'] == true;
 
   final _Trip trip;
   final String id;
@@ -126,6 +131,9 @@ class _Report {
   final String details;
   final bool resolved;
   final DateTime? created;
+
+  /// The server holds a photo for this report (`GET /reports/{id}/photo`).
+  final bool hasPhoto;
 
   _Category? get category => _Category.parse(title);
   String get description {
@@ -211,9 +219,16 @@ class _Snapshot {
 }
 
 class LostAndFoundPage extends StatefulWidget {
-  const LostAndFoundPage({super.key, required this.userId});
+  const LostAndFoundPage({
+    super.key,
+    required this.userId,
+    this.initialReportId,
+  });
 
   final String userId;
+
+  /// Opens this report's page as soon as the list has loaded (from a notification).
+  final String? initialReportId;
 
   @override
   State<LostAndFoundPage> createState() => _LostAndFoundPageState();
@@ -231,6 +246,21 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
   void initState() {
     super.initState();
     _snapshot = _load();
+    if (widget.initialReportId != null) {
+      _snapshot.then(_openInitial, onError: (_) {});
+    }
+  }
+
+  Future<void> _openInitial(_Snapshot data) async {
+    final id = widget.initialReportId;
+    if (id == null || !mounted) return;
+    for (final report in data.reports) {
+      if (report.id == id && report.reporterId == widget.userId) {
+        setState(() => _tab = report.type);
+        await _details(report, _findMatch(report, data), data);
+        return;
+      }
+    }
   }
 
   @override
@@ -267,7 +297,30 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
     final handovers = (await _api.getList('$_module/handovers/mine'))
         .map(_Handover.new)
         .toList();
-    return _Snapshot(trips, reports, handovers);
+    final data = _Snapshot(trips, reports, handovers);
+    await _loadPhotos(data);
+    return data;
+  }
+
+  /// Fetches the photos the user may see and does not have yet: their own reports' and the
+  /// photo of the report each one matches. A photo that cannot be fetched is simply not shown.
+  Future<void> _loadPhotos(_Snapshot data) async {
+    final wanted = <String>{};
+    for (final report in data.reports) {
+      if (report.reporterId != widget.userId) continue;
+      if (report.hasPhoto) wanted.add(report.id);
+      final match = _findMatch(report, data);
+      if (match != null && match.hasPhoto) wanted.add(match.id);
+    }
+    await Future.wait(
+      wanted.where((id) => !_photos.containsKey(id)).map((id) async {
+        try {
+          _photos[id] = await _api.getBytes('$_module/reports/$id/photo');
+        } catch (_) {
+          // no photo to show
+        }
+      }),
+    );
   }
 
   Future<void> _refresh() async {
@@ -354,6 +407,7 @@ class _LostAndFoundPageState extends State<LostAndFoundPage> {
           handover: snapshot.handoverFor(report.id),
           reload: () => _reloadDetails(report.id),
           photo: _photos[report.id],
+          photos: _photos,
         ),
       ),
     );
@@ -657,6 +711,9 @@ class _ReportFormState extends State<_ReportForm> {
   bool _busy = false;
   bool _missingCategory = false;
 
+  /// "Looks like: Phone (87%)", from labelling the photo on the phone.
+  PhotoCategorySuggestion? _suggestion;
+
   bool get _supportsDrafts =>
       !kIsWeb &&
       const {
@@ -745,11 +802,34 @@ class _ReportFormState extends State<_ReportForm> {
     }
   }
 
+  /// Camera or gallery, then labels the photo on the phone to suggest a category.
   Future<void> _pickPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheet, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(sheet, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 1200,
         maxHeight: 1200,
         imageQuality: 82,
@@ -760,12 +840,43 @@ class _ReportFormState extends State<_ReportForm> {
         return;
       }
       final bytes = await image.readAsBytes();
-      if (mounted) setState(() => _photo = bytes);
+      if (!mounted) return;
+      setState(() {
+        _photo = bytes;
+        _suggestion = null;
+      });
+      if (_labelsOnDevice) {
+        final suggestion = await PhotoLabelingService.instance.suggest(
+          image.path,
+        );
+        if (mounted && identical(_photo, bytes)) {
+          setState(() => _suggestion = suggestion);
+        }
+      }
     } catch (_) {
       if (mounted) _message(context, 'Could not open that photo.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// ML Kit runs on Android and iOS only.
+  bool get _labelsOnDevice =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  void _applySuggestion() {
+    final suggested = _suggestion;
+    final category = suggested == null
+        ? null
+        : _Category.parse(suggested.category);
+    if (category == null) return;
+    setState(() {
+      _category = category;
+      _legacyTitle = null;
+      _missingCategory = false;
+    });
   }
 
   Future<void> _chooseTrip() async {
@@ -819,14 +930,26 @@ class _ReportFormState extends State<_ReportForm> {
     }
     setState(() => _busy = true);
     try {
-      final json = await ApiClient.instance.post(
-        '$_module/trips/${trip.id}/reports',
-        {
-          'type': _type.apiValue,
-          'title': _legacyTitle ?? _category!.label,
-          'description': details,
-        },
-      );
+      final title = _legacyTitle ?? _category!.label;
+      final photo = _photo;
+      final fields = {
+        'type': _type.apiValue,
+        'title': title,
+        'description': details,
+      };
+      final json = photo == null
+          ? await ApiClient.instance.post(
+              '$_module/trips/${trip.id}/reports',
+              fields,
+            )
+          : await ApiClient.instance.uploadMultipart(
+              path: '$_module/trips/${trip.id}/reports',
+              fieldName: 'photo',
+              bytes: photo,
+              fileName: 'item.${_photoExtension(photo)}',
+              mimeType: _photoMimeType(photo),
+              fields: fields,
+            );
       final id = _text(json, ['id', 'reportId']);
       if (mounted) Navigator.pop(context, _PublishedReport(id, _type, _photo));
     } catch (error) {
@@ -882,9 +1005,9 @@ class _ReportFormState extends State<_ReportForm> {
                 style: _strong,
               ),
               const SizedBox(height: 6),
-              _categoryRow(_Category.values.take(3)),
+              _categoryRow(_Category.values.take(4)),
               const SizedBox(height: 8),
-              _categoryRow(_Category.values.skip(3)),
+              _categoryRow(_Category.values.skip(4)),
               if (_missingCategory)
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
@@ -975,11 +1098,14 @@ class _ReportFormState extends State<_ReportForm> {
                   ),
                 ),
               ],
+              if (photo != null && _suggestion != null) _lookLikeChip(),
               const SizedBox(height: 18),
               _Notice(
                 text: hasTrips
                     ? 'People on this trip can see your report. The optional '
-                          'photo stays on this device with your draft.'
+                          'photo is only shown to the person your report '
+                          'matches. It is read on this phone, never sent '
+                          'for analysis.'
                     : 'An eligible trip is required to submit a report.',
               ),
             ],
@@ -1004,6 +1130,32 @@ class _ReportFormState extends State<_ReportForm> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _lookLikeChip() {
+    final suggestion = _suggestion!;
+    final category = _Category.parse(suggestion.category);
+    final applied = category != null && _category == category;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ActionChip(
+        avatar: Icon(
+          applied ? Icons.check_circle : Icons.auto_awesome,
+          size: 18,
+          color: carShareGreen,
+        ),
+        backgroundColor: carShareTint,
+        side: const BorderSide(color: carShareGreen),
+        label: Text(
+          'Looks like: ${suggestion.category} (${suggestion.percent}%)',
+          style: const TextStyle(
+            color: carShareGreen,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        onPressed: _busy ? null : _applySuggestion,
       ),
     );
   }
@@ -1122,6 +1274,7 @@ class _ReportDetails extends StatefulWidget {
     required this.handover,
     required this.reload,
     this.photo,
+    this.photos,
     this.preview = false,
   });
 
@@ -1132,6 +1285,9 @@ class _ReportDetails extends StatefulWidget {
   /// Reads the report, its match and its handover again from the server; null in the preview.
   final Future<_DetailState> Function()? reload;
   final Uint8List? photo;
+
+  /// The page's photo cache by report id, so the match's photo shows once it has loaded.
+  final Map<String, Uint8List>? photos;
   final bool preview;
 
   @override
@@ -1170,6 +1326,10 @@ class _ReportDetailsState extends State<_ReportDetails> {
     _code.dispose();
     super.dispose();
   }
+
+  Uint8List? _photoOf(_Report report) =>
+      widget.photos?[report.id] ??
+      (report.id == widget.report.id ? widget.photo : null);
 
   /// Pull-to-refresh, the first load, and the end of every action.
   Future<void> _reload() async {
@@ -1495,7 +1655,7 @@ class _ReportDetailsState extends State<_ReportDetails> {
                 const SizedBox(height: 12),
               ],
               if (match == null)
-                _comparison(report, 'Your report', photo: widget.photo)
+                _comparison(report, 'Your report', photo: _photoOf(report))
               else ...[
                 IntrinsicHeight(
                   child: Row(
@@ -1505,7 +1665,7 @@ class _ReportDetailsState extends State<_ReportDetails> {
                         child: _comparison(
                           report,
                           'Your report',
-                          photo: widget.photo,
+                          photo: _photoOf(report),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1515,6 +1675,7 @@ class _ReportDetailsState extends State<_ReportDetails> {
                           match.type == _ReportType.found
                               ? 'Found item'
                               : 'Lost item',
+                          photo: _photoOf(match),
                         ),
                       ),
                     ],
@@ -2116,3 +2277,15 @@ String _errorMessage(Object? error) => error is ApiException
 void _message(BuildContext context, String message) =>
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+
+String _photoExtension(Uint8List bytes) => bytes.length > 3 && bytes[0] == 0x89
+    ? 'png'
+    : bytes.length > 3 && bytes[0] == 0x52
+    ? 'webp'
+    : 'jpg';
+
+String _photoMimeType(Uint8List bytes) => switch (_photoExtension(bytes)) {
+  'png' => 'image/png',
+  'webp' => 'image/webp',
+  _ => 'image/jpeg',
+};
