@@ -60,3 +60,5 @@ Claude outputs/
 
 # Evidence images uploaded to support tickets while testing (the backend writes them here)
 backend/public/uploads/support/
+# Lost & Found report photos
+backend/public/uploads/lost-and-found/
